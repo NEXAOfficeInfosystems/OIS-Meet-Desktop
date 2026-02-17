@@ -1,0 +1,37 @@
+.header {
+  border-bottom: 1px solid ButtonBorder;
+  background: Canvas;
+  color: CanvasText;
+}
+
+.header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.header__title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.header__nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header__link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.header__button {
+  border: 1px solid ButtonBorder;
+  border-radius: 6px;
+  background: ButtonFace;
+  color: ButtonText;
+  padding: 6px 10px;
+  cursor: pointer;
+}

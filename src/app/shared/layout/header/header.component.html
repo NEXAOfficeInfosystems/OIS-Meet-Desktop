@@ -1,0 +1,12 @@
+<header class="header">
+  <div class="header__inner">
+    <div class="header__brand">
+      <span class="header__title">{{ appTitle() }}</span>
+    </div>
+
+    <nav class="header__nav" *ngIf="isAuthenticated$ | async">
+      <a class="header__link" routerLink="/dashboard">Dashboard DK</a>
+      <button class="header__button" type="button" (click)="logout()">Logout</button>
+    </nav>
+  </div>
+</header>

@@ -1,1 +1,8 @@
-/* You can add global styles to this file, and also import other style files */
+/* Bootstrap is the primary design system for this app.
+	Angular Material is intended for dialogs only. */
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+}

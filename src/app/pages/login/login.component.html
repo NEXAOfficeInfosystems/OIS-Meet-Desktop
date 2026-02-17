@@ -1,0 +1,28 @@
+<div class="login">
+  <div class="login__card">
+    <h1 class="login__title">Login</h1>
+    <p class="login__subtitle">Dummy authentication (any non-empty values)</p>
+
+    <form (ngSubmit)="submit()">
+      <label class="field">
+        <span class="field__label">Username</span>
+        <input class="field__input" name="username" [(ngModel)]="username" autocomplete="username" />
+      </label>
+
+      <label class="field">
+        <span class="field__label">Password</span>
+        <input
+          class="field__input"
+          name="password"
+          type="password"
+          [(ngModel)]="password"
+          autocomplete="current-password"
+        />
+      </label>
+
+      <p class="login__error" *ngIf="error">{{ error }}</p>
+
+      <button class="login__button" type="submit">Sign in</button>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,60 @@
+.login {
+  min-height: calc(100vh - 96px);
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.login__card {
+  width: min(420px, 100%);
+  border: 1px solid ButtonBorder;
+  border-radius: 10px;
+  background: Canvas;
+  color: CanvasText;
+  padding: 18px;
+}
+
+.login__title {
+  font-size: 20px;
+  margin: 0 0 6px 0;
+}
+
+.login__subtitle {
+  margin: 0 0 16px 0;
+  font-size: 12px;
+  color: GrayText;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.field__label {
+  font-size: 12px;
+}
+
+.field__input {
+  border: 1px solid ButtonBorder;
+  border-radius: 8px;
+  padding: 10px;
+  background: Field;
+  color: FieldText;
+}
+
+.login__error {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  color: GrayText;
+}
+
+.login__button {
+  width: 100%;
+  border: 1px solid ButtonBorder;
+  border-radius: 8px;
+  padding: 10px;
+  background: ButtonFace;
+  color: ButtonText;
+  cursor: pointer;
+}

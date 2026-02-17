@@ -1,0 +1,21 @@
+.dashboard {
+  padding: 20px 16px;
+}
+
+.dashboard__title {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+}
+
+.dashboard__text {
+  margin: 0 0 12px 0;
+}
+
+.dashboard__button {
+  border: 1px solid ButtonBorder;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: ButtonFace;
+  color: ButtonText;
+  cursor: pointer;
+}
