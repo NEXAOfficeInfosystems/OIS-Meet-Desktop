@@ -1,27 +1,39 @@
-# OisMeetDesktop
+# OIS Meet Desktop
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 17.3.17.
+Angular 17 + Electron (Electron v29 compatible) desktop application.
 
-## Development server
+## Prerequisites
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+- Node.js v20.20.0+
 
-## Code scaffolding
+## Configuration
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+- API base URL is configured in `src/environments/environment.ts`
+- Production build uses `src/environments/environment.prod.ts` via Angular file replacements
 
-## Build
+## Run (Angular + Electron together)
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+```bash
+npm install
+npm run start
+```
 
-## Running unit tests
+This starts Angular dev server and then launches Electron loading `http://localhost:4200`.
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+## Build Windows .exe
 
-## Running end-to-end tests
+```bash
+npm run build
+```
 
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
+This:
 
-## Further help
+1. Builds Angular (`--configuration production`)
+2. Packages the app with `electron-builder` (NSIS)
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+Output is written under `release/`.
+
+## Pages
+
+- `/login` (dummy authentication)
+- `/dashboard` (guarded)
