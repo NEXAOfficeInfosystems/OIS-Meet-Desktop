@@ -1,37 +1,52 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
+import { CookieService } from 'ngx-cookie-service';
 
-const AUTH_STORAGE_KEY = 'oisMeet.isAuthenticated';
+const TOKEN_COOKIE_KEY = 'GM_token';
+const ENCRYPTED_JSON_COOKIE_KEY = 'encryptedJson';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
-  private readonly isAuthenticatedSubject = new BehaviorSubject<boolean>(
-    this.readInitialAuthState()
-  );
+  private readonly isAuthenticatedSubject: BehaviorSubject<boolean>;
+  readonly isAuthenticated$;
 
-  readonly isAuthenticated$ = this.isAuthenticatedSubject.asObservable();
+  constructor(private readonly cookieService: CookieService) {
+    this.isAuthenticatedSubject = new BehaviorSubject<boolean>(this.hasToken());
+    this.isAuthenticated$ = this.isAuthenticatedSubject.asObservable();
+  }
 
-  isAuthenticated() {
+  isAuthenticated(): boolean {
     return this.isAuthenticatedSubject.value;
   }
 
-  login(username: string, password: string) {
-    const ok = username.trim().length > 0 && password.trim().length > 0;
-    if (!ok) return false;
-
-    localStorage.setItem(AUTH_STORAGE_KEY, 'true');
-    this.isAuthenticatedSubject.next(true);
-    return true;
+  getToken(): string | null {
+    const token = this.cookieService.get(TOKEN_COOKIE_KEY);
+    return token ? token : null;
   }
 
-  logout() {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+  setSession(token: string, encryptedJson?: string): void {
+    this.cookieService.set(TOKEN_COOKIE_KEY, token);
+    if (encryptedJson) {
+      this.cookieService.set(ENCRYPTED_JSON_COOKIE_KEY, encryptedJson);
+    }
+
+    this.isAuthenticatedSubject.next(true);
+  }
+
+  clearSession(): void {
+    this.cookieService.delete(TOKEN_COOKIE_KEY);
+    this.cookieService.delete(ENCRYPTED_JSON_COOKIE_KEY);
     this.isAuthenticatedSubject.next(false);
   }
 
-  private readInitialAuthState() {
-    return localStorage.getItem(AUTH_STORAGE_KEY) === 'true';
+  logout(): void {
+    this.clearSession();
+  }
+
+  private hasToken(): boolean {
+    const token = this.cookieService.get(TOKEN_COOKIE_KEY);
+    return token != null && token.trim().length > 0;
   }
 }

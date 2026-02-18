@@ -1,60 +1,210 @@
-.login {
-  min-height: calc(100vh - 96px);
-  display: grid;
-  place-items: center;
-  padding: 24px 16px;
+/* =====================================================
+   GLOBAL BACKGROUND
+===================================================== */
+.login-body {
+  background-image: url('/assets/login/login-bg.png');
+  background-repeat: no-repeat;
+  background-size: 70% 100%;
+  background-attachment: fixed;
+  background-color: #ffffff;
 }
 
-.login__card {
-  width: min(420px, 100%);
-  border: 1px solid ButtonBorder;
-  border-radius: 10px;
-  background: Canvas;
-  color: CanvasText;
-  padding: 18px;
+/* =====================================================
+   LEFT PANEL (WELCOME SECTION)
+===================================================== */
+.left-panel {
+  background: transparent;
 }
 
-.login__title {
-  font-size: 20px;
-  margin: 0 0 6px 0;
+.left-panel>div:nth-child(2) {
+  margin-top: -80px;
 }
 
-.login__subtitle {
-  margin: 0 0 16px 0;
-  font-size: 12px;
-  color: GrayText;
+.left-panel h1 {
+  font-size: 3.3rem;
 }
 
-.field {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 12px;
+.left-panel h3 {
+  font-size: 1.9rem;
 }
 
-.field__label {
-  font-size: 12px;
+.left-panel p {
+  font-size: 1.3rem;
 }
 
-.field__input {
-  border: 1px solid ButtonBorder;
-  border-radius: 8px;
-  padding: 10px;
-  background: Field;
-  color: FieldText;
+.success-clr {
+  color: #74a925;
 }
 
-.login__error {
-  margin: 0 0 10px 0;
-  font-size: 12px;
-  color: GrayText;
+.custom-hr {
+  border: none;
+  height: 3px;
+  background: linear-gradient(90deg, #9be43a, #74a925, #9be43a);
+  border-radius: 2px;
+  opacity: 1;
 }
 
-.login__button {
+.down-content {
+  width: 50%;
+  margin-top: 20px;
+  color: white;
+  font-weight: 600;
+}
+
+/* =====================================================
+   RIGHT PANEL (LOGIN CONTAINER)
+===================================================== */
+.login-wrapper {
   width: 100%;
-  border: 1px solid ButtonBorder;
-  border-radius: 8px;
-  padding: 10px;
-  background: ButtonFace;
-  color: ButtonText;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -100px;
+}
+
+/* =====================================================
+   LOGO
+===================================================== */
+.login-logo {
+  margin-bottom: 16px;
+}
+
+.login-logo img {
+  width: 56px;
+}
+
+/* =====================================================
+   CARD
+===================================================== */
+.login-card {
+  width: 100%;
+}
+
+.login-card .card-body {
+  padding: 24px;
+}
+
+/* =====================================================
+   FORM LAYOUT
+===================================================== */
+form.d-grid {
+  gap: 16px;
+}
+
+/* =====================================================
+   INPUT GROUPS
+===================================================== */
+.input-group-text {
+  background-color: #f9fafb;
+  border-right: 0;
+}
+
+.input-group .form-control {
+  border-left: 0;
+  font-size: 14px;
+}
+
+.input-group-lg>.form-control,
+.input-group-lg>.input-group-text,
+.input-group-lg>.btn {
+  padding: 12px 14px;
+}
+
+.input-group .form-control:focus {
+  box-shadow: none;
+  border-color: #e5e7eb;
+}
+
+/* =====================================================
+   PASSWORD EYE ICON
+===================================================== */
+.input-group .btn-outline-secondary {
+  border-left: 0;
+  border-color: #e5e7eb;
+  background: #fff;
+}
+
+.input-group .btn-outline-secondary:focus,
+.input-group .btn-outline-secondary:active,
+.input-group .btn-outline-secondary:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.input-group .btn-outline-secondary:hover i {
+  color: #6c757d;
+}
+
+// .input-group .btn-outline-secondary:hover {
+//   background-color: #74a925;
+//   border-color: #74a925;
+// }
+
+
+/* =====================================================
+   TABS
+===================================================== */
+.nav-tabs {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.nav-tabs .nav-link {
+  border: none;
+  color: #6b7280;
+  font-weight: 500;
+  padding: 10px 0;
+}
+
+.nav-tabs .nav-link.active {
+  color: #2563eb;
+  border-bottom: 2px solid #2563eb;
+  background: transparent;
+}
+
+
+/* =====================================================
+   CAPTCHA
+===================================================== */
+.captcha-box {
+  min-height: 42px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.captcha-box img {
+  height: 28px;
+}
+
+/* =====================================================
+   BUTTONS
+===================================================== */
+.login-btn {
+  background-image: linear-gradient(to right, #0d5cb9, #74a925);
+  color: white;
+  border: none;
+  padding: 15px;
+  border-radius: 5px;
   cursor: pointer;
+  margin-bottom: 12px;
+  font-weight: 560;
+  font-size: 14px;
+}
+
+/* =====================================================
+   UTILITIES
+===================================================== */
+.no-spinner::-webkit-inner-spin-button,
+.no-spinner::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+
+.no-spinner {
+  appearance: textfield;
+  -moz-appearance: textfield;
 }

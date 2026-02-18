@@ -1,28 +1,153 @@
-<div class="login">
-  <div class="login__card">
-    <h1 class="login__title">Login</h1>
-    <p class="login__subtitle">Dummy authentication (any non-empty values)</p>
+<div class="login-body min-vh-100">
+  <div class="container-fluid min-vh-100">
+    <div class="row min-vh-100">
 
-    <form (ngSubmit)="submit()">
-      <label class="field">
-        <span class="field__label">Username</span>
-        <input class="field__input" name="username" [(ngModel)]="username" autocomplete="username" />
-      </label>
+      <!-- LEFT PANEL -->
+      <div class="col-lg-6 d-none d-lg-flex flex-column justify-content-between text-white p-5 left-panel">
 
-      <label class="field">
-        <span class="field__label">Password</span>
-        <input
-          class="field__input"
-          name="password"
-          type="password"
-          [(ngModel)]="password"
-          autocomplete="current-password"
-        />
-      </label>
+        <!-- TOP BRAND -->
+        <div>
+          <img src="assets/login/ois-meet-logo.svg" width="180" alt="OIS Meet Logo">
+        </div>
 
-      <p class="login__error" *ngIf="error">{{ error }}</p>
+        <!-- CENTER CONTENT -->
+        <div>
+          <h1 class="fw-bold">Welcome to<br>
+            OIS<span class="success-clr"> MEET</span>
+          </h1>
+          <hr class="custom-hr w-50 my-4">
+          <div class="down-content">
+            <p>Sign in once to access all your connected services.</p>
+          </div>
 
-      <button class="login__button" type="submit">Sign in</button>
-    </form>
+        </div>
+
+        <!-- FOOTER -->
+        <div>
+          <h6>Powered by OIS © 2026</h6>
+        </div>
+      </div>
+
+      <!-- RIGHT PANEL -->
+      <div class="col-12 col-lg-6 d-flex justify-content-center align-items-center">
+
+        <div class="login-wrapper">
+
+          <!-- LOGO -->
+          <div class="login-logo">
+            <img src="assets/login/logo.png" alt="OIS Meet">
+          </div>
+
+          <!-- CARD -->
+          <div class="card login-card shadow-lg border-0 rounded-4">
+            <div class="card-body">
+
+              <!-- INLINE ERROR -->
+              <div *ngIf="formError" class="alert alert-danger d-flex align-items-start gap-2" role="alert">
+                <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+                <div class="flex-grow-1 mt-1">{{ formError }}</div>
+              </div>
+
+              <!-- TABS -->
+              <ul class="nav nav-tabs nav-fill mb-4">
+                <li class="nav-item">
+                  <button class="nav-link" [class.active]="selectedTab === 'email'" (click)="showTab('email')">
+                    Email
+                  </button>
+                </li>
+                <li class="nav-item">
+                  <button class="nav-link" [class.active]="selectedTab === 'userid'" (click)="showTab('userid')">
+                    User ID
+                  </button>
+                </li>
+                <li class="nav-item">
+                  <button class="nav-link" [class.active]="selectedTab === 'mobile'" (click)="showTab('mobile')">
+                    Mobile
+                  </button>
+                </li>
+              </ul>
+
+              <!-- FORM -->
+              <form (ngSubmit)="onSubmit()" class="d-grid">
+
+                <!-- EMAIL -->
+                <div *ngIf="selectedTab === 'email'">
+                  <div class="input-group input-group-lg">
+                    <span class="input-group-text">
+                      <i class="bi bi-envelope"></i>
+                    </span>
+                      <input type="text" class="form-control" placeholder="Enter your email" [(ngModel)]="userID"
+                        name="userID" required #emailInput>
+                  </div>
+                </div>
+
+                <!-- USER ID -->
+                <div *ngIf="selectedTab === 'userid'">
+                  <div class="input-group input-group-lg">
+                    <span class="input-group-text">
+                      <i class="bi bi-person-badge"></i>
+                    </span>
+                      <input type="text" class="form-control" placeholder="Enter your user ID" [(ngModel)]="userID"
+                        name="userID" required #useridInput>
+                  </div>
+                </div>
+
+                <!-- MOBILE -->
+                <div *ngIf="selectedTab === 'mobile'">
+                  <div class="input-group input-group-lg">
+                    <span class="input-group-text">
+                      <i class="bi bi-phone"></i>
+                    </span>
+                      <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control no-spinner"
+                        placeholder="Enter your mobile number" [(ngModel)]="userID" name="userID" required #mobileInput>
+                  </div>
+                </div>
+
+                <!-- PASSWORD -->
+                <div class="input-group input-group-lg">
+                  <span class="input-group-text">
+                    <i class="bi bi-lock"></i>
+                  </span>
+                    <input [type]="isPasswordVisible ? 'text' : 'password'" class="form-control"
+                      placeholder="Enter your password" [(ngModel)]="password" name="password" required #passwordInput />
+                  <button type="button" class="btn btn-outline-secondary" (click)="togglePasswordVisibility()">
+                    <i class="bi" [ngClass]="isPasswordVisible ? 'bi-eye' : 'bi-eye-slash'"></i>
+                  </button>
+                </div>
+
+                <!-- CAPTCHA -->
+                <div class="row g-2 align-items-center">
+                  <div class="col-auto">
+                    <div class="captcha-box">
+                      <img [src]="captcha?.imageBase64" />
+                      <button type="button" class="btn btn-link p-0" (click)="getCaptcha()">↻</button>
+                    </div>
+                  </div>
+                  <div class="col">
+                      <input type="text" class="form-control" placeholder="Enter CAPTCHA" [(ngModel)]="enteredCode"
+                        name="captchaCode" required #captchaInput />
+                  </div>
+                </div>
+
+                <!-- REMEMBER ME -->
+                <div class="form-check">
+                  <input type="checkbox" class="form-check-input" [(ngModel)]="isRememberMeChecked" name="rememberMe" />
+                  <label class="form-check-label">Remember me</label>
+                </div>
+
+                <!-- LOGIN -->
+                <button type="submit" class="login-btn" [disabled]="showLoading">
+                  <span *ngIf="showLoading" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  <span>{{ showLoading ? loadingMessage : 'Log In' }}</span>
+                </button>
+
+              </form>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
   </div>
 </div>
