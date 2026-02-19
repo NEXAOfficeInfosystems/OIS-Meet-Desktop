@@ -17,6 +17,10 @@ export class SidebarComponent {
 
   public setActiveTab(tab: string): void {
     this.activeTab = tab;
-    this.router.navigate(['/chat']);
+    if (tab === 'chat') {
+      this.router.navigate(['/chat']);
+    } else{
+      this.router.navigate(['/coming-soon']);
+    }
   }
 }

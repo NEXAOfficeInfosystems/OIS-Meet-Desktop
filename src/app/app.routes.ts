@@ -6,6 +6,7 @@ import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { LandingComponent } from './components/landing/landing.component';
 import { JoinMeetingComponent } from './components/join-meeting/join-meeting.component';
 import { ChatComponent } from './components/chat/chat.component';
+import { ComingSoonComponent } from './components/comming-soon.component';
 
 export const routes: Routes = [
 
@@ -19,7 +20,8 @@ export const routes: Routes = [
       { path: 'dashboard', component: DashboardComponent },
       { path: 'landing', component: LandingComponent },
       { path: 'join-meeting', component: JoinMeetingComponent },
-      { path: 'chat', component: ChatComponent }
+      { path: 'chat', component: ChatComponent },
+      { path: 'coming-soon', component: ComingSoonComponent }
 
     ]
   },

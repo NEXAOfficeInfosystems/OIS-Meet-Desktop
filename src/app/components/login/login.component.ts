@@ -334,7 +334,8 @@ export class LoginComponent implements OnInit, OnDestroy {
         return this.ssoApiService.getApplicationList(token, userinfo, userId).pipe(
           switchMap((apps: ApplicationItem[]) => {
             const meetApp = apps.find(app =>
-              app?.Code === 'Meet'
+              // app?.Code === 'Meet'
+              app.Code === 'DMS' || app.Code === 'OISVault' || app.Code === 'Vault'
             );
 
             const appId = meetApp?.ApplicationId;
