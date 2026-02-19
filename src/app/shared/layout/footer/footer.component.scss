@@ -1,10 +1,13 @@
 .footer {
-  border-top: 1px solid ButtonBorder;
-  background: Canvas;
-  color: CanvasText;
+  background: transparent;
+  color: #9ca3af;
 }
 
 .footer__inner {
-  padding: 10px 16px;
   font-size: 12px;
+  text-align: center;
+}
+
+body.theme-dark .footer {
+  color: #64748b;
 }

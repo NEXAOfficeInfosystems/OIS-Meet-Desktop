@@ -30,7 +30,7 @@ export class DashboardComponent {
   // clinetId: string | null = null;
   // companyId:string | number | null = null;
   // companyLogo: string | null = null;
-  // applicationName: string | null = null;
+  applicationName: string | null = null;
   // appplicationToken: string | null = null;
   // ssoToken: string | null = null;
 
@@ -48,7 +48,7 @@ export class DashboardComponent {
     // this.clinetId = this.sessionService.getClientId();
     // this.companyId = this.sessionService.getCompanyId();
     // this.companyLogo = this.sessionService.getCompanyLogo();
-    // this.applicationName = this.sessionService.getApplicationName();
+    this.applicationName = this.sessionService.getApplicationName();
     // this.appplicationToken = this.sessionService.getApplicationToken();
     // this.ssoToken = this.sessionService.getSsoToken();
     // console.log('Session Data:', this.session);

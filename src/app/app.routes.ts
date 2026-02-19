@@ -6,15 +6,18 @@ import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { LandingComponent } from './components/landing/landing.component';
 
 export const routes: Routes = [
-	{ path: '', pathMatch: 'full', redirectTo: 'login' },
-	{ path: 'login', component: LoginComponent },
-	{
-		path: '',
-		component: AppLayoutComponent,
-		children: [
-			{ path: 'dashboard', component: DashboardComponent, canActivate: [authGuard] },
-      { path: 'landing', component: LandingComponent , canActivate: [authGuard]}
-		]
-	},
-	{ path: '**', redirectTo: 'login' }
+
+  { path: '', pathMatch: 'full', redirectTo: 'login' },
+  { path: 'login', component: LoginComponent },
+  {
+    path: '',
+    component: AppLayoutComponent,
+    canActivate: [authGuard],
+    children: [
+      { path: 'landing', component: LandingComponent },
+      { path: 'dashboard', component: DashboardComponent }
+    ]
+  },
+
+  { path: '**', redirectTo: 'login' }
 ];
