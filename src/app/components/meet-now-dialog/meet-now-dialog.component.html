@@ -33,7 +33,7 @@
       [placeholder]="mode === 'join-meeting' ? 'Enter meeting ID' : ''" />
 
     <button *ngIf="mode === 'meet-now'" class="btn btn-outline-secondary copy-btn" type="button"
-      (click)="copyMeetingId(meetInput)">
+      (click)="copyMeetingId(meetInput)" style="border-color: #dee2e6;">
       <i class="bi bi-clipboard"></i>
     </button>
   </div>

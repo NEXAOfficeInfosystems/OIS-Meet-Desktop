@@ -31,7 +31,7 @@ export class DashboardComponent {
   // companyId:string | number | null = null;
   // companyLogo: string | null = null;
   applicationName: string | null = null;
-  // appplicationToken: string | null = null;
+  appplicationToken: string | null = null;
   // ssoToken: string | null = null;
 
   constructor(
@@ -49,7 +49,8 @@ export class DashboardComponent {
     // this.companyId = this.sessionService.getCompanyId();
     // this.companyLogo = this.sessionService.getCompanyLogo();
     this.applicationName = this.sessionService.getApplicationName();
-    // this.appplicationToken = this.sessionService.getApplicationToken();
+    this.appplicationToken = this.sessionService.getApplicationToken();
+    // console.log('token:', this.appplicationToken);
     // this.ssoToken = this.sessionService.getSsoToken();
     // console.log('Session Data:', this.session);
   }
