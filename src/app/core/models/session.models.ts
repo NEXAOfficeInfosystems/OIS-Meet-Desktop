@@ -47,7 +47,7 @@ export interface CompanyInfo {
   isDefault?: boolean;
 }
 
-export interface DmsUrlResponse {
+export interface MeetUrlResponse {
   appURL?: string;
   AppURL?: string;
   [key: string]: any;

@@ -2,7 +2,7 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { CompanyUrlResponse, DmsUrlResponse } from '../models/session.models';
+import { CompanyUrlResponse, MeetUrlResponse } from '../models/session.models';
 
 export interface CaptchaValidationRequest {
   id: string;
@@ -92,10 +92,10 @@ export class SsoApiService {
     });
   }
 
-  getDMSUrl(token: string, userinfo: string, applicationId: string | number): Observable<DmsUrlResponse> {
+  getMeetUrl(token: string, userinfo: string, applicationId: string | number): Observable<MeetUrlResponse> {
     const url = `${this.ssoApiUrl}/Common/generate-app-access-url`;
     const params = new HttpParams().set('appId', applicationId.toString());
-    return this.http.get<DmsUrlResponse>(url, {
+    return this.http.get<MeetUrlResponse>(url, {
       headers: this.createAuthHeaders(token, userinfo),
       params,
     });

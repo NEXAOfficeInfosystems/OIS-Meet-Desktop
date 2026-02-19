@@ -7,7 +7,7 @@ import { switchMap, takeUntil, tap } from 'rxjs/operators';
 import { ApplicationItem, SsoApiService, UserDetailsResponse } from '../../core/services/sso-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { StorageService } from '../../core/services/storage.service';
-import { CompanyUrlItem, CompanyUrlResponse, StoredDefaultCompany, StoredUserDetails, DmsUrlResponse } from '../../core/models/session.models';
+import { CompanyUrlItem, CompanyUrlResponse, StoredDefaultCompany, StoredUserDetails, MeetUrlResponse } from '../../core/models/session.models';
 import { encryptValueSixteen } from '../../core/utils/encrypt';
 
 @Component({
@@ -333,29 +333,29 @@ export class LoginComponent implements OnInit, OnDestroy {
 
         return this.ssoApiService.getApplicationList(token, userinfo, userId).pipe(
           switchMap((apps: ApplicationItem[]) => {
-            const dmsApp = apps.find(app =>
-              app?.Code === 'DMS' || app?.Code === 'OISVault' || app?.Code === 'Vault'
+            const meetApp = apps.find(app =>
+              app?.Code === 'Meet'
             );
 
-            const appId = dmsApp?.ApplicationId;
-            const appName = dmsApp?.ApplicationName;
+            const appId = meetApp?.ApplicationId;
+            const appName = meetApp?.ApplicationName;
             if (!appId) {
-              throw new Error('DMS/Vault app not found in application list.');
+              throw new Error('Meet app not found in application list.');
             }
 
-            this.storageService.setItem('dmsAppId', appId.toString());
+            this.storageService.setItem('meetAppId', appId.toString());
             this.storageService.setItem('applicationName', appName ?? '');
 
             return forkJoin({
-              dmsUrl: this.ssoApiService.getDMSUrl(token, userinfo, appId),
+              meetUrl: this.ssoApiService.getMeetUrl(token, userinfo, appId),
               companyUrl: this.ssoApiService.getCompanyURL(token, userinfo, userId, appId),
             });
           })
         );
       })
     ).subscribe({
-      next: ({ dmsUrl, companyUrl }: { dmsUrl: DmsUrlResponse; companyUrl: CompanyUrlResponse }) => {
-        const appUrl: string | null = (dmsUrl?.appURL ?? dmsUrl?.AppURL ?? null);
+      next: ({ meetUrl, companyUrl }: { meetUrl: MeetUrlResponse; companyUrl: CompanyUrlResponse }) => {
+        const appUrl: string | null = (meetUrl?.appURL ?? meetUrl?.AppURL ?? null);
         if (appUrl) {
           this.storageService.setItem('applicationUrl', appUrl);
 
