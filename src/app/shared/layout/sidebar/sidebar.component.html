@@ -1,0 +1,62 @@
+<!-- Left Sidebar -->
+<aside class="d-flex flex-column justify-content-between bg-light border-end vh-100" style="width: 72px;">
+
+  <!-- TOP -->
+  <div class="d-flex flex-column align-items-center gap-2 py-3">
+
+    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'activity'"
+      (click)="setActiveTab('activity')" title="Activity">
+      <i class="bi bi-bell fs-5"></i>
+      <span class="sidebar-label">Activity</span>
+    </button>
+
+    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'chat'"
+      (click)="setActiveTab('chat')" title="Chat">
+      <i class="bi bi-chat-dots fs-5"></i>
+      <span class="sidebar-label">Chat</span>
+    </button>
+
+    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'teams'"
+      (click)="setActiveTab('teams')" title="Teams">
+      <i class="bi bi-people fs-5"></i>
+      <span class="sidebar-label">Teams</span>
+    </button>
+
+    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'calendar'"
+      (click)="setActiveTab('calendar')" title="Calendar">
+      <i class="bi bi-calendar-event fs-5"></i>
+      <span class="sidebar-label">Calendar</span>
+    </button>
+
+    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'calls'"
+      (click)="setActiveTab('calls')" title="Calls">
+      <i class="bi bi-telephone fs-5"></i>
+      <span class="sidebar-label">Calls</span>
+    </button>
+
+    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'files'"
+      (click)="setActiveTab('files')" title="Files">
+      <i class="bi bi-folder fs-5"></i>
+      <span class="sidebar-label">Files</span>
+    </button>
+
+  </div>
+
+  <!-- BOTTOM -->
+  <div class="d-flex flex-column">
+
+    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'help'"
+      (click)="setActiveTab('help')" title="Help">
+      <i class="bi bi-question-circle fs-5"></i>
+      <span class="sidebar-label">Help</span>
+    </button>
+    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'apps'"
+      (click)="setActiveTab('apps')" title="Apps">
+      <i class="bi bi-grid fs-5"></i>
+      <span class="sidebar-label">Apps</span>
+    </button>
+
+
+
+  </div>
+</aside>
