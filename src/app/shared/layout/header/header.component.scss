@@ -1,37 +1,64 @@
-.header {
-  border-bottom: 1px solid ButtonBorder;
-  background: Canvas;
-  color: CanvasText;
+.app-header__user-menu {
+	background: #fff;
+	color: #222;
+	border: 1px solid var(--bs-border-color);
+	border-radius: var(--bs-border-radius-lg);
+	box-shadow: 0 4px 24px 0 rgba(0,0,0,0.18), 0 1.5px 4px 0 rgba(0,0,0,0.10);
+	min-width: 180px;
+	padding: 4px 0;
+}
+:host {
+	display: block;
 }
 
-.header__inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
+.app-header {
+	z-index: 1030;
+	box-shadow: var(--bs-box-shadow-sm);
 }
 
-.header__title {
-  font-size: 16px;
-  font-weight: 600;
+
+.app-header__inner {
+	height: var(--app-header-height);
 }
 
-.header__nav {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.app-header__logo {
+	height: 40px;
+	width: auto;
+	display: block;
 }
 
-.header__link {
-  text-decoration: none;
-  color: inherit;
+.app-header__avatar {
+	width: 40px;
+	height: 40px;
+	background: var(--bs-secondary-bg);
+	color: var(--bs-secondary-color);
+	border: 1px solid var(--bs-border-color);
 }
 
-.header__button {
-  border: 1px solid ButtonBorder;
-  border-radius: 6px;
-  background: ButtonFace;
-  color: ButtonText;
-  padding: 6px 10px;
-  cursor: pointer;
+.app-header__theme-btn {
+	text-decoration: none;
+	line-height: 0;
 }
+
+.app-header__theme-icon {
+	width: 28px;
+	height: 28px;
+	display: block;
+}
+
+@media (max-width: 575.98px) {
+	.app-header__logo {
+		height: 32px;
+	}
+}
+.app-header__welcome {
+  font-size: 0.875rem;
+  font-weight: 500;   /* semi-bold */
+  color: #6c757d;
+}
+
+.app-header__welcome-name {
+  font-weight: 500;   /* semi-bold */
+  color: #212529;
+}
+

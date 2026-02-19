@@ -1,16 +1,19 @@
 <section class="dashboard">
   <h1 class="dashboard__title">Dashboard</h1>
-  <p class="dashboard__text">You are logged in.</p>
-
   <!-- <pre class="dashboard__text" *ngIf="session as s">{{ s | json }}</pre> -->
   <p class="dashboard__text" *ngIf="userFullName">Welcome, {{ userFullName }}!</p>
-  <p class="dashboard__text" *ngIf="defaultCompany">Default Company: {{ defaultCompany }}</p>
+  <button class="btn btn-primary">
+    <i class="bi bi-camera-video me-2"></i>
+    Start Meeting
+  </button>
+
+  <!-- <p class="dashboard__text" *ngIf="defaultCompany">Default Company: {{ defaultCompany }}</p>
   <p class="dashboard__text" *ngIf="clinetId">Client ID: {{ clinetId }}</p>
   <p class="dashboard__text" *ngIf="companyId">Company ID: {{ companyId }}</p>
   <p class="dashboard__text" *ngIf="companyLogo">Company Logo: {{ companyLogo }}</p>
   <p class="dashboard__text" *ngIf="applicationName">Application Name: {{ applicationName }}</p>
   <p class="dashboard__text" *ngIf="appplicationToken">Application Token: {{ appplicationToken }}</p>
-  <p class="dashboard__text" *ngIf="ssoToken">SSO Token: {{ ssoToken }}</p>
+  <p class="dashboard__text" *ngIf="ssoToken">SSO Token: {{ ssoToken }}</p> -->
 
-  <button class="dashboard__button" type="button" (click)="logout()">Logout</button>
+  <!-- <button class="dashboard__button" type="button" (click)="logout()">Logout</button> -->
 </section>

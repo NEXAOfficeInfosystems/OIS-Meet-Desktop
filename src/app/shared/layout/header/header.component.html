@@ -1,12 +1,48 @@
-<header class="header">
-  <div class="header__inner">
-    <div class="header__brand">
-      <span class="header__title">{{ appTitle() }}</span>
-    </div>
+<header class="app-header position-fixed top-0 start-0 end-0 bg-white border-bottom">
+  <div class="container-fluid px-3 px-md-4">
+    <div class="app-header__inner d-flex align-items-center justify-content-between gap-3">
+      <a class="d-inline-flex align-items-center text-decoration-none" routerLink="/dashboard" aria-label="OIS Meet">
+        <img src="assets/login/ois-meet-logo.svg" class="app-header__logo" alt="OIS Meet Logo" />
+      </a>
 
-    <nav class="header__nav" *ngIf="isAuthenticated$ | async">
-      <a class="header__link" routerLink="/dashboard">Dashboard DK</a>
-      <button class="header__button" type="button" (click)="logout()">Logout</button>
-    </nav>
+      <div class="d-flex align-items-center gap-2 gap-md-3 flex-shrink-0">
+        <span class="app-header__welcome d-none d-md-inline" *ngIf="userFullName">
+          Welcome <span class="app-header__welcome-name">{{ userFullName }}</span>!
+        </span>
+
+
+        <button type="button" class="btn btn-link p-0 app-header__theme-btn" (click)="toggleTheme()"
+          [attr.aria-label]="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
+          <img [src]="theme === 'dark' ? 'assets/header/night-mode.png' : 'assets/header/brightness.png'"
+            class="app-header__theme-icon" alt="" />
+        </button>
+
+        <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 py-2 d-flex align-items-center gap-2">
+          <i class="bi bi-person-fill-add fs-6"></i>
+          <span class="d-none d-sm-inline">Invite team</span>
+          <span class="d-inline d-sm-none">Invite</span>
+        </button>
+
+
+
+
+        <div class="dropdown position-relative">
+          <button type="button" class="btn p-0 border-0 bg-transparent" (click)="toggleUserMenu($event)"
+            [attr.aria-expanded]="isUserMenuOpen" aria-haspopup="menu" aria-label="User menu">
+            <span class="app-header__avatar rounded-circle d-inline-flex align-items-center justify-content-center">
+              <i class="bi bi-person-fill"></i>
+            </span>
+          </button>
+
+          <div class="dropdown-menu dropdown-menu-end show app-header__user-menu" data-bs-popper="static"
+            *ngIf="isUserMenuOpen">
+            <button type="button" class="dropdown-item" (click)="logout()">
+              <i class="bi bi-box-arrow-right me-2"></i>
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </header>

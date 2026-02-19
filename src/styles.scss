@@ -1,8 +1,31 @@
-/* Bootstrap is the primary design system for this app.
-	Angular Material is intended for dialogs only. */
+:root {
+  --app-header-height: 64px;
+  --app-header-offset: var(--app-header-height);
+  --app-footer-height: 40px;
+
+  /* Theme colors */
+  --light-bg: #f4f6f9;
+  --light-text: #212529;
+
+  --dark-bg: #0f172a;
+  --dark-text: #e5e7eb;
+}
 
 html,
 body {
-	height: 100%;
-	margin: 0;
+  height: 100%;
+  margin: 0;
+  font-family: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+body.theme-light {
+  color-scheme: light;
+  background-color: var(--light-bg);
+  color: var(--light-text);
+}
+
+body.theme-dark {
+  color-scheme: dark;
+  background-color: var(--dark-bg);
+  color: var(--dark-text);
 }
