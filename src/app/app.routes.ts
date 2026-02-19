@@ -5,6 +5,7 @@ import { LoginComponent } from './components/login/login.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { LandingComponent } from './components/landing/landing.component';
 import { JoinMeetingComponent } from './components/join-meeting/join-meeting.component';
+import { ChatComponent } from './components/chat/chat.component';
 
 export const routes: Routes = [
 
@@ -17,7 +18,8 @@ export const routes: Routes = [
     children: [
       { path: 'dashboard', component: DashboardComponent },
       { path: 'landing', component: LandingComponent },
-      { path: 'join-meeting', component: JoinMeetingComponent }
+      { path: 'join-meeting', component: JoinMeetingComponent },
+      { path: 'chat', component: ChatComponent }
 
     ]
   },

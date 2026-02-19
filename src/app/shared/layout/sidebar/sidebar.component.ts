@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-sidebar',
@@ -8,8 +9,14 @@ import { Component } from '@angular/core';
 })
 export class SidebarComponent {
   public activeTab: string = 'chat';
+  constructor(
+    private router: Router
+  ) {
+    this.setActiveTab(this.activeTab)
+  }
 
   public setActiveTab(tab: string): void {
     this.activeTab = tab;
+    this.router.navigate(['/chat']);
   }
 }

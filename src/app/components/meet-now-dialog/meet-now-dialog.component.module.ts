@@ -7,12 +7,14 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { MeetNowDialogComponent } from './meet-now-dialog.component';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
 
 @NgModule({
   declarations: [MeetNowDialogComponent],
   imports: [
     CommonModule,
     MatDialogModule,
+    MatSnackBarModule,
     MatButtonModule,
     MatIconModule,
     MatFormFieldModule,

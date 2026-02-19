@@ -1,0 +1,126 @@
+<div class="teams-chat-container">
+  <!-- Left Sidebar - User List -->
+  <div class="users-sidebar">
+    <div class="sidebar-header">
+      <h5 class="mb-0">Chat</h5>
+      <button class="btn btn-light btn-sm rounded-circle p-2 d-flex align-items-center justify-content-center">
+        <i class="bi bi-pencil"></i>
+      </button>
+    </div>
+
+    <div class="search-box px-3 pb-3">
+      <div class="input-group">
+        <span class="input-group-text bg-light border-end-0">
+          <i class="bi bi-search"></i>
+        </span>
+        <input type="text" class="form-control bg-light border-start-0" placeholder="Search">
+      </div>
+    </div>
+
+    <div class="users-list">
+      <div *ngFor="let user of users" class="user-item" [class.active]="selectedUser?.id === user.id"
+        (click)="selectUser(user)">
+
+        <div class="user-avatar" [style.background-color]="user.avatarColor">
+          {{ user.name.charAt(0) }}
+          <span class="status-indicator" [class.online]="user.online"></span>
+        </div>
+
+        <div class="user-info">
+          <div class="user-name-row">
+            <span class="user-name">{{ user.name }}</span>
+            <span class="user-time">{{ user.lastMessageTime }}</span>
+          </div>
+          <div class="last-message">
+            <span class="message-preview">{{ user.lastMessage }}</span>
+            <span *ngIf="user.unreadCount > 0" class="unread-badge">{{ user.unreadCount }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Side - Chat Window -->
+  <div class="chat-window" *ngIf="selectedUser; else noChatSelected">
+    <!-- Chat Header -->
+    <div class="chat-header">
+      <div class="chat-user-info">
+        <div class="user-avatar small" [style.background-color]="selectedUser.avatarColor">
+          {{ selectedUser.name.charAt(0) }}
+          <span class="status-indicator small" [class.online]="selectedUser.online"></span>
+        </div>
+        <div class="chat-user-details">
+          <h6 class="mb-0">{{ selectedUser.name }}</h6>
+          <small class="user-status">{{ selectedUser.online ? 'Online' : 'Offline' }}</small>
+        </div>
+      </div>
+
+      <div class="chat-actions">
+        <button class="btn btn-light btn-sm rounded-circle p-2 me-1">
+          <i class="bi bi-telephone"></i>
+        </button>
+        <button class="btn btn-light btn-sm rounded-circle p-2 me-1">
+          <i class="bi bi-camera-video"></i>
+        </button>
+        <button class="btn btn-light btn-sm rounded-circle p-2">
+          <i class="bi bi-three-dots-vertical"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Chat Messages -->
+    <div class="chat-messages" #chatMessages>
+      <div *ngFor="let msg of getMessagesForSelectedUser()" class="message" [class.message-me]="msg.sender === 'me'">
+
+        <div class="message-avatar" *ngIf="msg.sender !== 'me'">
+          <div class="user-avatar smallest" [style.background-color]="selectedUser.avatarColor">
+            {{ selectedUser.name.charAt(0) }}
+          </div>
+        </div>
+
+        <div class="message-content">
+          <div class="bubble" [class.me-bubble]="msg.sender === 'me'">
+            {{ msg.text }}
+          </div>
+          <div class="message-meta">
+            <span class="message-time">{{ msg.time }}</span>
+            <i *ngIf="msg.sender === 'me'" class="bi read-receipt" [class.bi-check]="!msg.read"
+              [class.bi-check-all]="msg.read" [class.read]="msg.read"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Input -->
+    <div class="chat-input-area">
+      <div class="input-container">
+        <button class="btn btn-link text-secondary attach-btn">
+          <i class="bi bi-paperclip"></i>
+        </button>
+
+        <div class="flex-grow-1">
+          <input type="text" class="form-control message-input border-0 bg-light" placeholder="Type a message"
+            [(ngModel)]="newMessage" (keydown.enter)="sendMessage()">
+        </div>
+
+        <button class="btn btn-link text-primary send-btn" [class.text-secondary]="!newMessage.trim()"
+          [disabled]="!newMessage.trim()" (click)="sendMessage()">
+          <i class="bi bi-send"></i>
+        </button>
+
+        <button class="btn btn-link text-secondary emoji-btn">
+          <i class="bi bi-emoji-smile"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- No Chat Selected State -->
+  <ng-template #noChatSelected>
+    <div class="no-chat-selected">
+      <i class="bi bi-chat-dots no-chat-icon"></i>
+      <h5>Select a conversation</h5>
+      <p class="text-muted">Choose a user from the list to start chatting</p>
+    </div>
+  </ng-template>
+</div>
