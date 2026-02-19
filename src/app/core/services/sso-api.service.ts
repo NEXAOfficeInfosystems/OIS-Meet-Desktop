@@ -2,6 +2,7 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { CompanyUrlResponse, DmsUrlResponse } from '../models/session.models';
 
 export interface CaptchaValidationRequest {
   id: string;
@@ -10,12 +11,36 @@ export interface CaptchaValidationRequest {
 
 export interface UserDetailsResponse {
   Id?: string;
+  Email?: string;
+  FullName?: string;
+  PhoneNumber?: string;
+  IsActive?: boolean;
+  Name?: string;
+  Surname?: string;
+  UserTypeId?: string;
+  UserId?: string;
+  GenderId?: string;
+  UserStatusId?: string | null;
+  RoleId?: string;
+  IsAdmin?: boolean;
+  ImageUrl?: string | null;
+  dialCode?: string;
+  IsDefault?: boolean;
+  EmpId?: string | null;
+  WorkingCompanyId?: number;
+  IsDeleted?: boolean;
+  CompanyName?: string;
   [key: string]: any;
 }
 
 export interface ApplicationItem {
   Code?: string;
-  ApplicationId?: string;
+  ApplicationId?: string | number;
+  ApplicationName?: string;
+  Url?: string;
+  ImageUrl?: string | null;
+  CoreApplicationId?: number;
+  Description?: string | null;
   [key: string]: any;
 }
 
@@ -67,19 +92,19 @@ export class SsoApiService {
     });
   }
 
-  getDMSUrl(token: string, userinfo: string, applicationId: string): Observable<any> {
+  getDMSUrl(token: string, userinfo: string, applicationId: string | number): Observable<DmsUrlResponse> {
     const url = `${this.ssoApiUrl}/Common/generate-app-access-url`;
-    const params = new HttpParams().set('appId', applicationId);
-    return this.http.get<any>(url, {
+    const params = new HttpParams().set('appId', applicationId.toString());
+    return this.http.get<DmsUrlResponse>(url, {
       headers: this.createAuthHeaders(token, userinfo),
       params,
     });
   }
 
-  getCompanyURL(token: string, userinfo: string, userId: string, appId: string): Observable<any> {
+  getCompanyURL(token: string, userinfo: string, userId: string, appId: string | number): Observable<CompanyUrlResponse> {
     const url = `${this.ssoApiUrl}/User/GetCompaniesAppByUser/${encodeURIComponent(userId)}`;
-    const params = new HttpParams().set('appId', appId);
-    return this.http.get<any>(url, {
+    const params = new HttpParams().set('appId', appId.toString());
+    return this.http.get<CompanyUrlResponse>(url, {
       headers: this.createAuthHeaders(token, userinfo),
       params,
     });
