@@ -4,6 +4,7 @@ import { AppLayoutComponent } from './shared/layout/app-layout/app-layout.compon
 import { LoginComponent } from './components/login/login.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { LandingComponent } from './components/landing/landing.component';
+import { JoinMeetingComponent } from './components/join-meeting/join-meeting.component';
 
 export const routes: Routes = [
 
@@ -14,8 +15,10 @@ export const routes: Routes = [
     component: AppLayoutComponent,
     canActivate: [authGuard],
     children: [
+      { path: 'dashboard', component: DashboardComponent },
       { path: 'landing', component: LandingComponent },
-      { path: 'dashboard', component: DashboardComponent }
+      { path: 'join-meeting', component: JoinMeetingComponent }
+
     ]
   },
 

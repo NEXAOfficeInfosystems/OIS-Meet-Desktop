@@ -1,0 +1,52 @@
+.meet-dialog {
+  padding: 16px;
+}
+
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid #dee2e6;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn.active {
+  background: #0d6efd;
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+
+.icon-btn i {
+  font-size: 18px;
+}
+
+.close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.close-btn:hover {
+  color: #000;
+}
+.copy-btn {
+  border-left: none;
+  background: transparent;
+  color: #6c757d;
+}
+
+.copy-btn:hover {
+  color: #0d6efd;
+}
+.input-group .form-control:focus {
+  box-shadow: none;
+}
+

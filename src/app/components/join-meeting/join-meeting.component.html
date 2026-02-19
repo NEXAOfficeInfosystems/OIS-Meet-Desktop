@@ -1,0 +1,60 @@
+<section class="join-wrapper d-flex align-items-center justify-content-center">
+  <div class="join-card">
+
+    <!-- Header -->
+    <div class="join-header d-flex align-items-center justify-content-between mb-4">
+      <h5 class="mb-0 fw-semibold">Join Existing Meeting</h5>
+
+      <span class="badge secured-badge">
+        <i class="bi bi-shield-check me-1"></i> SECURED
+      </span>
+    </div>
+
+    <!-- Form -->
+    <form [formGroup]="joinForm" (ngSubmit)="onSubmit()">
+      <!-- Name -->
+      <div class="mb-3">
+        <label class="form-label">Your Name</label>
+        <div class="input-group custom-input">
+          <span class="input-group-text">
+            <i class="bi bi-person"></i>
+          </span>
+          <input type="text" class="form-control" placeholder="Enter your Name" formControlName="name" readonly/>
+        </div>
+      </div>
+
+      <!-- Meeting ID -->
+      <div class="mb-4">
+        <label class="form-label">Meeting ID</label>
+        <div class="input-group custom-input">
+          <span class="input-group-text">
+            <i class="bi bi-hash"></i>
+          </span>
+          <input type="text" class="form-control" placeholder="Enter your meeting ID" formControlName="meetingId" />
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div class="d-flex gap-3">
+        <button type="button" class="btn btn-light flex-fill back-btn" (click)="goback()">
+          <i class="bi bi-arrow-left me-1"></i> Go Back
+        </button>
+
+        <button type="submit" class="btn btn-primary flex-fill" [disabled]="joinForm.invalid">
+          Join Now
+        </button>
+      </div>
+    </form>
+
+    <!-- Footer -->
+    <div class="join-footer text-center mt-4">
+      <span>
+        Need help ?
+        <a href="#" class="text-primary text-decoration-none">
+          Contact support
+        </a>
+      </span>
+    </div>
+
+  </div>
+</section>

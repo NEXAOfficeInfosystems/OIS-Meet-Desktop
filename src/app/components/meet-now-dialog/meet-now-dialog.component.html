@@ -1,0 +1,52 @@
+<div class="meet-dialog position-relative">
+
+  <!-- CLOSE -->
+  <button class="close-btn" (click)="dialogRef.close()">
+    <i class="bi bi-x-lg"></i>
+  </button>
+
+  <!-- HEADER -->
+  <h6 class="fw-semibold mb-3">
+    {{ mode === 'meet-now' ? 'Meet Now' : 'Join Meeting' }}
+  </h6>
+
+  <!-- MIC / CAM -->
+  <div class="d-flex justify-content-center gap-3 mb-3">
+
+    <button class="icon-btn" [class.active]="micOn" (click)="toggleMic()">
+      <i class="bi" [ngClass]="micOn ? 'bi-mic-fill' : 'bi-mic-mute-fill'"></i>
+    </button>
+
+    <button class="icon-btn" [class.active]="camOn" (click)="toggleCam()">
+      <i class="bi" [ngClass]="camOn ? 'bi-camera-video-fill' : 'bi-camera-video-off-fill'"></i>
+    </button>
+  </div>
+
+  <!-- MEETING ID -->
+  <label class="form-label small">
+    {{ mode === 'meet-now' ? 'Meeting ID' : 'Enter Meeting ID' }}
+  </label>
+
+  <div class="input-group mb-3">
+    <input #meetInput type="text" class="form-control" [readonly]="mode === 'meet-now'"
+      [value]="mode === 'meet-now' ? meetingId : ''"
+      [placeholder]="mode === 'join-meeting' ? 'Enter meeting ID' : ''" />
+
+    <button *ngIf="mode === 'meet-now'" class="btn btn-outline-secondary copy-btn" type="button"
+      (click)="copyMeetingId(meetInput)">
+      <i class="bi bi-clipboard"></i>
+    </button>
+  </div>
+
+  <!-- ACTION -->
+  <button class="btn btn-primary w-100" [disabled]="mode === 'join-meeting' && !meetInput.value" (click)="mode === 'meet-now'
+            ? startMeeting()
+            : joinMeeting(meetInput.value)">
+    <i class="bi me-2" [ngClass]="mode === 'meet-now'
+         ? 'bi-camera-video'
+         : 'bi-box-arrow-in-right'"></i>
+
+    {{ mode === 'meet-now' ? 'Start Meeting' : 'Join Meeting' }}
+  </button>
+
+</div>

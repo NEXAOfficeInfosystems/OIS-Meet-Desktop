@@ -3,13 +3,16 @@ import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { SessionService } from '../../../core/services/session.service';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MeetNowDialogComponentModule } from '../../../components/meet-now-dialog/meet-now-dialog.component.module';
+import { MeetNowDialogComponent } from '../../../components/meet-now-dialog/meet-now-dialog.component';
 
 type ThemeMode = 'light' | 'dark';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [RouterLink, CommonModule],
+  imports: [RouterLink, CommonModule, MatDialogModule, MeetNowDialogComponentModule],
   templateUrl: './header.component.html',
   styleUrl: './header.component.scss'
 })
@@ -28,11 +31,27 @@ export class HeaderComponent {
     private hostEl: ElementRef,
     private auth: AuthService,
     private router: Router,
-    private sessionService: SessionService
+    private sessionService: SessionService,
+    private dialog: MatDialog
   ) {
     this.userFullName = this.sessionService.getFullName();
     this.applyThemeToDocument();
   }
+
+openMeetNowDialog(mode:string = 'meet-now') {
+  this.dialog.open(MeetNowDialogComponent, {
+    width: '320px',
+    panelClass: 'meet-now-dialog',
+    position: {
+      top: '70px',
+      right: '20px'
+    },
+    data: { mode: mode },
+    autoFocus: false,
+    hasBackdrop: true,
+    disableClose: true
+  });
+}
 
   setTheme(theme: ThemeMode) {
     this.theme = theme;
