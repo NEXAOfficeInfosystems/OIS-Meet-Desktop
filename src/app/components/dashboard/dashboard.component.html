@@ -2,7 +2,7 @@
   <h1 class="dashboard__title">Dashboard</h1>
   <!-- <pre class="dashboard__text" *ngIf="session as s">{{ s | json }}</pre> -->
   <p class="dashboard__text" *ngIf="userFullName">Welcome, {{ userFullName }}!</p>
-  <button class="btn btn-primary">
+  <button class="btn btn-primary" (click)="gotoLandingPage()">
     <i class="bi bi-camera-video me-2"></i>
     Start Meeting
   </button>

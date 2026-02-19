@@ -58,4 +58,7 @@ export class DashboardComponent {
     this.authService.logout();
     void this.router.navigateByUrl('/login');
   }
+  gotoLandingPage() {
+      this.router.navigateByUrl('/landing');
+  }
 }
