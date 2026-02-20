@@ -7,7 +7,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subscription } from 'rxjs';
 import * as bootstrap from 'bootstrap';
 import { SessionService } from '../../core/services/session.service';
-
+import { Clipboard } from '@angular/cdk/clipboard';
 // Services (to be implemented)
 // import { WebRTCService } from '../../core/services/webrtc.service';
 // import { MeetingService } from '../../core/services/meeting.service';
@@ -109,7 +109,8 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
     private router: Router,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
-    private sessionService: SessionService
+    private sessionService: SessionService,
+        private clipboard: Clipboard,
     // private webrtcService: WebRTCService,
     // private meetingService: MeetingService
   ) {
@@ -475,7 +476,130 @@ updateFormattedDuration(): void {
 padZero(num: number): string {
   return num < 10 ? '0' + num : num.toString();
 }
+
+  /**
+   * Copy meeting code to clipboard
+   */
+  copyMeetingCode(event: Event): void {
+    event.preventDefault();
+
+    const meetingCode = this.meetingId;
+    const meetingLink = window.location.href;
+
+    // Copy both code and link
+    // this.clipboard.copy(`Meeting Code: ${meetingCode}\nMeeting Link: ${meetingLink}`);
+    this.clipboard.copy(`Meeting Code: ${meetingCode}`);
+
+    this.snackBar.open('Meeting code copied to clipboard!', 'Close', {
+      duration: 3000,
+      horizontalPosition: 'center',
+      verticalPosition: 'bottom'
+    });
+  }
+
+  /**
+   * Share meeting details to Microsoft Teams
+   */
+  shareToTeams(event: Event): void {
+    event.preventDefault();
+
+    const meetingSubject = encodeURIComponent(this.meetingTopic || 'OIS Meet');
+    const meetingBody = encodeURIComponent(
+      `Join OIS Meet meeting\n\n` +
+      `Meeting Code: ${this.meetingId}\n` +
+      `Meeting Link: ${window.location.href}\n\n` +
+      `Click the link to join the meeting.`
+    );
+
+    // Teams deep link
+    const teamsDeepLink = `https://teams.microsoft.com/l/meeting/new?subject=${meetingSubject}&body=${meetingBody}`;
+
+    // Try to open Teams desktop app first, fallback to web
+    this.openTeamsApp(teamsDeepLink);
+  }
+
+  /**
+   * Share meeting details via Email
+   */
+  shareToMail(event: Event): void {
+    event.preventDefault();
+
+    const subject = encodeURIComponent(`Join OIS Meet: ${this.meetingTopic || 'Meeting'}`);
+    const body = encodeURIComponent(
+      `You're invited to join an OIS Meet meeting.\n\n` +
+      `Meeting Code: ${this.meetingId}\n` +
+      `Meeting Link: ${window.location.href}\n\n` +
+      `Join using the link above or enter the meeting code in OIS Meet app.`
+    );
+
+    // Open default mail client
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+
+    this.snackBar.open('Email client opened!', 'Close', {
+      duration: 2000
+    });
+  }
+
+  /**
+   * Open Teams app with meeting details
+   */
+  private openTeamsApp(deepLink: string): void {
+    // Try to open desktop app first (Electron environment)
+    // if (window.navigator && window.navigator.msLaunchUri) {
+    //   // Windows 10+
+    //   window.navigator.msLaunchUri(
+    //     deepLink,
+    //     () => {
+    //       console.log('Teams desktop app opened');
+    //     },
+    //     () => {
+    //       // Fallback to web
+    //       window.open(deepLink, '_blank');
+    //     }
+    //   );
+    // } else {
+    //   // For other platforms, try custom protocol first
+    //   const iframe = document.createElement('iframe');
+    //   iframe.style.display = 'none';
+    //   document.body.appendChild(iframe);
+
+    //   try {
+    //     // Try to open msteams protocol
+    //     iframe.src = 'msteams:/';
+    //     setTimeout(() => {
+    //       document.body.removeChild(iframe);
+
+    //       // After 500ms, if Teams didn't open, redirect to web version
+    //       setTimeout(() => {
+    //         window.open(deepLink, '_blank');
+    //       }, 500);
+    //     }, 0);
+    //   } catch (e) {
+    //     document.body.removeChild(iframe);
+    //     window.open(deepLink, '_blank');
+    //   }
+    // }
+
+    this.snackBar.open('Opening Microsoft Teams...', 'Close', {
+      duration: 2000
+    });
+  }
+
+  /**
+   * Share to specific Teams channel/user (optional advanced feature)
+   */
+  shareToTeamsChannel(channelId?: string): void {
+    // You can implement more advanced Teams integration here
+    // For deep linking to specific channels or chats
+    const baseUrl = 'https://teams.microsoft.com/l/chat/0/0?';
+    const users = encodeURIComponent('user@example.com'); // Add user email
+    const message = encodeURIComponent(`Join meeting: ${window.location.href}`);
+
+    const teamsChatLink = `${baseUrl}users=${users}&message=${message}`;
+    window.open(teamsChatLink, '_blank');
+  }
 }
+
 
 // Interfaces
 interface Participant {

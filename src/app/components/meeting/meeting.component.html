@@ -93,6 +93,36 @@
         <span class="meeting-timer" id="meetingTimer" data-bs-toggle="tooltip" data-bs-title="Meeting duration">
           {{ formattedDuration }}
         </span>
+
+        <div class="invite-dropdown" dropdown>
+          <button class="invite-btn" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-person-plus-fill"></i>
+            <span>Invite Team</span>
+          </button>
+          <ul class="dropdown-menu">
+            <li>
+              <a class="dropdown-item" href="#" (click)="copyMeetingCode($event)">
+                <i class="bi bi-clipboard"></i>
+                Copy Meeting Code
+              </a>
+            </li>
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" (click)="shareToTeams($event)">
+                <i class="bi bi-microsoft-teams"></i>
+                Share to Microsoft Teams
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" (click)="shareToMail($event)">
+                <i class="bi bi-envelope"></i>
+                Share via Email
+              </a>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <div class="controls-center">
