@@ -1,5 +1,5 @@
 :root {
-  --app-header-height: 64px;
+  --app-header-height: 50px;
   --app-header-offset: var(--app-header-height);
   --app-footer-height: 40px;
 
@@ -33,3 +33,28 @@ body.theme-dark {
   padding: 0;
   border-radius: 10px;
 }
+
+/* ===== Scrollbar CSS ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e5e5e5;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #d6d6d6;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* ===== Scrollbar CSS End===== */
