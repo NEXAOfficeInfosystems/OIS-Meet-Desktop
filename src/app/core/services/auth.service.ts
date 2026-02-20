@@ -25,10 +25,15 @@ export class AuthService {
     return this.isAuthenticatedSubject.value;
   }
 
-  getToken(): string | null {
+  getSSOToken(): string | null {
     const token = this.cookieService.get(TOKEN_COOKIE_KEY);
     return token ? token : null;
   }
+
+  getEncryptedJson(): string | null {
+  const encrypted = this.cookieService.get(ENCRYPTED_JSON_COOKIE_KEY);
+  return encrypted ? encrypted : null;
+}
 
   setSession(token: string, encryptedJson?: string): void {
     this.cookieService.set(TOKEN_COOKIE_KEY, token);

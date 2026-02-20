@@ -110,6 +110,13 @@ export class SsoApiService {
     });
   }
 
+  getSSOUserList(token: string, userinfo: string, client: string, companyId: string, appId: string): Observable<UserDetailsResponse[]> {
+    const url = `${this.ssoApiUrl}/Common/GetUsersDetailsByClientCompanyDMS/${client}/${companyId}/${appId}`;
+    return this.http.get<UserDetailsResponse[]>(url, {
+      headers: this.createAuthHeaders(token, userinfo),
+    });
+  }
+
   private createAuthHeaders(token: string, userinfo: string): HttpHeaders {
     return new HttpHeaders({
       'Content-Type': 'application/json',

@@ -1,9 +1,12 @@
+import { SessionService } from './../../core/services/session.service';
 import { Component, OnInit, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { SsoApiService } from '../../core/services/sso-api.service';
+import { AuthService } from '../../core/services/auth.service';
 
 interface User {
-  id: number;
+  id: string;
   name: string;
   online: boolean;
   lastMessage: string;
@@ -14,12 +17,13 @@ interface User {
 
 interface Message {
   id: number;
-  userId: number;
+  userId: string;
   text: string;
   sender: 'me' | 'other';
   time: string;
   read: boolean;
 }
+
 
 @Component({
   selector: 'app-chat',
@@ -31,68 +35,25 @@ interface Message {
 export class ChatComponent implements OnInit, AfterViewChecked {
   @ViewChild('chatMessages') private chatMessagesContainer!: ElementRef;
 
-  users: User[] = [
-    {
-      id: 1,
-      name: 'John Smith',
-      online: true,
-      lastMessage: 'See you at the meeting',
-      lastMessageTime: '10:30 AM',
-      unreadCount: 2,
-      avatarColor: '#1a73e8'
-    },
-    {
-      id: 2,
-      name: 'Emma Watson',
-      online: true,
-      lastMessage: 'Thanks for the update',
-      lastMessageTime: '9:15 AM',
-      unreadCount: 0,
-      avatarColor: '#e91e63'
-    },
-    {
-      id: 3,
-      name: 'Michael Brown',
-      online: false,
-      lastMessage: 'Can you review the document?',
-      lastMessageTime: 'Yesterday',
-      unreadCount: 0,
-      avatarColor: '#4caf50'
-    },
-    {
-      id: 4,
-      name: 'Sarah Wilson',
-      online: true,
-      lastMessage: 'The project looks great!',
-      lastMessageTime: 'Yesterday',
-      unreadCount: 1,
-      avatarColor: '#ff9800'
-    },
-    {
-      id: 5,
-      name: 'David Lee',
-      online: false,
-      lastMessage: 'Call me when you\'re free',
-      lastMessageTime: 'Yesterday',
-      unreadCount: 0,
-      avatarColor: '#9c27b0'
-    }
-  ];
+  constructor(private ssoApiService: SsoApiService, private authService: AuthService, private sessionService: SessionService) { }
+
+  users: User[] = [];
 
   allMessages: Message[] = [
-    { id: 1, userId: 1, text: 'Hi John! How are you?', sender: 'me', time: '10:20 AM', read: true },
-    { id: 2, userId: 1, text: 'I\'m good, thanks! How about you?', sender: 'other', time: '10:21 AM', read: true },
-    { id: 3, userId: 1, text: 'Great! Ready for the meeting?', sender: 'me', time: '10:22 AM', read: true },
-    { id: 4, userId: 1, text: 'Yes, see you at 11', sender: 'other', time: '10:23 AM', read: true },
-    { id: 5, userId: 2, text: 'Hi Emma, did you see the design?', sender: 'me', time: '9:15 AM', read: true },
-    { id: 6, userId: 2, text: 'Yes, it looks perfect!', sender: 'other', time: '9:16 AM', read: true },
-    { id: 7, userId: 4, text: 'Sarah, check out the new update', sender: 'me', time: 'Yesterday', read: false }
+    { id: 1, userId: '', text: 'Hi John! How are you?', sender: 'me', time: '10:20 AM', read: true },
+    { id: 2, userId: '', text: 'I\'m good, thanks! How about you?', sender: 'other', time: '10:21 AM', read: true },
+    { id: 3, userId: '', text: 'Great! Ready for the meeting?', sender: 'me', time: '10:22 AM', read: true },
+    { id: 4, userId: '', text: 'Yes, see you at 11', sender: 'other', time: '10:23 AM', read: true },
+    { id: 5, userId: '', text: 'Hi Emma, did you see the design?', sender: 'me', time: '9:15 AM', read: true },
+    { id: 6, userId: '', text: 'Yes, it looks perfect!', sender: 'other', time: '9:16 AM', read: true },
+    { id: 7, userId: '', text: 'Sarah, check out the new update', sender: 'me', time: 'Yesterday', read: false }
   ];
 
   selectedUser: User | null = null;
   newMessage = '';
 
   ngOnInit() {
+    this.getSSOUserList();
     // Auto-select first user
     if (this.users.length > 0) {
       this.selectUser(this.users[0]);
@@ -111,9 +72,12 @@ export class ChatComponent implements OnInit, AfterViewChecked {
 
   getMessagesForSelectedUser(): Message[] {
     if (!this.selectedUser) return [];
+
     return this.allMessages
       .filter(msg => msg.userId === this.selectedUser?.id)
-      .sort((a, b) => this.parseTime(a.time).getTime() - this.parseTime(b.time).getTime());
+      .sort((a, b) =>
+        this.parseTime(a.time).getTime() - this.parseTime(b.time).getTime()
+      );
   }
 
   sendMessage() {
@@ -203,4 +167,47 @@ export class ChatComponent implements OnInit, AfterViewChecked {
     today.setHours(hours, minutes, 0, 0);
     return today;
   }
+
+  getSSOUserList(): void {
+    const token = this.authService.getSSOToken() ?? '';
+    const userinfo = this.authService.getEncryptedJson() ?? '';
+    const client = this.sessionService.getClientId() ?? '';
+    const companyId = this.sessionService.getCompanyId()?.toString() ?? '';
+    const appId = this.sessionService.getMeetAppId() ?? '';
+
+  this.ssoApiService.getSSOUserList(token, userinfo, client, companyId, appId)
+    .subscribe(
+      (response: any[]) => {
+        this.users = response.map(user => ({
+          id: user.id,
+          name: user.fullName,
+          online: true,
+          lastMessage: '',
+          lastMessageTime: '',
+          unreadCount: 0,
+          avatarColor: this.getRandomColor()
+        }));
+        console.log('Mapped Users:', this.users);
+        if (this.users.length > 0) {
+          this.selectUser(this.users[0]);
+        }
+      },
+      (error) => {
+        console.error('Error fetching SSO user list:', error);
+      }
+    );
+  }
+  private getRandomColor(): string {
+    const colors = [
+      '#1a73e8',
+      '#e91e63',
+      '#4caf50',
+      '#ff9800',
+      '#9c27b0',
+      '#009688'
+    ];
+
+    return colors[Math.floor(Math.random() * colors.length)];
+  }
+
 }

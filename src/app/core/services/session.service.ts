@@ -23,7 +23,7 @@ export class SessionService {
   ) { }
 
   getSsoToken(): string | null {
-    return this.authService.getToken();
+    return this.authService.getSSOToken();
   }
 
   getUserDetails(): StoredUserDetails | null {
