@@ -1,0 +1,184 @@
+<!-- src/app/features/meeting/meeting.component.html -->
+<div class="meeting-container" [class.sidebars-open]="showParticipants || showChat">
+
+  <!-- Main Meeting Area -->
+  <div class="main-area">
+    <!-- Video Grid -->
+    <div class="video-container" [class.speaker-mode]="gridLayout === 'speaker'">
+
+      <!-- Screen Share View (if active) -->
+      <div class="screen-share-container" *ngIf="isScreenSharing">
+        <video #screenShareVideo autoplay playsinline></video>
+        <div class="screen-share-label">
+          <i class="bi bi-display"></i>
+          <span>Your Screen</span>
+        </div>
+      </div>
+
+      <!-- Participant Videos Grid -->
+      <div class="video-grid" [style.grid-template-columns]="'repeat(' + getParticipantGridColumns() + ', 1fr)'">
+
+        <!-- Local Video -->
+        <div class="video-tile local-video" [class.self-view]="true" >
+          <video #localVideo autoplay playsinline muted></video>
+          <div class="participant-info">
+            <span class="participant-name">You</span>
+            <span class="mic-indicator" *ngIf="isMuted">
+              <i class="bi bi-mic-mute-fill"></i>
+            </span>
+          </div>
+          <div class="video-controls-overlay" *ngIf="isVideoOff">
+            <div class="avatar-placeholder" [style.background-color]="'#1a73e8'">
+              Y
+            </div>
+          </div>
+        </div>
+
+        <!-- Remote Participants -->
+        <div class="video-tile" *ngFor="let participant of participants | slice:1">
+          <video *ngIf="!participant.isVideoOff" [id]="'video-' + participant.id" autoplay playsinline></video>
+          <div class="participant-info">
+            <span class="participant-name">{{ participant.name }}</span>
+            <span class="mic-indicator" *ngIf="participant.isMuted">
+              <i class="bi bi-mic-mute-fill"></i>
+            </span>
+          </div>
+          <div class="speaking-indicator" *ngIf="participant.isSpeaking"></div>
+          <div class="video-controls-overlay" *ngIf="participant.isVideoOff">
+            <div class="avatar-placeholder" [style.background-color]="participant.avatarColor">
+              {{ participant.name.charAt(0) }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty Tiles for Grid Fill (optional) -->
+        <div class="video-tile empty-tile" *ngFor="let i of [].constructor(getEmptyTileCount())">
+          <div class="empty-tile-content">
+            <i class="bi bi-person-plus"></i>
+            <span>Waiting for others...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Meeting Controls -->
+    <div class="meeting-controls">
+      <div class="controls-left">
+        <span class="meeting-info">
+          <i class="bi bi-camera-video-fill"></i>
+          {{ meetingTopic }} • {{ meetingId }}
+        </span>
+        <span class="meeting-timer" id="meetingTimer">00:00</span>
+      </div>
+
+      <div class="controls-center">
+        <button class="control-btn" [class.active]="!isMuted" (click)="toggleMute()" [class.danger]="isMuted">
+          <i class="bi" [ngClass]="isMuted ? 'bi-mic-mute-fill' : 'bi-mic-fill'"></i>
+        </button>
+
+        <button class="control-btn" [class.active]="!isVideoOff" (click)="toggleVideo()" [class.danger]="isVideoOff">
+          <i class="bi" [ngClass]="isVideoOff ? 'bi-camera-video-off-fill' : 'bi-camera-video-fill'"></i>
+        </button>
+
+        <button class="control-btn" [class.active]="isScreenSharing" (click)="toggleScreenShare()">
+          <i class="bi bi-display"></i>
+        </button>
+
+        <button class="control-btn participants-btn" (click)="showParticipants = !showParticipants">
+          <i class="bi bi-people-fill"></i>
+          <span class="badge">{{ participants.length }}</span>
+        </button>
+
+        <button class="control-btn chat-btn" (click)="showChat = !showChat">
+          <i class="bi bi-chat-dots-fill"></i>
+        </button>
+
+        <button class="control-btn" [class.active]="isRecording" (click)="toggleRecording()"
+          [class.recording]="isRecording">
+          <i class="bi bi-record-circle-fill"></i>
+        </button>
+
+        <button class="control-btn more-btn">
+          <i class="bi bi-three-dots-vertical"></i>
+        </button>
+      </div>
+
+      <div class="controls-right">
+        <button class="control-btn leave-btn" (click)="leaveMeeting()">
+          <i class="bi bi-telephone-x-fill"></i>
+          <span>Leave</span>
+        </button>
+
+        <button class="control-btn end-btn" *ngIf="isHost" (click)="endMeeting()">
+          <i class="bi bi-stop-circle-fill"></i>
+          <span>End</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Participants Sidebar -->
+  <div class="participants-sidebar" *ngIf="showParticipants">
+    <div class="sidebar-header">
+      <h6>Participants ({{ participants.length }})</h6>
+      <button class="btn-close" (click)="showParticipants = false"></button>
+    </div>
+
+    <div class="participants-list">
+      <div class="participant-item" *ngFor="let participant of participants">
+        <div class="participant-avatar" [style.background-color]="participant.avatarColor">
+          {{ participant.name.charAt(0) }}
+        </div>
+        <div class="participant-details">
+          <span class="participant-name">{{ participant.name }}</span>
+          <span class="participant-status">
+            <i class="bi bi-mic-mute-fill" *ngIf="participant.isMuted"></i>
+            <i class="bi bi-camera-video-off-fill" *ngIf="participant.isVideoOff"></i>
+            <span class="host-badge" *ngIf="participant.isHost">Host</span>
+          </span>
+        </div>
+        <div class="participant-actions" *ngIf="isHost && !participant.isHost">
+          <button class="btn btn-link text-danger p-1" (click)="removeParticipant(participant.id)">
+            <i class="bi bi-person-x"></i>
+          </button>
+          <button class="btn btn-link p-1" (click)="muteParticipant(participant.id)">
+            <i class="bi bi-mic-mute"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="btn btn-outline-primary w-100" (click)="copyMeetingLink()">
+        <i class="bi bi-link-45deg"></i>
+        Copy Invitation Link
+      </button>
+    </div>
+  </div>
+
+  <!-- Chat Sidebar -->
+  <div class="chat-sidebar" *ngIf="showChat">
+    <div class="sidebar-header">
+      <h6>In-call messages</h6>
+      <button class="btn-close" (click)="showChat = false"></button>
+    </div>
+
+    <div class="chat-messages" #chatMessagesContainer>
+      <div class="message" *ngFor="let msg of chatMessages" [class.my-message]="msg.isMe">
+        <div class="message-sender">{{ msg.sender }}</div>
+        <div class="message-content">{{ msg.message }}</div>
+        <div class="message-time">{{ msg.timestamp | date:'shortTime' }}</div>
+      </div>
+    </div>
+
+    <div class="chat-input">
+      <div class="input-group">
+        <input type="text" class="form-control" placeholder="Send a message to everyone" [(ngModel)]="newMessage"
+          (keydown.enter)="sendMessage()">
+        <button class="btn btn-primary" (click)="sendMessage()">
+          <i class="bi bi-send"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

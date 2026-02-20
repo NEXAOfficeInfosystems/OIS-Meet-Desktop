@@ -2,6 +2,7 @@ import { Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-meet-now-dialog',
@@ -17,6 +18,7 @@ export class MeetNowDialogComponent {
     public dialogRef: MatDialogRef<MeetNowDialogComponent>,
     private clipboard: Clipboard,
     private snackBar: MatSnackBar,
+     private router: Router,
     @Inject(MAT_DIALOG_DATA) public data: any
   ) {
     this.mode = data.mode;
@@ -48,13 +50,31 @@ copyMeetingId(input: HTMLInputElement) {
 }
 
 
-  startMeeting() {
-    console.log('Starting meeting...');
-    this.dialogRef.close();
-  }
+startMeeting() {
+  this.dialogRef.close();
 
-  joinMeeting(meetingId: string) {
-    console.log('Joining meeting:', meetingId);
-    this.dialogRef.close();
-  }
+  this.router.navigate(['/meeting', this.meetingId], {
+    queryParams: {
+      host: 'true',
+      topic: 'My Meeting',
+      mic: this.micOn,
+      cam: this.camOn
+    }
+  });
+}
+
+
+joinMeeting(meetingId: string) {
+  this.dialogRef.close();
+
+  this.router.navigate(['/meeting', meetingId], {
+    queryParams: {
+      host: 'false',
+      topic: 'Joined Meeting',
+      mic: this.micOn,
+      cam: this.camOn
+    }
+  });
+}
+
 }
