@@ -7,12 +7,13 @@ import { LandingComponent } from './components/landing/landing.component';
 import { JoinMeetingComponent } from './components/join-meeting/join-meeting.component';
 import { ChatComponent } from './components/chat/chat.component';
 import { ComingSoonComponent } from './components/comming-soon.component';
-import { MeetingComponent } from './components/meetings/meeting/meeting.component';
+import { MeetingComponent } from './components/meeting/meeting.component';
 
 export const routes: Routes = [
 
   { path: '', pathMatch: 'full', redirectTo: 'login' },
   { path: 'login', component: LoginComponent },
+  { path: 'meeting/:meetingId', component: MeetingComponent , canActivate:[authGuard]},
   {
     path: '',
     component: AppLayoutComponent,
@@ -23,7 +24,7 @@ export const routes: Routes = [
       { path: 'join-meeting', component: JoinMeetingComponent },
       { path: 'chat', component: ChatComponent },
       { path: 'coming-soon', component: ComingSoonComponent },
-      { path: 'meeting/:meetingId', component: MeetingComponent },
+
     ]
   },
 

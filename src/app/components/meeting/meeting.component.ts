@@ -350,20 +350,27 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // Helper for participant grid
-  getParticipantGridColumns(): number {
-    const count = this.participants.length;
-    if (count <= 2) return 1;
-    if (count <= 4) return 2;
-    if (count <= 9) return 3;
-    return 4;
+getParticipantGridColumns(): number {
+  const count = this.participants.length;
+  if (this.isScreenSharing) {
+    return 1; // When screen sharing, grid is 1 column
   }
+  if (count <= 2) return 1;
+  if (count <= 4) return 2;
+  if (count <= 9) return 3;
+  return 4;
+}
 
   // Add this method to calculate empty tiles for grid layout
-  getEmptyTileCount(): number {
-    const totalSlots = Math.pow(this.getParticipantGridColumns(), 2);
-    const filledSlots = this.participants.length + (this.isScreenSharing ? 1 : 0);
-    return Math.max(0, totalSlots - filledSlots);
-  }
+getEmptyTileCount(): number {
+  if (this.isScreenSharing) return 0; // No empty tiles when screen sharing
+
+  const columns = this.getParticipantGridColumns();
+  const rows = columns; // Square grid
+  const totalSlots = columns * rows;
+  const filledSlots = this.participants.length;
+  return Math.max(0, totalSlots - filledSlots);
+}
 }
 
 // Interfaces
