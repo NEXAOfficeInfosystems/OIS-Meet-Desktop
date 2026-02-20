@@ -6,6 +6,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subscription } from 'rxjs';
 import * as bootstrap from 'bootstrap';
+import { SessionService } from '../../core/services/session.service';
 
 // Services (to be implemented)
 // import { WebRTCService } from '../../core/services/webrtc.service';
@@ -35,7 +36,12 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
   showParticipants: boolean = false;
   showChat: boolean = false;
   showSettings: boolean = false;
-private tooltips: bootstrap.Tooltip[] = [];
+  private tooltips: bootstrap.Tooltip[] = [];
+
+  meetingDuration: number = 0;
+  private timerInterval: any;
+  formattedDuration: string = '00:00';
+
   // Participants
   participants: Participant[] = [
     {
@@ -50,8 +56,8 @@ private tooltips: bootstrap.Tooltip[] = [];
     {
       id: '2',
       name: 'John Smith',
-      isMuted: true,
-      isVideoOff: false,
+      isMuted: false,
+      isVideoOff: true,
       isHost: false,
       isSpeaking: false,
       avatarColor: '#e91e63'
@@ -59,7 +65,7 @@ private tooltips: bootstrap.Tooltip[] = [];
     {
       id: '3',
       name: 'Emma Watson',
-      isMuted: false,
+      isMuted: true,
       isVideoOff: true,
       isHost: false,
       isSpeaking: false,
@@ -97,16 +103,20 @@ private tooltips: bootstrap.Tooltip[] = [];
   isMicOn = false;
   isCamOn = false;
 
+  userFullName: any;
   constructor(
     private route: ActivatedRoute,
     private router: Router,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
+    private sessionService: SessionService
     // private webrtcService: WebRTCService,
     // private meetingService: MeetingService
-  ) { }
+  ) {
+    this.userFullName = this.sessionService.getFullName();
+  }
 
-  ngOnInit() {
+    ngOnInit() {
     this.meetingId =
       this.route.snapshot.paramMap.get('meetingId') ||
       this.generateMeetingId();
@@ -117,15 +127,14 @@ private tooltips: bootstrap.Tooltip[] = [];
     const micParam = this.route.snapshot.queryParamMap.get('mic');
     const camParam = this.route.snapshot.queryParamMap.get('cam');
 
-    // IMPORTANT:
-    // micParam = true → mic should be ON → isMuted = false
-    // micParam = false → mic should be OFF → isMuted = true
-
     this.isMuted = micParam === 'false';
     this.isVideoOff = camParam === 'false';
 
-    // Now initialize media AFTER setting flags
+    // Initialize media
     this.initializeLocalMedia();
+
+    // Start the timer
+    this.startTimer();
 
     this.subscriptions.push(
       this.route.queryParams.subscribe(params => {
@@ -186,6 +195,7 @@ private initializeTooltips(): void {
 
 
   ngOnDestroy() {
+     this.stopTimer();
       this.tooltips.forEach(t => t.dispose());
   this.tooltips = [];
 
@@ -408,7 +418,21 @@ getParticipantGridColumns(): number {
   return 4;
 }
 
-  // Add this method to calculate empty tiles for grid layout
+getInitials(name: string): string {
+  if (!name) return '';
+
+  const words = name.trim().split(' ');
+
+  if (words.length === 1) {
+    return words[0].charAt(0).toUpperCase();
+  }
+
+  return (
+    words[0].charAt(0) +
+    words[words.length - 1].charAt(0)
+  ).toUpperCase();
+}
+
 getEmptyTileCount(): number {
   if (this.isScreenSharing) return 0; // No empty tiles when screen sharing
 
@@ -417,6 +441,39 @@ getEmptyTileCount(): number {
   const totalSlots = columns * rows;
   const filledSlots = this.participants.length;
   return Math.max(0, totalSlots - filledSlots);
+}
+
+startTimer(): void {
+  this.meetingDuration = 0;
+  this.updateFormattedDuration();
+
+  this.timerInterval = setInterval(() => {
+    this.meetingDuration++;
+    this.updateFormattedDuration();
+  }, 1000);
+}
+
+stopTimer(): void {
+  if (this.timerInterval) {
+    clearInterval(this.timerInterval);
+    this.timerInterval = null;
+  }
+}
+
+updateFormattedDuration(): void {
+  const hours = Math.floor(this.meetingDuration / 3600);
+  const minutes = Math.floor((this.meetingDuration % 3600) / 60);
+  const seconds = this.meetingDuration % 60;
+
+  if (hours > 0) {
+    this.formattedDuration = `${this.padZero(hours)}:${this.padZero(minutes)}:${this.padZero(seconds)}`;
+  } else {
+    this.formattedDuration = `${this.padZero(minutes)}:${this.padZero(seconds)}`;
+  }
+}
+
+padZero(num: number): string {
+  return num < 10 ? '0' + num : num.toString();
 }
 }
 

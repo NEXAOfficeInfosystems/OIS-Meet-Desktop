@@ -26,11 +26,23 @@
             <span class="mic-indicator" *ngIf="isMuted">
               <i class="bi bi-mic-mute-fill"></i>
             </span>
+            <span class="mic-indicator" *ngIf="!isMuted">
+              <i class="bi bi-mic-fill"></i>
+            </span>
           </div>
           <div class="video-controls-overlay" *ngIf="isVideoOff">
             <div class="avatar-placeholder" [style.background-color]="'#1a73e8'">
-              Y
+              {{ getInitials(userFullName) }}
             </div>
+          <div class="participant-info">
+            <span class="participant-name">You</span>
+            <span class="mic-indicator" *ngIf="isMuted">
+              <i class="bi bi-mic-mute-fill"></i>
+            </span>
+            <span class="mic-indicator" *ngIf="!isMuted">
+              <i class="bi bi-mic-fill"></i>
+            </span>
+          </div>
           </div>
         </div>
 
@@ -46,8 +58,17 @@
           <div class="speaking-indicator" *ngIf="participant.isSpeaking"></div>
           <div class="video-controls-overlay" *ngIf="participant.isVideoOff">
             <div class="avatar-placeholder" [style.background-color]="participant.avatarColor">
-              {{ participant.name.charAt(0) }}
+              {{ getInitials(participant.name) }}
             </div>
+              <div class="participant-info">
+                <span class="participant-name">{{ participant.name }}</span>
+                <span class="mic-indicator" *ngIf="participant.isMuted">
+                  <i class="bi bi-mic-mute-fill"></i>
+                </span>
+                <span class="mic-indicator" *ngIf="!participant.isMuted">
+                  <i class="bi bi-mic-fill"></i>
+                </span>
+              </div>
           </div>
         </div>
 
@@ -66,10 +87,12 @@
       <div class="controls-left">
         <span class="meeting-info" data-bs-toggle="tooltip" [attr.data-bs-title]="meetingId">
           <i class="bi bi-camera-video-fill"></i>
-          {{ meetingTopic }} • {{ meetingId }}
+          <!-- {{ meetingTopic }} • {{ meetingId }} -->
+          {{ meetingId }}
         </span>
-        <span class="meeting-timer" id="meetingTimer" data-bs-toggle="tooltip"
-          data-bs-title="Meeting duration">00:00</span>
+        <span class="meeting-timer" id="meetingTimer" data-bs-toggle="tooltip" data-bs-title="Meeting duration">
+          {{ formattedDuration }}
+        </span>
       </div>
 
       <div class="controls-center">
