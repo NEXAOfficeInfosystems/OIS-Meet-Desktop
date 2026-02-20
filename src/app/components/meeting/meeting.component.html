@@ -19,7 +19,7 @@
       <div class="video-grid" [style.grid-template-columns]="'repeat(' + getParticipantGridColumns() + ', 1fr)'">
 
         <!-- Local Video -->
-        <div class="video-tile local-video" [class.self-view]="true" >
+        <div class="video-tile local-video" [class.self-view]="true">
           <video #localVideo autoplay playsinline muted></video>
           <div class="participant-info">
             <span class="participant-name">You</span>
@@ -64,52 +64,76 @@
     <!-- Meeting Controls -->
     <div class="meeting-controls">
       <div class="controls-left">
-        <span class="meeting-info">
+        <span class="meeting-info" data-bs-toggle="tooltip" [attr.data-bs-title]="meetingId">
           <i class="bi bi-camera-video-fill"></i>
           {{ meetingTopic }} • {{ meetingId }}
         </span>
-        <span class="meeting-timer" id="meetingTimer">00:00</span>
+        <span class="meeting-timer" id="meetingTimer" data-bs-toggle="tooltip"
+          data-bs-title="Meeting duration">00:00</span>
       </div>
 
       <div class="controls-center">
-        <button class="control-btn" [class.active]="!isMuted" (click)="toggleMute()" [class.danger]="isMuted">
+        <!-- Mute/Unmute -->
+        <button class="control-btn" [class.active]="!isMuted" [class.danger]="isMuted" (click)="toggleMute()"
+          data-bs-toggle="tooltip" [attr.data-bs-title]="isMuted ? 'Unmute Microphone' : 'Mute Microphone'"
+          [attr.data-bs-original-title]="isMuted ? 'Unmute Microphone' : 'Mute Microphone'">
           <i class="bi" [ngClass]="isMuted ? 'bi-mic-mute-fill' : 'bi-mic-fill'"></i>
         </button>
 
-        <button class="control-btn" [class.active]="!isVideoOff" (click)="toggleVideo()" [class.danger]="isVideoOff">
+        <!-- Video On/Off -->
+        <button class="control-btn" [class.active]="!isVideoOff" [class.danger]="isVideoOff" (click)="toggleVideo()"
+          data-bs-toggle="tooltip" [attr.data-bs-title]="isVideoOff ? 'Turn On Camera' : 'Turn Off Camera'"
+          [attr.data-bs-original-title]="isVideoOff ? 'Turn On Camera' : 'Turn Off Camera'">
           <i class="bi" [ngClass]="isVideoOff ? 'bi-camera-video-off-fill' : 'bi-camera-video-fill'"></i>
         </button>
 
-        <button class="control-btn" [class.active]="isScreenSharing" (click)="toggleScreenShare()">
+        <!-- Screen Share -->
+        <button class="control-btn" [class.active]="isScreenSharing" (click)="toggleScreenShare()"
+          data-bs-toggle="tooltip" [attr.data-bs-title]="isScreenSharing ? 'Stop Sharing' : 'Share Screen'"
+          [attr.data-bs-original-title]="isScreenSharing ? 'Stop Sharing' : 'Share Screen'">
           <i class="bi bi-display"></i>
         </button>
 
-        <button class="control-btn participants-btn" (click)="showParticipants = !showParticipants">
+        <!-- Participants -->
+        <button class="control-btn participants-btn" (click)="showParticipants = !showParticipants"
+          data-bs-toggle="tooltip" data-bs-title="Participants"
+          [attr.data-bs-original-title]="showParticipants ? 'Hide Participants' : 'Show Participants'">
           <i class="bi bi-people-fill"></i>
           <span class="badge">{{ participants.length }}</span>
         </button>
 
-        <button class="control-btn chat-btn" (click)="showChat = !showChat">
+        <!-- Chat -->
+        <button class="control-btn chat-btn" (click)="showChat = !showChat" data-bs-toggle="tooltip"
+          [attr.data-bs-title]="showChat ? 'Hide Chat' : 'Show Chat'"
+          [attr.data-bs-original-title]="showChat ? 'Hide Chat' : 'Show Chat'">
           <i class="bi bi-chat-dots-fill"></i>
         </button>
 
-        <button class="control-btn" [class.active]="isRecording" (click)="toggleRecording()"
-          [class.recording]="isRecording">
+        <!-- Record -->
+        <button class="control-btn" [class.active]="isRecording" [class.recording]="isRecording"
+          (click)="toggleRecording()" data-bs-toggle="tooltip"
+          [attr.data-bs-title]="isRecording ? 'Stop Recording' : 'Start Recording'"
+          [attr.data-bs-original-title]="isRecording ? 'Stop Recording' : 'Start Recording'">
           <i class="bi bi-record-circle-fill"></i>
         </button>
 
-        <button class="control-btn more-btn">
+        <!-- More Options -->
+        <button class="control-btn more-btn" data-bs-toggle="tooltip" data-bs-title="More Options">
           <i class="bi bi-three-dots-vertical"></i>
         </button>
       </div>
 
       <div class="controls-right">
-        <button class="control-btn leave-btn" (click)="leaveMeeting()">
+        <!-- Leave Meeting -->
+        <button class="control-btn leave-btn" (click)="leaveMeeting()" data-bs-toggle="tooltip"
+          data-bs-title="Leave Meeting">
           <i class="bi bi-telephone-x-fill"></i>
           <span>Leave</span>
         </button>
 
-        <button class="control-btn end-btn" *ngIf="isHost" (click)="endMeeting()">
+        <!-- End Meeting -->
+        <button class="control-btn end-btn" *ngIf="isHost" (click)="endMeeting()" data-bs-toggle="tooltip"
+          data-bs-title="End Meeting">
           <i class="bi bi-stop-circle-fill"></i>
           <span>End</span>
         </button>

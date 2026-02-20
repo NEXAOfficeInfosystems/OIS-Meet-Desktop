@@ -5,6 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subscription } from 'rxjs';
+import * as bootstrap from 'bootstrap';
 
 // Services (to be implemented)
 // import { WebRTCService } from '../../core/services/webrtc.service';
@@ -34,7 +35,7 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
   showParticipants: boolean = false;
   showChat: boolean = false;
   showSettings: boolean = false;
-
+private tooltips: bootstrap.Tooltip[] = [];
   // Participants
   participants: Participant[] = [
     {
@@ -139,13 +140,55 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
 
 
   ngAfterViewInit() {
-    // Set up local video after view init
     if (this.localVideo && this.mediaStream) {
       this.localVideo.nativeElement.srcObject = this.mediaStream;
     }
+
+    setTimeout(() => {
+      this.initializeTooltips();
+    });
   }
 
+private initializeTooltips(): void {
+  const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+
+  tooltipTriggerList.forEach((el: Element) => {
+    // Dispose existing tooltip if already created
+    const existing = bootstrap.Tooltip.getInstance(el);
+    if (existing) {
+      existing.dispose();
+    }
+
+    // Create new tooltip with options
+    const tooltip = new bootstrap.Tooltip(el, {
+      placement: 'top',
+      trigger: 'hover',
+      container: 'body',
+      animation: true,
+      delay: { show: 200, hide: 100 },
+      html: false
+    });
+
+    this.tooltips.push(tooltip);
+  });
+}
+
+  private refreshTooltips(): void {
+    // First dispose all existing tooltips
+    this.tooltips.forEach(t => t.dispose());
+    this.tooltips = [];
+
+    // Small delay to ensure DOM updates
+    setTimeout(() => {
+      this.initializeTooltips();
+    });
+  }
+
+
   ngOnDestroy() {
+      this.tooltips.forEach(t => t.dispose());
+  this.tooltips = [];
+
     // Clean up media streams
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(track => track.stop());
@@ -215,6 +258,7 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
     } catch (error) {
       console.error('Error toggling mic:', error);
     }
+    this.refreshTooltips();
   }
 
 
@@ -249,6 +293,7 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
     } catch (error) {
       console.error('Error toggling video:', error);
     }
+     this.refreshTooltips();
   }
 
 
@@ -276,6 +321,7 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
     } else {
       this.stopScreenSharing();
     }
+     this.refreshTooltips();
   }
 
   private stopScreenSharing() {
@@ -291,6 +337,7 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   toggleRecording() {
     this.isRecording = !this.isRecording;
+     this.refreshTooltips();
     // Implement recording logic
   }
 
