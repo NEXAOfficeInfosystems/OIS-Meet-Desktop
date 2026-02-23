@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import { environment } from '../../../environments/environment';
 import * as CryptoJS from 'crypto-js';
+import { UserDetailsResponse } from './sso-api.service';
+import { StoredUserDetails } from '../models/session.models';
 
 @Injectable({
   providedIn: 'root'
@@ -73,5 +75,30 @@ export class StorageService {
       const match = appUrl.match(/[?&]Token=([^&]+)/i);
       return match?.[1] ? decodeURIComponent(match[1]) : null;
     }
+  }
+
+   pickUserDetailsForStorage(user: UserDetailsResponse): StoredUserDetails {
+    return {
+      Id: user?.Id,
+      Email: user?.Email,
+      FullName: user?.FullName,
+      PhoneNumber: user?.PhoneNumber,
+      IsActive: user?.IsActive,
+      Name: user?.Name,
+      Surname: user?.Surname,
+      UserTypeId: user?.UserTypeId,
+      UserId: user?.UserId,
+      GenderId: user?.GenderId,
+      UserStatusId: user?.UserStatusId,
+      RoleId: user?.RoleId,
+      IsAdmin: user?.IsAdmin,
+      ImageUrl: user?.ImageUrl,
+      dialCode: user?.dialCode,
+      IsDefault: user?.IsDefault,
+      EmpId: user?.EmpId,
+      WorkingCompanyId: user?.WorkingCompanyId,
+      IsDeleted: user?.IsDeleted,
+      CompanyName: user?.CompanyName,
+    };
   }
 }

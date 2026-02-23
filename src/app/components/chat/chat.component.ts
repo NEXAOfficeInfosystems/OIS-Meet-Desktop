@@ -4,6 +4,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SsoApiService } from '../../core/services/sso-api.service';
 import { AuthService } from '../../core/services/auth.service';
+import { CommonService } from '../../core/services/common.service';
+import { Subject, takeUntil } from 'rxjs';
 
 interface User {
   id: string;
@@ -35,7 +37,7 @@ interface Message {
 export class ChatComponent implements OnInit, AfterViewChecked {
   @ViewChild('chatMessages') private chatMessagesContainer!: ElementRef;
 
-  constructor(private ssoApiService: SsoApiService, private authService: AuthService, private sessionService: SessionService) { }
+  constructor(private ssoApiService: SsoApiService, private authService: AuthService, private sessionService: SessionService, private commonService: CommonService) { }
 
   users: User[] = [];
 
@@ -51,9 +53,14 @@ export class ChatComponent implements OnInit, AfterViewChecked {
 
   selectedUser: User | null = null;
   newMessage = '';
-
+  private destroy$ = new Subject<void>();
   ngOnInit() {
-    this.getSSOUserList();
+    this.commonService.selectedCompany$.pipe(takeUntil(this.destroy$))
+      .subscribe(company => {
+        if (company) {
+          this.getSSOUserList();
+        }
+      });
     // Auto-select first user
     if (this.users.length > 0) {
       this.selectUser(this.users[0]);
@@ -64,6 +71,10 @@ export class ChatComponent implements OnInit, AfterViewChecked {
     this.scrollToBottom();
   }
 
+  ngOnDestroy() {
+  this.destroy$.next();
+  this.destroy$.complete();
+}
   selectUser(user: User) {
     this.selectedUser = user;
     // Reset unread count for selected user
@@ -152,22 +163,8 @@ export class ChatComponent implements OnInit, AfterViewChecked {
     } catch (err) { }
   }
 
-  private formatTime(date: Date): string {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
 
-  private parseTime(timeStr: string): Date {
-    const today = new Date();
-    const [time, period] = timeStr.split(' ');
-    let [hours, minutes] = time.split(':').map(Number);
-
-    if (period === 'PM' && hours !== 12) hours += 12;
-    if (period === 'AM' && hours === 12) hours = 0;
-
-    today.setHours(hours, minutes, 0, 0);
-    return today;
-  }
-
+//GET SSO USER LIST
   getSSOUserList(): void {
     const token = this.authService.getSSOToken() ?? '';
     const userinfo = this.authService.getEncryptedJson() ?? '';
@@ -185,9 +182,8 @@ export class ChatComponent implements OnInit, AfterViewChecked {
           lastMessage: '',
           lastMessageTime: '',
           unreadCount: 0,
-          avatarColor: this.getRandomColor()
+          avatarColor: this.commonService.getRandomColor()
         }));
-        console.log('Mapped Users:', this.users);
         if (this.users.length > 0) {
           this.selectUser(this.users[0]);
         }
@@ -197,17 +193,20 @@ export class ChatComponent implements OnInit, AfterViewChecked {
       }
     );
   }
-  private getRandomColor(): string {
-    const colors = [
-      '#1a73e8',
-      '#e91e63',
-      '#4caf50',
-      '#ff9800',
-      '#9c27b0',
-      '#009688'
-    ];
 
-    return colors[Math.floor(Math.random() * colors.length)];
+  private formatTime(date: Date): string {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
+  private parseTime(timeStr: string): Date {
+    const today = new Date();
+    const [time, period] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+
+    today.setHours(hours, minutes, 0, 0);
+    return today;
+  }
 }

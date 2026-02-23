@@ -7,8 +7,9 @@ import { switchMap, takeUntil, tap } from 'rxjs/operators';
 import { ApplicationItem, SsoApiService, UserDetailsResponse } from '../../core/services/sso-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { StorageService } from '../../core/services/storage.service';
-import { CompanyUrlItem, CompanyUrlResponse, StoredDefaultCompany, StoredUserDetails, MeetUrlResponse } from '../../core/models/session.models';
+import { CompanyUrlResponse, MeetUrlResponse } from '../../core/models/session.models';
 import { encryptValueSixteen } from '../../core/utils/encrypt';
+import { CommonService } from '../../core/services/common.service';
 
 @Component({
   selector: 'app-login',
@@ -53,6 +54,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     private ssoApiService: SsoApiService,
     private authService: AuthService,
     private storageService: StorageService,
+    private commonService: CommonService,
     private router: Router
   ) { }
 
@@ -323,7 +325,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.ssoApiService.getUserDetails(token, userinfo).pipe(
       takeUntil(this.destroy$),
       tap((user: UserDetailsResponse) => {
-        this.storageService.setObject('userDetails', this.pickUserDetailsForStorage(user));
+        this.storageService.setObject('userDetails', this.storageService.pickUserDetailsForStorage(user));
       }),
       switchMap((user: UserDetailsResponse) => {
         const userId = user?.Id;
@@ -334,8 +336,8 @@ export class LoginComponent implements OnInit, OnDestroy {
         return this.ssoApiService.getApplicationList(token, userinfo, userId).pipe(
           switchMap((apps: ApplicationItem[]) => {
             const meetApp = apps.find(app =>
-              app?.Code === 'Meet'
-              // app.Code === 'DMS' || app.Code === 'OISVault' || app.Code === 'Vault'
+              // app?.Code === 'Meet'
+              app.Code === 'DMS' || app.Code === 'OISVault' || app.Code === 'Vault'
             );
 
             const appId = meetApp?.ApplicationId;
@@ -357,6 +359,8 @@ export class LoginComponent implements OnInit, OnDestroy {
     ).subscribe({
       next: ({ meetUrl, companyUrl }: { meetUrl: MeetUrlResponse; companyUrl: CompanyUrlResponse }) => {
         const appUrl: string | null = (meetUrl?.appURL ?? meetUrl?.AppURL ?? null);
+        const companies = (companyUrl.data ?? []).map((x: any) => x.company);
+         this.commonService.setCompanies(companies);
         if (appUrl) {
           this.storageService.setItem('applicationUrl', appUrl);
 
@@ -366,7 +370,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           }
         }
 
-        const defaultCompany = this.pickDefaultCompanyForStorage(companyUrl);
+        const defaultCompany = this.commonService.pickDefaultCompanyForStorage(companyUrl);
         if (defaultCompany) {
           this.storageService.setObject('defaultCompany', defaultCompany);
         }
@@ -380,50 +384,5 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.formError = 'Unable to load user details. Please try again.';
       }
     });
-  }
-
-
-  private pickDefaultCompanyForStorage(companyUrlResponse: CompanyUrlResponse): StoredDefaultCompany | null {
-    const items = companyUrlResponse?.data;
-    if (!Array.isArray(items) || items.length === 0) return null;
-
-    const preferred = items.find((x: CompanyUrlItem) => x?.isDefault === true)
-      ?? items.find((x: CompanyUrlItem) => x?.company?.isDefault === true)
-      ?? items[0];
-
-    const company = preferred?.company;
-    if (!company) return null;
-
-    return {
-      clientId: company?.clientId,
-      companyId: company?.companyId,
-      companyname: company?.name,
-      companylogo: company?.logo ?? null,
-    };
-  }
-
-  private pickUserDetailsForStorage(user: UserDetailsResponse): StoredUserDetails {
-    return {
-      Id: user?.Id,
-      Email: user?.Email,
-      FullName: user?.FullName,
-      PhoneNumber: user?.PhoneNumber,
-      IsActive: user?.IsActive,
-      Name: user?.Name,
-      Surname: user?.Surname,
-      UserTypeId: user?.UserTypeId,
-      UserId: user?.UserId,
-      GenderId: user?.GenderId,
-      UserStatusId: user?.UserStatusId,
-      RoleId: user?.RoleId,
-      IsAdmin: user?.IsAdmin,
-      ImageUrl: user?.ImageUrl,
-      dialCode: user?.dialCode,
-      IsDefault: user?.IsDefault,
-      EmpId: user?.EmpId,
-      WorkingCompanyId: user?.WorkingCompanyId,
-      IsDeleted: user?.IsDeleted,
-      CompanyName: user?.CompanyName,
-    };
   }
 }

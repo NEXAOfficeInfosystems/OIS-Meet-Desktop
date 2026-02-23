@@ -6,6 +6,9 @@ import { SessionService } from '../../../core/services/session.service';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MeetNowDialogComponentModule } from '../../../components/meet-now-dialog/meet-now-dialog.component.module';
 import { MeetNowDialogComponent } from '../../../components/meet-now-dialog/meet-now-dialog.component';
+import { CommonService } from '../../../core/services/common.service';
+import { SsoApiService } from '../../../core/services/sso-api.service';
+import { StorageService } from '../../../core/services/storage.service';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -25,33 +28,87 @@ export class HeaderComponent {
 
   theme: ThemeMode = (localStorage.getItem('ois.theme') as ThemeMode) ?? 'light';
   isUserMenuOpen = false;
+  isCompanyMenuOpen = false;
   userFullName: string | null = null;
+  selectedCompanyId: number | null = null;
+  companyList: any[] = [];
 
   constructor(
     private hostEl: ElementRef,
     private auth: AuthService,
     private router: Router,
     private sessionService: SessionService,
+    private commonService: CommonService,
+    private ssoApiService: SsoApiService,
+    private storageService: StorageService,
     private dialog: MatDialog
   ) {
     this.userFullName = this.sessionService.getFullName();
     this.applyThemeToDocument();
   }
 
-openMeetNowDialog(mode:string = 'meet-now') {
-  this.dialog.open(MeetNowDialogComponent, {
-    width: '320px',
-    panelClass: 'meet-now-dialog',
-    position: {
-      top: '70px',
-      right: '20px'
-    },
-    data: { mode: mode },
-    autoFocus: false,
-    hasBackdrop: true,
-    disableClose: true
+ngOnInit() {
+  const storedCompany = this.storageService.getObject<any>('defaultCompany');
+  if (storedCompany) {
+    this.selectedCompanyId = storedCompany.companyId;
+    this.commonService.setSelectedCompany(storedCompany);
+  }
+
+  this.commonService.companyList$.subscribe(companies => {
+    if (!companies || companies.length === 0) {
+      this.getUserCompanyList();
+    } else {
+      this.companyList = companies;
+    }
   });
 }
+
+getUserCompanyList() {
+  const token = this.auth.getSSOToken() ?? '';
+  const userinfo = this.auth.getEncryptedJson() ?? '';
+  const userId = this.sessionService.getUserId() ?? '';
+  const appId = this.sessionService.getMeetAppId() ?? '';
+
+  this.ssoApiService.getCompanyURL(token, userinfo, userId, appId)
+    .subscribe({
+      next: (response: any) => {
+        if (response?.status) {
+          const companies = (response.data ?? []).map((x: any) => x.company);
+          const defaultCompany = this.commonService.pickDefaultCompanyForStorage(response);
+            if (defaultCompany) {
+              this.storageService.setObject('defaultCompany', defaultCompany);
+            }
+          this.companyList = companies;
+        }
+      },
+      error: (error) => {
+        console.error('Company API Error:', error);
+      }
+    });
+}
+
+  selectCompany(company: any) {
+    this.selectedCompanyId = company.companyId;
+    this.storageService.setObject('defaultCompany', company);
+    this.commonService.setSelectedCompany(company);
+    this.isCompanyMenuOpen = false;
+    this.isUserMenuOpen = false;
+  }
+
+  openMeetNowDialog(mode: string = 'meet-now') {
+    this.dialog.open(MeetNowDialogComponent, {
+      width: '320px',
+      panelClass: 'meet-now-dialog',
+      position: {
+        top: '70px',
+        right: '20px'
+      },
+      data: { mode: mode },
+      autoFocus: false,
+      hasBackdrop: true,
+      disableClose: true
+    });
+  }
 
   setTheme(theme: ThemeMode) {
     this.theme = theme;
@@ -85,5 +142,9 @@ openMeetNowDialog(mode:string = 'meet-now') {
   logout() {
     this.auth.logout();
     void this.router.navigateByUrl('/login');
+  }
+  toggleCompanyMenu(event: Event) {
+    event.stopPropagation();
+    this.isCompanyMenuOpen = !this.isCompanyMenuOpen;
   }
 }

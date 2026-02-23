@@ -34,6 +34,10 @@ export class SessionService {
     return this.getUserDetails()?.FullName ?? null;
   }
 
+  getUserId(): string | null {
+    return this.getUserDetails()?.Id ?? null;
+  }
+
   getDefaultCompany(): StoredDefaultCompany | null {
     return this.storageService.getObject<StoredDefaultCompany>('defaultCompany');
   }
