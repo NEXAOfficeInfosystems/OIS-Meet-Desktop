@@ -9,6 +9,7 @@ import { MeetNowDialogComponent } from '../../../components/meet-now-dialog/meet
 import { CommonService } from '../../../core/services/common.service';
 import { SsoApiService } from '../../../core/services/sso-api.service';
 import { StorageService } from '../../../core/services/storage.service';
+import { ConfirmationDialogComponent } from '../confirmation-dialog.component';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -139,10 +140,24 @@ getUserCompanyList() {
     body.classList.toggle('theme-light', this.theme === 'light');
   }
 
-  logout() {
-    this.auth.logout();
-    void this.router.navigateByUrl('/login');
-  }
+logout() {
+  const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+    width: '350px',
+    data: {
+      type: 'question',
+      title: 'Confirm Logout',
+      message: 'Are you sure you want to logout?'
+    },
+    disableClose: true,
+  });
+
+  dialogRef.afterClosed().subscribe(result => {
+    if (result) {
+      this.auth.logout();
+      this.router.navigateByUrl('/login');
+    }
+  });
+}
   toggleCompanyMenu(event: Event) {
     event.stopPropagation();
     this.isCompanyMenuOpen = !this.isCompanyMenuOpen;
