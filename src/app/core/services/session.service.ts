@@ -74,6 +74,9 @@ export class SessionService {
     return this.storageService.getItem('applicationToken');
   }
 
+  getOISMeetUserId(): string | null {
+    return this.storageService.getItem('oisMeetUserId');
+  }
   getSession(): AppSession {
     return {
       ssoToken: this.getSsoToken(),

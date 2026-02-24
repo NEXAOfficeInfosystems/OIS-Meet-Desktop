@@ -302,13 +302,9 @@ private syncUsersBeforeNavigation(token: string, userinfo: string): Observable<a
   const companyId = this.sessionService.getCompanyId() ?? 0;
   const appId = this.sessionService.getMeetAppId() ?? '';
 
-  // console.log('Starting user sync with:', { client, companyId });
-
   return this.ssoApiService.getSSOUserList(token, userinfo, client, companyId.toString(), appId)
     .pipe(
       switchMap((ssoUsers: any[]) => {
-        console.log(`📥 Fetched ${ssoUsers.length} users from SSO`);
-
         if (ssoUsers.length === 0) {
           console.warn('No users to sync');
           return of(null);
@@ -319,7 +315,6 @@ private syncUsersBeforeNavigation(token: string, userinfo: string): Observable<a
       }),
       tap((response) => {
         if (response) {
-          console.log('✅ SSO Users Synced to backend:', response.message);
         }
         // sessionStorage.setItem('ssoSynced', 'true');
       }),
@@ -444,70 +439,4 @@ private syncUsersBeforeNavigation(token: string, userinfo: string): Observable<a
   isValidMobile(mobile: string): boolean {
     return /^[0-9]{6,15}$/.test(mobile);
   }
-
-
-  // private loadPostLoginData(token: string, userinfo: string): void {
-  //   this.ssoApiService.getUserDetails(token, userinfo).pipe(
-  //     takeUntil(this.destroy$),
-  //     tap((user: UserDetailsResponse) => {
-  //       this.storageService.setObject('userDetails', this.storageService.pickUserDetailsForStorage(user));
-  //     }),
-  //     switchMap((user: UserDetailsResponse) => {
-  //       const userId = user?.Id;
-  //       if (!userId) {
-  //         throw new Error('UserId not found in GetUser response.');
-  //       }
-
-  //       return this.ssoApiService.getApplicationList(token, userinfo, userId).pipe(
-  //         switchMap((apps: ApplicationItem[]) => {
-  //           const meetApp = apps.find(app =>
-  //             // app?.Code === 'Meet'
-  //             app.Code === 'DMS' || app.Code === 'OISVault' || app.Code === 'Vault'
-  //           );
-
-  //           const appId = meetApp?.ApplicationId;
-  //           const appName = meetApp?.ApplicationName;
-  //           if (!appId) {
-  //             throw new Error('Meet app not found in application list.');
-  //           }
-
-  //           this.storageService.setItem('meetAppId', appId.toString());
-  //           this.storageService.setItem('applicationName', appName ?? '');
-
-  //           return forkJoin({
-  //             meetUrl: this.ssoApiService.getMeetUrl(token, userinfo, appId),
-  //             companyUrl: this.ssoApiService.getCompanyURL(token, userinfo, userId, appId),
-  //           });
-  //         })
-  //       );
-  //     })
-  //   ).subscribe({
-  //     next: ({ meetUrl, companyUrl }: { meetUrl: MeetUrlResponse; companyUrl: CompanyUrlResponse }) => {
-  //       const appUrl: string | null = (meetUrl?.appURL ?? meetUrl?.AppURL ?? null);
-  //       const companies = (companyUrl.data ?? []).map((x: any) => x.company);
-  //        this.commonService.setCompanies(companies);
-  //       if (appUrl) {
-  //         this.storageService.setItem('applicationUrl', appUrl);
-
-  //         const appToken = this.storageService.extractTokenFromAppUrl(appUrl);
-  //         if (appToken) {
-  //           this.storageService.setItem('applicationToken', appToken);
-  //         }
-  //       }
-
-  //       const defaultCompany = this.commonService.pickDefaultCompanyForStorage(companyUrl);
-  //       if (defaultCompany) {
-  //         this.storageService.setObject('defaultCompany', defaultCompany);
-  //       }
-
-  //       this.showLoading = false;
-  //       this.router.navigateByUrl('/dashboard');
-  //     },
-  //     error: (err) => {
-  //       console.error('Post-login data load failed:', err);
-  //       this.showLoading = false;
-  //       this.formError = 'Unable to load user details. Please try again.';
-  //     }
-  //   });
-  // }
 }

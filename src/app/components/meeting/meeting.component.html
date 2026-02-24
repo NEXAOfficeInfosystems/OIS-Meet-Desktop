@@ -1,9 +1,18 @@
 <!-- src/app/features/meeting/meeting.component.html -->
 <div class="meeting-container" [class.sidebars-open]="showParticipants || showChat">
 
+  <!-- Loading State -->
+  <div class="loading-overlay" *ngIf="isLoading" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #1a1a1a; display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; gap: 16px;">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <p>Loading meeting...</p>
+  </div>
+
   <!-- Main Meeting Area -->
-  <div class="main-area">
-    <!-- Video Grid -->
+  <div class="main-area" *ngIf="!isLoading">
+
+    <!-- Video Container -->
     <div class="video-container" [class.speaker-mode]="gridLayout === 'speaker'">
 
       <!-- Screen Share View (if active) -->
@@ -21,7 +30,7 @@
         <!-- Local Video -->
         <div class="video-tile local-video" [class.self-view]="true">
           <video #localVideo autoplay playsinline muted></video>
-          <div class="participant-info">
+          <div class="participant-info" *ngIf="!isVideoOff">
             <span class="participant-name">You</span>
             <span class="mic-indicator" *ngIf="isMuted">
               <i class="bi bi-mic-mute-fill"></i>
@@ -34,33 +43,45 @@
             <div class="avatar-placeholder" [style.background-color]="'#1a73e8'">
               {{ getInitials(userFullName) }}
             </div>
-          <div class="participant-info">
-            <span class="participant-name">You</span>
-            <span class="mic-indicator" *ngIf="isMuted">
-              <i class="bi bi-mic-mute-fill"></i>
-            </span>
-            <span class="mic-indicator" *ngIf="!isMuted">
-              <i class="bi bi-mic-fill"></i>
-            </span>
-          </div>
+            <div class="participant-info" style="bottom: 8px; left: 8px; position: absolute;">
+              <span class="participant-name">You</span>
+              <span class="mic-indicator" *ngIf="isMuted">
+                <i class="bi bi-mic-mute-fill"></i>
+              </span>
+              <span class="mic-indicator" *ngIf="!isMuted">
+                <i class="bi bi-mic-fill"></i>
+              </span>
+            </div>
           </div>
         </div>
 
         <!-- Remote Participants -->
-        <div class="video-tile" *ngFor="let participant of participants | slice:1">
-          <video *ngIf="!participant.isVideoOff" [id]="'video-' + participant.id" autoplay playsinline></video>
-          <div class="participant-info">
-            <span class="participant-name">{{ participant.name }}</span>
-            <span class="mic-indicator" *ngIf="participant.isMuted">
-              <i class="bi bi-mic-mute-fill"></i>
-            </span>
-          </div>
-          <div class="speaking-indicator" *ngIf="participant.isSpeaking"></div>
-          <div class="video-controls-overlay" *ngIf="participant.isVideoOff">
-            <div class="avatar-placeholder" [style.background-color]="participant.avatarColor">
-              {{ getInitials(participant.name) }}
+        <div class="video-tile" *ngFor="let participant of participants">
+          <!-- Skip current user -->
+          <ng-container *ngIf="participant.id !== userId">
+            <video *ngIf="!participant.isVideoOff" [id]="'video-' + participant.id" autoplay playsinline></video>
+
+            <!-- Participant Info (when video on) -->
+            <div class="participant-info" *ngIf="!participant.isVideoOff">
+              <span class="participant-name">{{ participant.name }}</span>
+              <span class="mic-indicator" *ngIf="participant.isMuted">
+                <i class="bi bi-mic-mute-fill"></i>
+              </span>
+              <span class="mic-indicator" *ngIf="!participant.isMuted">
+                <i class="bi bi-mic-fill"></i>
+              </span>
+              <span class="host-badge" *ngIf="participant.isHost" style="background: #1a73e8; color: white; padding: 2px 4px; border-radius: 3px; font-size: 9px; margin-left: 4px;">Host</span>
             </div>
-              <div class="participant-info">
+
+            <!-- Speaking Indicator -->
+            <div class="speaking-indicator" *ngIf="participant.isSpeaking"></div>
+
+            <!-- Video Off Overlay -->
+            <div class="video-controls-overlay" *ngIf="participant.isVideoOff">
+              <div class="avatar-placeholder" [style.background-color]="participant.avatarColor">
+                {{ getInitials(participant.name) }}
+              </div>
+              <div class="participant-info" style="bottom: 8px; left: 8px; position: absolute;">
                 <span class="participant-name">{{ participant.name }}</span>
                 <span class="mic-indicator" *ngIf="participant.isMuted">
                   <i class="bi bi-mic-mute-fill"></i>
@@ -68,11 +89,13 @@
                 <span class="mic-indicator" *ngIf="!participant.isMuted">
                   <i class="bi bi-mic-fill"></i>
                 </span>
+                <span class="host-badge" *ngIf="participant.isHost" style="background: #1a73e8; color: white; padding: 2px 4px; border-radius: 3px; font-size: 9px; margin-left: 4px;">Host</span>
               </div>
-          </div>
+            </div>
+          </ng-container>
         </div>
 
-        <!-- Empty Tiles for Grid Fill (optional) -->
+        <!-- Empty Tiles for Grid Fill -->
         <div class="video-tile empty-tile" *ngFor="let i of [].constructor(getEmptyTileCount())">
           <div class="empty-tile-content">
             <i class="bi bi-person-plus"></i>
@@ -87,17 +110,17 @@
       <div class="controls-left">
         <span class="meeting-info" data-bs-toggle="tooltip" [attr.data-bs-title]="meetingId">
           <i class="bi bi-camera-video-fill"></i>
-          <!-- {{ meetingTopic }} • {{ meetingId }} -->
-          {{ meetingId }}
+          {{ meetingTopic }} • {{ meetingId }}
         </span>
-        <span class="meeting-timer" id="meetingTimer" data-bs-toggle="tooltip" data-bs-title="Meeting duration">
+        <span class="meeting-timer" data-bs-toggle="tooltip" data-bs-title="Meeting duration">
+          <i class="bi bi-clock"></i>
           {{ formattedDuration }}
         </span>
 
-        <div class="invite-dropdown" dropdown>
+        <div class="invite-dropdown">
           <button class="invite-btn" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="bi bi-person-plus-fill"></i>
-            <span>Invite Team</span>
+            <span>Invite</span>
           </button>
           <ul class="dropdown-menu">
             <li>
@@ -107,12 +130,16 @@
               </a>
             </li>
             <li>
-              <hr class="dropdown-divider">
+              <a class="dropdown-item" href="#" (click)="copyMeetingLink($event)">
+                <i class="bi bi-link-45deg"></i>
+                Copy Meeting Link
+              </a>
             </li>
+            <li><hr class="dropdown-divider"></li>
             <li>
               <a class="dropdown-item" href="#" (click)="shareToTeams($event)">
                 <i class="bi bi-microsoft-teams"></i>
-                Share to Microsoft Teams
+                Share to Teams
               </a>
             </li>
             <li>
@@ -128,51 +155,41 @@
       <div class="controls-center">
         <!-- Mute/Unmute -->
         <button class="control-btn" [class.active]="!isMuted" [class.danger]="isMuted" (click)="toggleMute()"
-          data-bs-toggle="tooltip" [attr.data-bs-title]="isMuted ? 'Unmute Microphone' : 'Mute Microphone'"
-          [attr.data-bs-original-title]="isMuted ? 'Unmute Microphone' : 'Mute Microphone'">
+          data-bs-toggle="tooltip" [attr.data-bs-title]="isMuted ? 'Unmute' : 'Mute'">
           <i class="bi" [ngClass]="isMuted ? 'bi-mic-mute-fill' : 'bi-mic-fill'"></i>
         </button>
 
         <!-- Video On/Off -->
         <button class="control-btn" [class.active]="!isVideoOff" [class.danger]="isVideoOff" (click)="toggleVideo()"
-          data-bs-toggle="tooltip" [attr.data-bs-title]="isVideoOff ? 'Turn On Camera' : 'Turn Off Camera'"
-          [attr.data-bs-original-title]="isVideoOff ? 'Turn On Camera' : 'Turn Off Camera'">
+          data-bs-toggle="tooltip" [attr.data-bs-title]="isVideoOff ? 'Start Video' : 'Stop Video'">
           <i class="bi" [ngClass]="isVideoOff ? 'bi-camera-video-off-fill' : 'bi-camera-video-fill'"></i>
         </button>
 
         <!-- Screen Share -->
         <button class="control-btn" [class.active]="isScreenSharing" (click)="toggleScreenShare()"
-          data-bs-toggle="tooltip" [attr.data-bs-title]="isScreenSharing ? 'Stop Sharing' : 'Share Screen'"
-          [attr.data-bs-original-title]="isScreenSharing ? 'Stop Sharing' : 'Share Screen'">
+          data-bs-toggle="tooltip" [attr.data-bs-title]="isScreenSharing ? 'Stop Sharing' : 'Share Screen'">
           <i class="bi bi-display"></i>
         </button>
 
         <!-- Participants -->
         <button class="control-btn participants-btn" (click)="showParticipants = !showParticipants"
-          data-bs-toggle="tooltip" data-bs-title="Participants"
-          [attr.data-bs-original-title]="showParticipants ? 'Hide Participants' : 'Show Participants'">
+          data-bs-toggle="tooltip" [attr.data-bs-title]="showParticipants ? 'Hide Participants' : 'Show Participants'">
           <i class="bi bi-people-fill"></i>
-          <span class="badge">{{ participants.length }}</span>
+          <span class="badge" *ngIf="participants.length > 0">{{ participants.length }}</span>
         </button>
 
         <!-- Chat -->
         <button class="control-btn chat-btn" (click)="showChat = !showChat" data-bs-toggle="tooltip"
-          [attr.data-bs-title]="showChat ? 'Hide Chat' : 'Show Chat'"
-          [attr.data-bs-original-title]="showChat ? 'Hide Chat' : 'Show Chat'">
+          [attr.data-bs-title]="showChat ? 'Hide Chat' : 'Show Chat'">
           <i class="bi bi-chat-dots-fill"></i>
+          <span class="badge" *ngIf="chatMessages.length > 0">{{ chatMessages.length }}</span>
         </button>
 
         <!-- Record -->
         <button class="control-btn" [class.active]="isRecording" [class.recording]="isRecording"
           (click)="toggleRecording()" data-bs-toggle="tooltip"
-          [attr.data-bs-title]="isRecording ? 'Stop Recording' : 'Start Recording'"
-          [attr.data-bs-original-title]="isRecording ? 'Stop Recording' : 'Start Recording'">
+          [attr.data-bs-title]="isRecording ? 'Stop Recording' : 'Start Recording'">
           <i class="bi bi-record-circle-fill"></i>
-        </button>
-
-        <!-- More Options -->
-        <button class="control-btn more-btn" data-bs-toggle="tooltip" data-bs-title="More Options">
-          <i class="bi bi-three-dots-vertical"></i>
         </button>
       </div>
 
@@ -184,19 +201,18 @@
           <span>Leave</span>
         </button>
 
-        <!-- End Meeting -->
+        <!-- End Meeting (Host only) -->
         <button class="control-btn end-btn" *ngIf="isHost" (click)="endMeeting()" data-bs-toggle="tooltip"
-          data-bs-title="End Meeting">
+          data-bs-title="End Meeting for Everyone">
           <i class="bi bi-stop-circle-fill"></i>
           <span>End</span>
         </button>
       </div>
     </div>
-
   </div>
 
   <!-- Participants Sidebar -->
-  <div class="participants-sidebar" *ngIf="showParticipants">
+  <div class="participants-sidebar" *ngIf="showParticipants && !isLoading">
     <div class="sidebar-header">
       <h6>Participants ({{ participants.length }})</h6>
       <button class="btn-close" (click)="showParticipants = false"></button>
@@ -205,37 +221,35 @@
     <div class="participants-list">
       <div class="participant-item" *ngFor="let participant of participants">
         <div class="participant-avatar" [style.background-color]="participant.avatarColor">
-          {{ participant.name.charAt(0) }}
+          {{ getInitials(participant.name) }}
         </div>
         <div class="participant-details">
-          <span class="participant-name">{{ participant.name }}</span>
+          <span class="participant-name">
+            {{ participant.name }}
+            <span style="color: #aaa; font-size: 11px; margin-left: 4px;" *ngIf="participant.id === userId">(You)</span>
+          </span>
           <span class="participant-status">
             <i class="bi bi-mic-mute-fill" *ngIf="participant.isMuted"></i>
             <i class="bi bi-camera-video-off-fill" *ngIf="participant.isVideoOff"></i>
             <span class="host-badge" *ngIf="participant.isHost">Host</span>
           </span>
         </div>
-        <div class="participant-actions" *ngIf="isHost && !participant.isHost">
-          <button class="btn btn-link text-danger p-1" (click)="removeParticipant(participant.id)">
+        <div class="participant-actions" *ngIf="isHost && participant.id !== userId">
+          <button class="btn btn-link text-danger p-1" (click)="removeParticipant(participant.id)"
+            data-bs-toggle="tooltip" data-bs-title="Remove Participant">
             <i class="bi bi-person-x"></i>
           </button>
-          <button class="btn btn-link p-1" (click)="muteParticipant(participant.id)">
+          <button class="btn btn-link p-1" (click)="muteParticipant(participant.id)"
+            data-bs-toggle="tooltip" data-bs-title="Mute Participant">
             <i class="bi bi-mic-mute"></i>
           </button>
         </div>
       </div>
     </div>
-
-    <!-- <div class="sidebar-footer">
-      <button class="btn btn-outline-primary w-100" (click)="copyMeetingLink()">
-        <i class="bi bi-link-45deg"></i>
-        Copy Invitation Link
-      </button>
-    </div> -->
   </div>
 
   <!-- Chat Sidebar -->
-  <div class="chat-sidebar" *ngIf="showChat">
+  <div class="chat-sidebar" *ngIf="showChat && !isLoading">
     <div class="sidebar-header">
       <h6>In-call messages</h6>
       <button class="btn-close" (click)="showChat = false"></button>
@@ -247,16 +261,27 @@
         <div class="message-content">{{ msg.message }}</div>
         <div class="message-time">{{ msg.timestamp | date:'shortTime' }}</div>
       </div>
+
+      <!-- Empty State -->
+      <div class="no-messages" *ngIf="chatMessages.length === 0" style="text-align: center; color: #666; padding: 32px;">
+        <i class="bi bi-chat-dots" style="font-size: 48px; margin-bottom: 8px; display: block;"></i>
+        <span>No messages yet</span>
+      </div>
     </div>
 
     <div class="chat-input">
       <div class="input-group">
-        <input type="text" class="form-control" placeholder="Send a message to everyone" [(ngModel)]="newMessage"
-          (keydown.enter)="sendMessage()">
-        <button class="btn btn-primary" (click)="sendMessage()">
+        <input type="text" class="form-control" placeholder="Send a message to everyone"
+               [(ngModel)]="newMessage" (keydown.enter)="sendMessage()"
+               [disabled]="meetingDetails?.settings?.allowChat === false">
+        <button class="btn btn-primary" (click)="sendMessage()"
+                [disabled]="!newMessage.trim() || meetingDetails?.settings?.allowChat === false">
           <i class="bi bi-send"></i>
         </button>
       </div>
+      <small class="text-muted" style="display: block; margin-top: 4px;" *ngIf="meetingDetails?.settings?.allowChat === false">
+        Chat is disabled by host
+      </small>
     </div>
   </div>
 </div>

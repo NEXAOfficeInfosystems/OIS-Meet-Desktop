@@ -1,3 +1,4 @@
+import { StorageService } from './../../core/services/storage.service';
 import { Component, OnInit, ViewChild, ElementRef, AfterViewChecked, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -71,10 +72,9 @@ private companySubscription!: Subscription;
   constructor(
     private chatService: ChatService,
     private signalRService: SignalRService,
-    private authService: AuthService,
     private sessionService: SessionService,
     private commonService: CommonService,
-    private ssoApiService: SsoApiService,
+    private storageService: StorageService,
     private commonSvc: CommonService
   ) {
      const userId = this.sessionService.getUserId() ?? '11111111-1111-1111-1111-111111111111';
@@ -172,14 +172,21 @@ private companySubscription!: Subscription;
     const clientId = this.sessionService.getClientId() ?? '';
     const companyId = this.sessionService.getCompanyId() ?? 0;
 
-    console.log(`📤 Loading users for client: ${clientId}, company: ${companyId}`);
-
     this.chatService.getOisMeetUsers(clientId, companyId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
           if (res.success && res.data) {
-            console.log(`✅ Loaded ${res.data.length} users from backend`);
+            console.log(`✅ Loaded : ${res}`);
+            const loggedInSSOUserId = this.sessionService.getUserId() || '';
+            const currentUser = res.data.find(
+              (u: any) => u.ssoUserId === loggedInSSOUserId
+            );
+
+            if (currentUser) {
+              this.storageService.setItem('oisMeetUserId', currentUser.id);
+              console.log('✅ OIS Meet UserId stored:', currentUser.id);
+            }
 
             const transformed = this.transformSSOUsersToChatUsers(res.data);
 
@@ -723,40 +730,9 @@ private companySubscription!: Subscription;
     return messageDate.toLocaleDateString();
   }
 
-  private loadOisMeetUsers(): void {
-    this.isLoading = true;
-
-    const clientId = this.sessionService.getClientId() ?? '';
-    const companyId = this.sessionService.getCompanyId() ?? 0;
-
-    console.log(`📤 Loading users for client: ${clientId}, company: ${companyId}`);
-
-    this.chatService.getOisMeetUsers(clientId, companyId)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (res) => {
-          if (res.success && res.data) {
-            console.log(`✅ Loaded ${res.data.length} users from backend`);
-
-            const transformed = this.transformSSOUsersToChatUsers(res.data);
-            this.users = transformed.filter(
-              user => user.id !== this.currentUserId
-            );
-
-            this.filteredUsers = [...this.users];
-            console.log(`📋 Displaying ${this.users.length} users`);
-          }
-          this.isLoading = false;
-        },
-        error: (err) => {
-          console.error('❌ Failed to load users', err);
-          this.isLoading = false;
-        }
-      });
-  }
-
 // Update transform method if needed (keep as is)
 private transformSSOUsersToChatUsers(users: any[]): ChatUser[] {
+  console.log('Users fetched from SSO:', users);
   return users.map(user => ({
     id: user.id,
     userId: user.ssoUserId || user.id,

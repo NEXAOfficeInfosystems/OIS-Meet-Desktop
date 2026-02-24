@@ -4,6 +4,7 @@ import * as signalR from '@microsoft/signalr';
 import { environment } from '../../../environments/environment';
 import { Observable, Subject } from 'rxjs';
 import { Message } from './chat.service'; // Import the same Message interface
+import { SessionService } from './session.service';
 
 @Injectable({
   providedIn: 'root'
@@ -26,7 +27,9 @@ export class SignalRService {
   public messageDeleted$ = this.messageDeletedSubject.asObservable();
   public newConversation$ = this.newConversationSubject.asObservable();
 
-  constructor() {}
+  constructor(
+    private sessionService: SessionService
+  ) {}
 
   public startConnection(userId?: string): void {
     const baseUrl = environment.apiBaseUrl.replace('/api', '');
@@ -141,4 +144,81 @@ export class SignalRService {
         .catch(err => console.error('Error stopping SignalR: ', err));
     }
   }
+
+
+
+
+// Meeting signalr
+participantJoined$ = new Subject<any>();
+participantLeft$ = new Subject<any>();
+participantStatusChanged$ = new Subject<any>();
+meetingMessageReceived$ = new Subject<any>();
+screenSharingChanged$ = new Subject<any>();
+userId = this.sessionService.getOISMeetUserId() || '';
+userName = this.sessionService.getFullName() || '';
+
+joinMeeting(meetingId: string) {
+  if (this.hubConnection) {
+    this.hubConnection.invoke('JoinMeeting', meetingId, {
+      userId: this.userId,
+      userName: this.userName
+    }).catch(err => console.error('Error joining meeting:', err));
+  }
+}
+
+leaveMeeting(meetingId: string) {
+  if (this.hubConnection) {
+    this.hubConnection.invoke('LeaveMeeting', meetingId, this.userId)
+      .catch(err => console.error('Error leaving meeting:', err));
+  }
+}
+
+updateParticipantStatus(meetingId: string, status: any) {
+  if (this.hubConnection) {
+    this.hubConnection.invoke('UpdateParticipantStatus', meetingId, this.userId, status)
+      .catch(err => console.error('Error updating status:', err));
+  }
+}
+
+sendMeetingMessage(meetingId: string, message: any) {
+  if (this.hubConnection) {
+    this.hubConnection.invoke('SendMeetingMessage', meetingId, message)
+      .catch(err => console.error('Error sending meeting message:', err));
+  }
+}
+
+screenSharingStarted(meetingId: string) {
+  if (this.hubConnection) {
+    this.hubConnection.invoke('ScreenSharingStarted', meetingId, this.userId)
+      .catch(err => console.error('Error notifying screen share:', err));
+  }
+}
+
+screenSharingStopped(meetingId: string) {
+  if (this.hubConnection) {
+    this.hubConnection.invoke('ScreenSharingStopped', meetingId, this.userId)
+      .catch(err => console.error('Error notifying screen share stop:', err));
+  }
+}
+
+muteParticipant(meetingId: string, participantId: string) {
+  if (this.hubConnection) {
+    this.hubConnection.invoke('MuteParticipant', meetingId, participantId)
+      .catch(err => console.error('Error muting participant:', err));
+  }
+}
+
+removeParticipant(meetingId: string, participantId: string) {
+  if (this.hubConnection) {
+    this.hubConnection.invoke('RemoveParticipant', meetingId, participantId)
+      .catch(err => console.error('Error removing participant:', err));
+  }
+}
+
+endMeeting(meetingId: string) {
+  if (this.hubConnection) {
+    this.hubConnection.invoke('EndMeeting', meetingId)
+      .catch(err => console.error('Error ending meeting:', err));
+  }
+}
 }

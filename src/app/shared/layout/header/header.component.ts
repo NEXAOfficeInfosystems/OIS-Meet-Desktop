@@ -123,27 +123,17 @@ private resyncUsersForCompany(company: any) {
     console.error('No token or userinfo found');
     return;
   }
-
-  console.log('🔄 Re-syncing users for company:', company);
-
   this.ssoApiService.getSSOUserList(token, userinfo, client, company.companyId.toString(), appId)
     .pipe(
       switchMap((ssoUsers: any[]) => {
-        console.log(`📥 Fetched ${ssoUsers.length} users from SSO for new company`);
         return this.chatService.syncSsoUsers(ssoUsers, client, company.companyId);
       })
     )
     .subscribe({
       next: (response) => {
-        console.log('✅ Users re-synced for new company:', response);
-        sessionStorage.setItem('ssoSynced', 'true');
-
-        // Notify that sync is complete
         this.commonService.notifySyncComplete(company);
       },
       error: (error) => {
-        console.error('❌ Failed to re-sync users:', error);
-        // Still try to load whatever is available
         this.commonService.notifySyncComplete(company);
       }
     });
