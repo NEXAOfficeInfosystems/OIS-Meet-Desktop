@@ -10,6 +10,8 @@ import { CommonService } from '../../../core/services/common.service';
 import { SsoApiService } from '../../../core/services/sso-api.service';
 import { StorageService } from '../../../core/services/storage.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog.component';
+import { switchMap } from 'rxjs';
+import { ChatService } from '../../../core/services/chat.service';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -42,6 +44,7 @@ export class HeaderComponent {
     private commonService: CommonService,
     private ssoApiService: SsoApiService,
     private storageService: StorageService,
+    private chatService: ChatService,
     private dialog: MatDialog
   ) {
     this.userFullName = this.sessionService.getFullName();
@@ -88,13 +91,63 @@ getUserCompanyList() {
     });
 }
 
-  selectCompany(company: any) {
-    this.selectedCompanyId = company.companyId;
-    this.storageService.setObject('defaultCompany', company);
-    this.commonService.setSelectedCompany(company);
-    this.isCompanyMenuOpen = false;
-    this.isUserMenuOpen = false;
+selectCompany(company: any) {
+  this.selectedCompanyId = company.companyId;
+  this.storageService.setObject('defaultCompany', company);
+  this.commonService.setSelectedCompany(company);
+  this.isCompanyMenuOpen = false;
+  this.isUserMenuOpen = false;
+
+  // Store the selected company info in session storage for chat component
+  sessionStorage.setItem('selectedCompanyId', company.companyId.toString());
+  sessionStorage.setItem('selectedClientId', this.sessionService.getClientId() ?? '');
+
+  // Remove sync flag to force re-sync
+  sessionStorage.removeItem('ssoSynced');
+
+  // First notify that company is changing (chat will clear data and show loading)
+  this.commonService.notifyCompanyChanged(company);
+
+  // Then trigger re-sync
+  this.resyncUsersForCompany(company);
+}
+
+
+private resyncUsersForCompany(company: any) {
+  const token = this.auth.getSSOToken() ?? '';
+  const userinfo = this.auth.getEncryptedJson() ?? '';
+  const client = this.sessionService.getClientId() ?? '';
+  const appId = this.sessionService.getMeetAppId() ?? '';
+
+  if (!token || !userinfo) {
+    console.error('No token or userinfo found');
+    return;
   }
+
+  console.log('🔄 Re-syncing users for company:', company);
+
+  this.ssoApiService.getSSOUserList(token, userinfo, client, company.companyId.toString(), appId)
+    .pipe(
+      switchMap((ssoUsers: any[]) => {
+        console.log(`📥 Fetched ${ssoUsers.length} users from SSO for new company`);
+        return this.chatService.syncSsoUsers(ssoUsers, client, company.companyId);
+      })
+    )
+    .subscribe({
+      next: (response) => {
+        console.log('✅ Users re-synced for new company:', response);
+        sessionStorage.setItem('ssoSynced', 'true');
+
+        // Notify that sync is complete
+        this.commonService.notifySyncComplete(company);
+      },
+      error: (error) => {
+        console.error('❌ Failed to re-sync users:', error);
+        // Still try to load whatever is available
+        this.commonService.notifySyncComplete(company);
+      }
+    });
+}
 
   generateMeetingId() {
     const randomId = Math.random().toString(36).substring(2, 8).toUpperCase();

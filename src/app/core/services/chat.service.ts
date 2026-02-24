@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
@@ -96,8 +96,20 @@ export class ChatService {
 
   constructor(private http: HttpClient) {}
 
-  getConversations(): Observable<ApiResponse<ChatUser[]>> {
-    return this.http.get<ApiResponse<ChatUser[]>>(`${this.apiUrl}/conversations`);
+  getConversations(clientId?: string, companyId?: any) {
+    let params = new HttpParams();
+
+    if (clientId) {
+      params = params.set('clientId', clientId);
+    }
+    if (companyId) {
+      params = params.set('companyId', companyId.toString());
+    }
+
+    return this.http.get<ApiResponse<ChatUser[]>>(
+      `${environment.apiBaseUrl}/Conversation`,
+      { params }
+    );
   }
 
   getOrCreateConversation(otherUserId: string): Observable<ApiResponse<Conversation>> {
@@ -142,4 +154,22 @@ export class ChatService {
     return this.http.post<ApiResponse<Attachment>>(`${this.apiUrl}/upload`, formData);
   }
 
+  syncSsoUsers(users: any[], clientId: string, companyId: any) {
+    const usersWithClientInfo = users.map(user => ({
+      ...user,
+      clientId: clientId,
+      companyId: companyId
+    }));
+    return this.http.post<ApiResponse<any>>(`${environment.apiBaseUrl}/User/sync-sso-users`, usersWithClientInfo );
+  }
+
+getOisMeetUsers(clientId: string, companyId: any) {
+  const params = new HttpParams()
+    .set('clientId', clientId)
+    .set('companyId', companyId.toString());
+  return this.http.get<ApiResponse<any[]>>(
+    `${environment.apiBaseUrl}/User`,
+    { params }
+  );
+}
 }

@@ -2,14 +2,16 @@ import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/co
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { forkJoin, Subject } from 'rxjs';
-import { switchMap, takeUntil, tap } from 'rxjs/operators';
+import { forkJoin, Observable, of, Subject } from 'rxjs';
+import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
 import { ApplicationItem, SsoApiService, UserDetailsResponse } from '../../core/services/sso-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { StorageService } from '../../core/services/storage.service';
 import { CompanyUrlResponse, MeetUrlResponse } from '../../core/models/session.models';
 import { encryptValueSixteen } from '../../core/utils/encrypt';
 import { CommonService } from '../../core/services/common.service';
+import { SessionService } from '../../core/services/session.service';
+import { ChatService } from '../../core/services/chat.service';
 
 @Component({
   selector: 'app-login',
@@ -55,6 +57,8 @@ export class LoginComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     private storageService: StorageService,
     private commonService: CommonService,
+    private sessionService: SessionService,
+    private chatService: ChatService,
     private router: Router
   ) { }
 
@@ -170,7 +174,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     });
   }
 
-  /* =======================
+ /* =======================
       LOGIN
   ======================== */
   login(): void {
@@ -188,27 +192,148 @@ export class LoginComponent implements OnInit, OnDestroy {
       ApplicationName: 'GM'
     }));
 
-    this.ssoApiService.authenticateUser(encryptedData).subscribe({
-      next: (res) => {
-        const result = res?.response?.table?.[0];
-        if (result?.successflag === 1) {
-          this.formError = null;
-          this.authService.setSession(result.token, res?.encryptedJson);
-          this.showLoading = true;
-          this.loadingMessage = 'Loading your workspace...';
-          this.loadPostLoginData(result.token, res?.encryptedJson);
-        } else {
-          this.showLoading = false;
-          this.formError = result?.responsemessage || 'Invalid credentials. Please try again.';
+    this.ssoApiService.authenticateUser(encryptedData).pipe(takeUntil(this.destroy$)).subscribe({
+        next: (res) => {
+          const result = res?.response?.table?.[0];
+          if (result?.successflag === 1) {
+            this.formError = null;
+            this.authService.setSession(result.token, res?.encryptedJson);
+            this.loadingMessage = 'Loading your workspace...';
+            this.loadPostLoginData(result.token, res?.encryptedJson);
+          } else {
+            this.handleLoginError(result?.responsemessage || 'Invalid credentials. Please try again.');
+            this.resetCaptcha();
+          }
+        },
+        error: () => {
+          this.handleLoginError('Login failed. Please try again.');
           this.resetCaptcha();
         }
-      },
-      error: () => {
-        this.showLoading = false;
-        this.formError = 'Login failed. Please try again.';
-        this.resetCaptcha();
+      });
+  }
+
+  /* =======================
+      POST LOGIN DATA
+  ======================== */
+private loadPostLoginData(token: string, userinfo: string): void {
+  this.ssoApiService.getUserDetails(token, userinfo).pipe(
+    takeUntil(this.destroy$),
+    tap((user: any) => {
+      this.storageService.setObject(
+        'userDetails',
+        this.storageService.pickUserDetailsForStorage(user)
+      );
+    }),
+    switchMap((user: any) => {
+      const userId = user?.Id;
+      if (!userId) {
+        throw new Error('UserId not found in GetUser response.');
       }
-    });
+      return this.ssoApiService.getApplicationList(token, userinfo, userId)
+        .pipe(
+          switchMap((apps: any[]) => {
+            const meetApp = apps.find(app =>
+              app.Code === 'DMS' ||
+              app.Code === 'OISVault' ||
+              app.Code === 'Vault'
+            );
+
+            if (!meetApp?.ApplicationId) {
+              throw new Error('Meet app not found in application list.');
+            }
+
+            this.storageService.setItem('meetAppId', meetApp.ApplicationId.toString());
+            this.storageService.setItem('applicationName', meetApp.ApplicationName ?? '');
+
+            return forkJoin({
+              meetUrl: this.ssoApiService.getMeetUrl(token, userinfo, meetApp.ApplicationId),
+              companyUrl: this.ssoApiService.getCompanyURL(token, userinfo, userId, meetApp.ApplicationId),
+            });
+          })
+        );
+    }),
+    // ADD THIS: Sync users BEFORE navigation
+    switchMap(({ meetUrl, companyUrl }) => {
+      const appUrl: string | null = (meetUrl?.appURL ?? meetUrl?.AppURL ?? null);
+      const companies = (companyUrl.data ?? []).map((x: any) => x.company);
+      this.commonService.setCompanies(companies);
+
+      if (appUrl) {
+        this.storageService.setItem('applicationUrl', appUrl);
+        const appToken = this.storageService.extractTokenFromAppUrl(appUrl);
+        if (appToken) {
+          this.storageService.setItem('applicationToken', appToken);
+        }
+      }
+
+      const defaultCompany = this.commonService.pickDefaultCompanyForStorage(companyUrl);
+      if (defaultCompany) {
+        this.storageService.setObject('defaultCompany', defaultCompany);
+      }
+
+      // Sync users NOW before navigating
+      this.loadingMessage = 'Syncing users...';
+      return this.syncUsersBeforeNavigation(token, userinfo).pipe(
+        map(() => ({ meetUrl, companyUrl }))
+      );
+    })
+  )
+  .subscribe({
+    next: () => {
+      this.showLoading = false;
+      this.router.navigateByUrl('/chat');
+    },
+    error: (err) => {
+      console.error('Post-login data load failed:', err);
+      this.handleLoginError('Unable to load user details. Please try again.');
+    }
+  });
+}
+
+  /* =======================
+      BACKGROUND SSO SYNC
+  ======================== */
+private syncUsersBeforeNavigation(token: string, userinfo: string): Observable<any> {
+  // if (sessionStorage.getItem('ssoSynced')) {
+  //   return of(null);
+  // }
+
+  const client = this.sessionService.getClientId() ?? '';
+  const companyId = this.sessionService.getCompanyId() ?? 0;
+  const appId = this.sessionService.getMeetAppId() ?? '';
+
+  // console.log('Starting user sync with:', { client, companyId });
+
+  return this.ssoApiService.getSSOUserList(token, userinfo, client, companyId.toString(), appId)
+    .pipe(
+      switchMap((ssoUsers: any[]) => {
+        console.log(`📥 Fetched ${ssoUsers.length} users from SSO`);
+
+        if (ssoUsers.length === 0) {
+          console.warn('No users to sync');
+          return of(null);
+        }
+
+        // Pass client and company to sync method
+        return this.chatService.syncSsoUsers(ssoUsers, client, companyId);
+      }),
+      tap((response) => {
+        if (response) {
+          console.log('✅ SSO Users Synced to backend:', response.message);
+        }
+        // sessionStorage.setItem('ssoSynced', 'true');
+      }),
+      catchError(error => {
+        return of(null);
+      })
+    );
+}
+
+
+
+  private handleLoginError(message: string) {
+    this.showLoading = false;
+    this.formError = message;
   }
 
   /* =======================
@@ -321,68 +446,68 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
 
-  private loadPostLoginData(token: string, userinfo: string): void {
-    this.ssoApiService.getUserDetails(token, userinfo).pipe(
-      takeUntil(this.destroy$),
-      tap((user: UserDetailsResponse) => {
-        this.storageService.setObject('userDetails', this.storageService.pickUserDetailsForStorage(user));
-      }),
-      switchMap((user: UserDetailsResponse) => {
-        const userId = user?.Id;
-        if (!userId) {
-          throw new Error('UserId not found in GetUser response.');
-        }
+  // private loadPostLoginData(token: string, userinfo: string): void {
+  //   this.ssoApiService.getUserDetails(token, userinfo).pipe(
+  //     takeUntil(this.destroy$),
+  //     tap((user: UserDetailsResponse) => {
+  //       this.storageService.setObject('userDetails', this.storageService.pickUserDetailsForStorage(user));
+  //     }),
+  //     switchMap((user: UserDetailsResponse) => {
+  //       const userId = user?.Id;
+  //       if (!userId) {
+  //         throw new Error('UserId not found in GetUser response.');
+  //       }
 
-        return this.ssoApiService.getApplicationList(token, userinfo, userId).pipe(
-          switchMap((apps: ApplicationItem[]) => {
-            const meetApp = apps.find(app =>
-              // app?.Code === 'Meet'
-              app.Code === 'DMS' || app.Code === 'OISVault' || app.Code === 'Vault'
-            );
+  //       return this.ssoApiService.getApplicationList(token, userinfo, userId).pipe(
+  //         switchMap((apps: ApplicationItem[]) => {
+  //           const meetApp = apps.find(app =>
+  //             // app?.Code === 'Meet'
+  //             app.Code === 'DMS' || app.Code === 'OISVault' || app.Code === 'Vault'
+  //           );
 
-            const appId = meetApp?.ApplicationId;
-            const appName = meetApp?.ApplicationName;
-            if (!appId) {
-              throw new Error('Meet app not found in application list.');
-            }
+  //           const appId = meetApp?.ApplicationId;
+  //           const appName = meetApp?.ApplicationName;
+  //           if (!appId) {
+  //             throw new Error('Meet app not found in application list.');
+  //           }
 
-            this.storageService.setItem('meetAppId', appId.toString());
-            this.storageService.setItem('applicationName', appName ?? '');
+  //           this.storageService.setItem('meetAppId', appId.toString());
+  //           this.storageService.setItem('applicationName', appName ?? '');
 
-            return forkJoin({
-              meetUrl: this.ssoApiService.getMeetUrl(token, userinfo, appId),
-              companyUrl: this.ssoApiService.getCompanyURL(token, userinfo, userId, appId),
-            });
-          })
-        );
-      })
-    ).subscribe({
-      next: ({ meetUrl, companyUrl }: { meetUrl: MeetUrlResponse; companyUrl: CompanyUrlResponse }) => {
-        const appUrl: string | null = (meetUrl?.appURL ?? meetUrl?.AppURL ?? null);
-        const companies = (companyUrl.data ?? []).map((x: any) => x.company);
-         this.commonService.setCompanies(companies);
-        if (appUrl) {
-          this.storageService.setItem('applicationUrl', appUrl);
+  //           return forkJoin({
+  //             meetUrl: this.ssoApiService.getMeetUrl(token, userinfo, appId),
+  //             companyUrl: this.ssoApiService.getCompanyURL(token, userinfo, userId, appId),
+  //           });
+  //         })
+  //       );
+  //     })
+  //   ).subscribe({
+  //     next: ({ meetUrl, companyUrl }: { meetUrl: MeetUrlResponse; companyUrl: CompanyUrlResponse }) => {
+  //       const appUrl: string | null = (meetUrl?.appURL ?? meetUrl?.AppURL ?? null);
+  //       const companies = (companyUrl.data ?? []).map((x: any) => x.company);
+  //        this.commonService.setCompanies(companies);
+  //       if (appUrl) {
+  //         this.storageService.setItem('applicationUrl', appUrl);
 
-          const appToken = this.storageService.extractTokenFromAppUrl(appUrl);
-          if (appToken) {
-            this.storageService.setItem('applicationToken', appToken);
-          }
-        }
+  //         const appToken = this.storageService.extractTokenFromAppUrl(appUrl);
+  //         if (appToken) {
+  //           this.storageService.setItem('applicationToken', appToken);
+  //         }
+  //       }
 
-        const defaultCompany = this.commonService.pickDefaultCompanyForStorage(companyUrl);
-        if (defaultCompany) {
-          this.storageService.setObject('defaultCompany', defaultCompany);
-        }
+  //       const defaultCompany = this.commonService.pickDefaultCompanyForStorage(companyUrl);
+  //       if (defaultCompany) {
+  //         this.storageService.setObject('defaultCompany', defaultCompany);
+  //       }
 
-        this.showLoading = false;
-        this.router.navigateByUrl('/dashboard');
-      },
-      error: (err) => {
-        console.error('Post-login data load failed:', err);
-        this.showLoading = false;
-        this.formError = 'Unable to load user details. Please try again.';
-      }
-    });
-  }
+  //       this.showLoading = false;
+  //       this.router.navigateByUrl('/dashboard');
+  //     },
+  //     error: (err) => {
+  //       console.error('Post-login data load failed:', err);
+  //       this.showLoading = false;
+  //       this.formError = 'Unable to load user details. Please try again.';
+  //     }
+  //   });
+  // }
 }

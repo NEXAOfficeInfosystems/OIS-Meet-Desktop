@@ -1,7 +1,7 @@
 import { Component, OnInit, ViewChild, ElementRef, AfterViewChecked, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject, takeUntil } from 'rxjs';
+import { Subject, Subscription, takeUntil } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
 
 // Services
@@ -11,7 +11,7 @@ import { SessionService } from '../../core/services/session.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CommonService } from '../../core/services/common.service';
 import { SsoApiService } from '../../core/services/sso-api.service';
-import { FileSizePipe } from '../../core/pipes/file-size.pipe';
+// import { FileSizePipe } from '../../core/pipes/file-size.pipe';
 
 // Pipes
 
@@ -25,7 +25,7 @@ declare var bootstrap: any;
     CommonModule,
     FormsModule,
     HttpClientModule,
-    FileSizePipe
+    // FileSizePipe
   ],
   templateUrl: './chat.component.html',
   styleUrls: ['./chat.component.scss']
@@ -62,7 +62,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   // Image viewer
   selectedImage: any = null;
-
+private companySubscription!: Subscription;
+  private syncSubscription!: Subscription;
+  private isCompanyChanging = false;
   // Cleanup
   private destroy$ = new Subject<void>();
 
@@ -79,13 +81,38 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.currentUserId = userId;
   }
 
-ngOnInit() {
-  this.signalRService.startConnection(this.currentUserId);
-  this.setupSignalREvents();
-  this.loadConversations();
-  this.getSSOUserList();
+  ngOnInit() {
+    this.signalRService.startConnection(this.currentUserId);
+    this.setupSignalREvents();
 
-}
+    // Check if we have a pending company change
+    const pendingCompanyId = sessionStorage.getItem('selectedCompanyId');
+    if (pendingCompanyId) {
+      console.log('⏳ Pending company change detected, waiting for sync...');
+      this.isCompanyChanging = true;
+      this.isLoading = true; // Show loading immediately
+    } else {
+      // Initial load
+      this.loadUsersForCurrentCompany();
+      this.loadConversations();
+    }
+
+    // Listen for company changes
+    this.companySubscription = this.commonService.companyChanged$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(company => {
+        console.log('🏢 Company changing to:', company);
+        this.handleCompanyChange();
+      });
+
+    // Listen for sync completion
+    this.syncSubscription = this.commonService.syncComplete$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(company => {
+        console.log('✅ Sync completed for company:', company);
+        this.handleSyncComplete();
+      });
+  }
 
   ngAfterViewChecked() {
     this.scrollToBottom();
@@ -98,7 +125,88 @@ ngOnInit() {
     this.signalRService.stopConnection();
     this.destroy$.next();
     this.destroy$.complete();
+
+    if (this.companySubscription) {
+      this.companySubscription.unsubscribe();
+    }
+    if (this.syncSubscription) {
+      this.syncSubscription.unsubscribe();
+    }
   }
+
+  private handleCompanyChange() {
+    // Clear current data immediately
+    this.users = [];
+    this.filteredUsers = [];
+    this.selectedUser = null;
+    this.messages = [];
+
+    // Set loading state
+    this.isLoading = true;
+    this.isCompanyChanging = true;
+
+    // Clear any existing data in UI
+  }
+
+   private handleSyncComplete() {
+    console.log('🔄 Sync complete, now loading users...');
+    this.isCompanyChanging = false;
+
+    // Clear session storage flags
+    sessionStorage.removeItem('selectedCompanyId');
+
+    // Now load users (they should be available after sync)
+    this.loadUsersForCurrentCompany();
+    this.loadConversations();
+  }
+
+  private loadUsersForCurrentCompany(): void {
+    // Don't load if company is still changing
+    if (this.isCompanyChanging) {
+      console.log('⏳ Company still changing, waiting before loading users...');
+      return;
+    }
+
+    this.isLoading = true;
+
+    const clientId = this.sessionService.getClientId() ?? '';
+    const companyId = this.sessionService.getCompanyId() ?? 0;
+
+    console.log(`📤 Loading users for client: ${clientId}, company: ${companyId}`);
+
+    this.chatService.getOisMeetUsers(clientId, companyId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          if (res.success && res.data) {
+            console.log(`✅ Loaded ${res.data.length} users from backend`);
+
+            const transformed = this.transformSSOUsersToChatUsers(res.data);
+
+            // Exclude logged-in user
+            this.users = transformed.filter(
+              user => user.id !== this.currentUserId
+            );
+
+            this.filteredUsers = [...this.users];
+            console.log(`📋 Displaying ${this.users.length} users`);
+          }
+          this.isLoading = false;
+        },
+        error: (err) => {
+          console.error('❌ Failed to load users', err);
+          this.isLoading = false;
+
+          // If error, try one more time after a delay
+          setTimeout(() => {
+            if (!this.isCompanyChanging) {
+              this.loadUsersForCurrentCompany();
+            }
+          }, 2000);
+        }
+      });
+  }
+
 
   // Helper method to get display name
   getUserDisplayName(user: ChatUser): string {
@@ -173,44 +281,47 @@ ngOnInit() {
     }
   }
 
-loadConversations(): void {
-  this.isLoading = true;
-  this.chatService.getConversations()
-    .pipe(takeUntil(this.destroy$))
-    .subscribe({
-      next: (response: ApiResponse<ChatUser[]>) => {
-        if (response.success) {
-          console.log(`✅ Loaded ${response.data.length} conversations from server`);
+  loadConversations(): void {
+    // Don't load if company is still changing
+    if (this.isCompanyChanging) {
+      console.log('⏳ Company still changing, waiting before loading conversations...');
+      return;
+    }
 
-          // If we have SSO users, merge with server data
-          if (this.users.length > 0) {
-            this.mergeConversationData(response.data);
-          } else {
-            // No SSO users yet, use server data directly
-            this.users = response.data.map(user => ({
-              ...user,
-              name: user.fullName,
-              online: user.isOnline
-            }));
-            this.filteredUsers = [...this.users];
+    this.isLoading = true;
 
-            if (this.users.length > 0 && !this.selectedUser) {
-              this.selectUser(this.users[0]);
+    const clientId = this.sessionService.getClientId() ?? '';
+    const companyId = this.sessionService.getCompanyId() ?? 0;
+
+    this.chatService.getConversations(clientId, companyId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response: ApiResponse<ChatUser[]>) => {
+          if (response.success) {
+            console.log(`✅ Loaded ${response.data.length} conversations for company ${companyId}`);
+
+            // Merge with users
+            if (this.users.length > 0) {
+              this.mergeConversationData(response.data);
+            } else {
+              this.users = response.data.map(user => ({
+                ...user,
+                name: user.fullName,
+                online: user.isOnline
+              }));
+              this.filteredUsers = [...this.users];
             }
-          }
 
-          this.loadUnreadCount();
+            this.loadUnreadCount();
+          }
+          this.isLoading = false;
+        },
+        error: (error) => {
+          console.error('Error loading conversations:', error);
+          this.isLoading = false;
         }
-        this.isLoading = false;
-      },
-      error: (error) => {
-        console.error('Error loading conversations:', error);
-        this.isLoading = false;
-        // Don't fallback to mock data, just show error
-        // this.commonSvc.showError('Failed to load conversations');
-      }
-    });
-}
+      });
+  }
 
   loadUnreadCount(): void {
     this.chatService.getUnreadCount()
@@ -612,56 +723,58 @@ loadConversations(): void {
     return messageDate.toLocaleDateString();
   }
 
-  // Legacy method - keep for backward compatibility
-  getSSOUserList(): void {
-    const token = this.authService.getSSOToken() ?? '';
-    const userinfo = this.authService.getEncryptedJson() ?? '';
-    const client = this.sessionService.getClientId() ?? '';
-    const companyId = this.sessionService.getCompanyId()?.toString() ?? '';
-    const appId = this.sessionService.getMeetAppId() ?? '';
-
+  private loadOisMeetUsers(): void {
     this.isLoading = true;
-    console.log('Fetching SSO user list...');
 
-    this.ssoApiService.getSSOUserList(token, userinfo, client, companyId, appId)
+    const clientId = this.sessionService.getClientId() ?? '';
+    const companyId = this.sessionService.getCompanyId() ?? 0;
+
+    console.log(`📤 Loading users for client: ${clientId}, company: ${companyId}`);
+
+    this.chatService.getOisMeetUsers(clientId, companyId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response: any[]) => {
-          console.log(`✅ Fetched ${response.length} SSO users successfully`);
-          this.ssoUsers = response;
+        next: (res) => {
+          if (res.success && res.data) {
+            console.log(`✅ Loaded ${res.data.length} users from backend`);
 
-          // Transform SSO users to ChatUser format
-          this.users = this.transformSSOUsersToChatUsers(response);
-          this.filteredUsers = [...this.users];
+            const transformed = this.transformSSOUsersToChatUsers(res.data);
+            this.users = transformed.filter(
+              user => user.id !== this.currentUserId
+            );
 
-          // Initialize conversations for these users
-          this.initializeConversations();
-        },
-        error: (error) => {
-          console.error('❌ Error fetching SSO user list:', error);
+            this.filteredUsers = [...this.users];
+            console.log(`📋 Displaying ${this.users.length} users`);
+          }
           this.isLoading = false;
-          // Show error message to user
-          // this.commonSvc.showError('Failed to load users. Please try again.');
+        },
+        error: (err) => {
+          console.error('❌ Failed to load users', err);
+          this.isLoading = false;
         }
       });
   }
-  private transformSSOUsersToChatUsers(ssoUsers: any[]): ChatUser[] {
-    return ssoUsers.map(user => ({
-      id: user.id,
-      userId: user.id,
-      name: user.fullName,
-      fullName: user.fullName,
-      email: user.email,
-      isOnline: true, // SSO users are considered online by default
-      online: true,
-      lastMessage: '',
-      lastMessageTime: '',
-      lastMessageType: '',
-      unreadCount: 0,
-      avatarColor: this.commonSvc.getRandomColor(),
-      status: 'Available'
-    }));
-  }
+
+// Update transform method if needed (keep as is)
+private transformSSOUsersToChatUsers(users: any[]): ChatUser[] {
+  return users.map(user => ({
+    id: user.id,
+    userId: user.ssoUserId || user.id,
+    name: user.fullName || user.name || 'Unknown',
+    fullName: user.fullName || user.name || 'Unknown',
+    email: user.email || '',
+    isOnline: true,
+    online: true,
+    lastMessage: '',
+    lastMessageTime: '',
+    lastMessageType: '',
+    unreadCount: 0,
+    avatarColor: this.commonSvc.getRandomColor(),
+    status: 'Available',
+    clientId: user.clientId,
+    companyId: user.companyId
+  }));
+}
 
   private initializeConversations(): void {
     if (this.users.length === 0) {

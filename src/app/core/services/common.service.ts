@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 import { CompanyUrlItem, CompanyUrlResponse, StoredDefaultCompany } from '../models/session.models';
 
 @Injectable({
@@ -15,6 +15,20 @@ export class CommonService {
   setCompanies(companies: any) {
     this.companyListSource.next(companies);
   }
+  private companyChangedSource = new Subject<any>();
+  companyChanged$ = this.companyChangedSource.asObservable();
+
+  notifyCompanyChanged(company: any) {
+    this.companyChangedSource.next(company);
+  }
+
+  // In common.service.ts
+private syncCompleteSource = new Subject<any>();
+syncComplete$ = this.syncCompleteSource.asObservable();
+
+notifySyncComplete(company: any) {
+  this.syncCompleteSource.next(company);
+}
 
   getCompanies() {
     return this.companyListSource.value;

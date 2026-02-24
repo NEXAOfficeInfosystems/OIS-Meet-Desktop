@@ -98,11 +98,11 @@
 
     <!-- Chat Messages -->
     <div class="chat-messages" #chatMessages (scroll)="onScroll($event)">
-      <div *ngIf="isLoading && messages.length === 0" class="text-center p-3">
+      <!-- <div *ngIf="isLoading && messages.length === 0" class="text-center p-3">
         <div class="spinner-border spinner-border-sm text-primary" role="status">
           <span class="visually-hidden">Loading messages...</span>
         </div>
-      </div>
+      </div> -->
 
       <div *ngFor="let msg of messages" class="message" [class.message-me]="msg.senderId === currentUserId">
 
