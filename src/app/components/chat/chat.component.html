@@ -3,9 +3,14 @@
   <div class="users-sidebar">
     <div class="sidebar-header">
       <h5 class="mb-0">Chat</h5>
-      <button class="btn btn-light btn-sm rounded-circle p-2 d-flex align-items-center justify-content-center">
-        <i class="bi bi-pencil"></i>
-      </button>
+      <div class="position-relative">
+        <button class="btn btn-light btn-sm rounded-circle p-2 d-flex align-items-center justify-content-center">
+          <i class="bi bi-pencil"></i>
+        </button>
+        <span *ngIf="totalUnreadCount > 0" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+          {{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}
+        </span>
+      </div>
     </div>
 
     <div class="search-box px-3 pb-3">
@@ -13,29 +18,43 @@
         <span class="input-group-text bg-light border-end-0">
           <i class="bi bi-search"></i>
         </span>
-        <input type="text" class="form-control bg-light border-start-0" placeholder="Search">
+        <input type="text" class="form-control bg-light border-start-0" placeholder="Search" (input)="searchUsers($event)">
       </div>
     </div>
 
     <div class="users-list">
-      <div *ngFor="let user of users" class="user-item" [class.active]="selectedUser?.id === user.id"
+      <div *ngFor="let user of filteredUsers" class="user-item" [class.active]="selectedUser?.id === user.id"
         (click)="selectUser(user)">
 
         <div class="user-avatar" [style.background-color]="user.avatarColor">
-          {{ user.name.charAt(0) }}
-          <span class="status-indicator" [class.online]="user.online"></span>
+          {{ getUserDisplayName(user).charAt(0) }}
+          <span class="status-indicator" [class.online]="user.isOnline"></span>
         </div>
 
         <div class="user-info">
           <div class="user-name-row">
-            <span class="user-name">{{ user.name }}</span>
+            <span class="user-name">{{ getUserDisplayName(user) }}</span>
             <span class="user-time">{{ user.lastMessageTime }}</span>
           </div>
           <div class="last-message">
-            <span class="message-preview">{{ user.lastMessage }}</span>
+            <span class="message-preview">
+              <i *ngIf="user.lastMessageType === 'Image'" class="bi bi-image me-1"></i>
+              <i *ngIf="user.lastMessageType === 'File'" class="bi bi-file-earmark me-1"></i>
+              {{ user.lastMessage }}
+            </span>
             <span *ngIf="user.unreadCount > 0" class="unread-badge">{{ user.unreadCount }}</span>
           </div>
         </div>
+      </div>
+
+      <div *ngIf="isLoading" class="text-center p-3">
+        <div class="spinner-border spinner-border-sm text-primary" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+      </div>
+
+      <div *ngIf="users.length === 0 && !isLoading" class="text-center p-3 text-muted">
+        No conversations yet
       </div>
     </div>
   </div>
@@ -46,47 +65,103 @@
     <div class="chat-header">
       <div class="chat-user-info">
         <div class="user-avatar small" [style.background-color]="selectedUser.avatarColor">
-          {{ selectedUser.name.charAt(0) }}
-          <span class="status-indicator small" [class.online]="selectedUser.online"></span>
+          {{ getUserDisplayName(selectedUser).charAt(0) }}
+          <span class="status-indicator small" [class.online]="selectedUser.isOnline"></span>
         </div>
         <div class="chat-user-details">
-          <h6 class="mb-0">{{ selectedUser.name }}</h6>
-          <small class="user-status">{{ selectedUser.online ? 'Online' : 'Offline' }}</small>
+          <h6 class="mb-0">{{ getUserDisplayName(selectedUser) }}</h6>
+          <small class="user-status">
+            <span *ngIf="selectedUser.isOnline">Online</span>
+            <span *ngIf="!selectedUser.isOnline && selectedUser.lastSeen">Last seen {{ selectedUser.lastSeen | date:'short' }}</span>
+            <span *ngIf="!selectedUser.isOnline && !selectedUser.lastSeen">Offline</span>
+            <span *ngIf="isTyping" class="typing-indicator ms-2">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </span>
+          </small>
         </div>
       </div>
 
       <div class="chat-actions">
-        <button class="btn btn-light btn-sm rounded-circle p-2 me-1">
+        <button class="btn btn-light btn-sm rounded-circle p-2 me-1" (click)="startVoiceCall()">
           <i class="bi bi-telephone"></i>
         </button>
-        <button class="btn btn-light btn-sm rounded-circle p-2 me-1">
+        <button class="btn btn-light btn-sm rounded-circle p-2 me-1" (click)="startVideoCall()">
           <i class="bi bi-camera-video"></i>
         </button>
-        <button class="btn btn-light btn-sm rounded-circle p-2">
+        <button class="btn btn-light btn-sm rounded-circle p-2" (click)="showUserInfo()">
           <i class="bi bi-three-dots-vertical"></i>
         </button>
       </div>
     </div>
 
     <!-- Chat Messages -->
-    <div class="chat-messages" #chatMessages>
-      <div *ngFor="let msg of getMessagesForSelectedUser()" class="message" [class.message-me]="msg.sender === 'me'">
+    <div class="chat-messages" #chatMessages (scroll)="onScroll($event)">
+      <div *ngIf="isLoading && messages.length === 0" class="text-center p-3">
+        <div class="spinner-border spinner-border-sm text-primary" role="status">
+          <span class="visually-hidden">Loading messages...</span>
+        </div>
+      </div>
 
-        <div class="message-avatar" *ngIf="msg.sender !== 'me'">
+      <div *ngFor="let msg of messages" class="message" [class.message-me]="msg.senderId === currentUserId">
+
+        <div class="message-avatar" *ngIf="msg.senderId !== currentUserId">
           <div class="user-avatar smallest" [style.background-color]="selectedUser.avatarColor">
-            {{ selectedUser.name.charAt(0) }}
+            {{ getUserDisplayName(selectedUser).charAt(0) }}
           </div>
         </div>
 
         <div class="message-content">
-          <div class="bubble" [class.me-bubble]="msg.sender === 'me'">
-            {{ msg.text }}
+          <div class="bubble" [class.me-bubble]="msg.senderId === currentUserId"
+               [class.image-message]="msg.messageType === 'Image'">
+
+            <!-- Text message -->
+            <div *ngIf="msg.messageType === 'Text'">{{ msg.content }}</div>
+
+            <!-- Image message -->
+            <div *ngIf="msg.messageType === 'Image'" class="image-attachment">
+              <img [src]="msg.fileUrl || msg.attachments?.[0]?.fileUrl"
+                   [alt]="msg.fileName || msg.attachments?.[0]?.fileName"
+                   class="img-fluid rounded"
+                   (click)="viewImage(msg)">
+            </div>
+
+            <!-- File message -->
+            <div *ngIf="msg.messageType === 'File'" class="file-attachment">
+              <i class="bi bi-file-earmark me-2"></i>
+              <span class="file-name" (click)="downloadAttachment(msg.attachments?.[0])">
+                {{ msg.fileName || msg.attachments?.[0]?.fileName }}
+              </span>
+              <small class="text-muted ms-2">
+                ({{ getFileSize(msg.fileSize || msg.attachments?.[0]?.fileSize) }})
+              </small>
+            </div>
+
+            <!-- System message -->
+            <div *ngIf="msg.messageType === 'System'" class="system-message text-center text-muted small">
+              {{ msg.content }}
+            </div>
           </div>
+
           <div class="message-meta">
-            <span class="message-time">{{ msg.time }}</span>
-            <i *ngIf="msg.sender === 'me'" class="bi read-receipt" [class.bi-check]="!msg.read"
-              [class.bi-check-all]="msg.read" [class.read]="msg.read"></i>
+            <span class="message-time">{{ formatTime(msg.sentAt) }}</span>
+            <i *ngIf="msg.senderId === currentUserId"
+               class="bi read-receipt"
+               [class.bi-check]="!msg.isDelivered"
+               [class.bi-check-all]="msg.isDelivered"
+               [class.read]="msg.isRead"></i>
           </div>
+        </div>
+      </div>
+
+      <div *ngIf="!hasMoreMessages && messages.length > 0" class="text-center p-2 text-muted small">
+        No more messages
+      </div>
+
+      <div *ngIf="isLoading && messages.length > 0" class="text-center p-2">
+        <div class="spinner-border spinner-border-sm text-primary" role="status">
+          <span class="visually-hidden">Loading more...</span>
         </div>
       </div>
     </div>
@@ -94,21 +169,37 @@
     <!-- Chat Input -->
     <div class="chat-input-area">
       <div class="input-container">
-        <button class="btn btn-link text-secondary attach-btn">
+        <input type="file" #fileInput style="display: none" (change)="onFileSelected($event)"
+               accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx">
+
+        <button class="btn btn-link text-secondary attach-btn" (click)="triggerFileInput()"
+                [title]="'Attach file'" [disabled]="isSendingFile">
           <i class="bi bi-paperclip"></i>
         </button>
 
-        <div class="flex-grow-1">
-          <input type="text" class="form-control message-input border-0 bg-light" placeholder="Type a message"
-            [(ngModel)]="newMessage" (keydown.enter)="sendMessage()">
+        <div class="flex-grow-1 position-relative">
+          <input type="text"
+                 class="form-control message-input border-0 bg-light"
+                 placeholder="Type a message"
+                 [(ngModel)]="newMessage"
+                 (keydown.enter)="sendMessage()"
+                 (input)="onTyping()">
+          <div *ngIf="isTyping" class="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
         </div>
 
-        <button class="btn btn-link text-primary send-btn" [class.text-secondary]="!newMessage.trim()"
-          [disabled]="!newMessage.trim()" (click)="sendMessage()">
+        <button class="btn btn-link text-primary send-btn"
+                [class.text-secondary]="!newMessage.trim()"
+                [disabled]="!newMessage.trim() || isSendingFile"
+                (click)="sendMessage()"
+                [title]="'Send message'">
           <i class="bi bi-send"></i>
         </button>
 
-        <button class="btn btn-link text-secondary emoji-btn">
+        <button class="btn btn-link text-secondary emoji-btn" (click)="showEmojiPicker()" [title]="'Add emoji'">
           <i class="bi bi-emoji-smile"></i>
         </button>
       </div>
@@ -123,4 +214,25 @@
       <p class="text-muted">Choose a user from the list to start chatting</p>
     </div>
   </ng-template>
+</div>
+
+<!-- Image Viewer Modal -->
+<div class="modal fade" id="imageViewerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ selectedImage?.fileName }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center">
+        <img [src]="selectedImage?.fileUrl" class="img-fluid" alt="Full size image">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" (click)="downloadAttachment(selectedImage)">
+          <i class="bi bi-download me-2"></i>Download
+        </button>
+      </div>
+    </div>
+  </div>
 </div>

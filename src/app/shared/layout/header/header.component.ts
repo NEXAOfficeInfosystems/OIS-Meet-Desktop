@@ -96,6 +96,10 @@ getUserCompanyList() {
     this.isUserMenuOpen = false;
   }
 
+  generateMeetingId() {
+    const randomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return `OIS-${randomId}`;
+  }
   openMeetNowDialog(mode: string = 'meet-now') {
     this.dialog.open(MeetNowDialogComponent, {
       width: '320px',
