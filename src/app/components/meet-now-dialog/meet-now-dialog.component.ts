@@ -14,8 +14,8 @@ import { MeetingService } from '../../core/services/meeting.service';
 export class MeetNowDialogComponent implements OnInit {
   mode: 'meet-now' | 'join-meeting' = 'meet-now';
   meetingId = '';
-  micOn = false;
-  camOn = false;
+  micOn = true; // Default mic ON
+  camOn = false; // Default camera OFF (as requested)
   isValidating = false;
   meetingError = '';
 
@@ -50,7 +50,7 @@ export class MeetNowDialogComponent implements OnInit {
       topic: 'My Meeting',
       hostId: userId,
       hostName: userName,
-      expiryHours: 24, // Meeting expires in 24 hours
+      expiryHours: 24,
       settings: {
         muteOnEntry: false,
         allowChat: true,
@@ -109,7 +109,6 @@ export class MeetNowDialogComponent implements OnInit {
         this.isValidating = false;
 
         if (response.success) {
-          // Meeting is valid, join it
           this.joinMeeting(meetingId.trim());
         } else {
           this.meetingError = response.message || 'Invalid meeting ID';
@@ -143,12 +142,13 @@ export class MeetNowDialogComponent implements OnInit {
         if (response.success) {
           this.dialogRef.close();
 
+          // Pass micOn and camOn states to meeting component
           this.router.navigate(['/meeting', meetingId], {
             queryParams: {
               host: 'false',
               topic: response.data.topic || 'Joined Meeting',
-              mic: this.micOn,
-              cam: this.camOn
+              mic: this.micOn,  // Pass mic state
+              cam: this.camOn   // Pass cam state (will be false)
             }
           });
         }
@@ -165,12 +165,13 @@ export class MeetNowDialogComponent implements OnInit {
   startMeeting() {
     this.dialogRef.close();
 
+    // Pass micOn and camOn states to meeting component
     this.router.navigate(['/meeting', this.meetingId], {
       queryParams: {
         host: 'true',
         topic: 'My Meeting',
-        mic: this.micOn,
-        cam: this.camOn
+        mic: this.micOn,  // Pass mic state
+        cam: this.camOn   // Pass cam state (will be false)
       }
     });
   }

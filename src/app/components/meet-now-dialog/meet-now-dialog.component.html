@@ -17,7 +17,7 @@
       <i class="bi" [ngClass]="micOn ? 'bi-mic-fill' : 'bi-mic-mute-fill'"></i>
     </button>
 
-    <button class="icon-btn" [class.active]="camOn" (click)="toggleCam()">
+    <button class="icon-btn" [class.active]="camOn" (click)="toggleCam()" style="display: none;">
       <i class="bi" [ngClass]="camOn ? 'bi-camera-video-fill' : 'bi-camera-video-off-fill'"></i>
     </button>
   </div>

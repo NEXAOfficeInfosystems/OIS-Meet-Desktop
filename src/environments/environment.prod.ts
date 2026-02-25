@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  secretkey:'ce6834aa-049f-46a8-806c-fb36cdf22d84',
+  secretkey: 'ce6834aa-049f-46a8-806c-fb36cdf22d84',
 
   // Dev environment
   // apiBaseUrl: 'https://www.nexaois.com/OIS_Vault_API_Dev/api',
@@ -14,6 +14,7 @@ export const environment = {
   // apiBaseUrl: 'https://www.officeinfosystems.com/OISvaultLiveAPI/api',
   // ssoApiBaseUrl: 'https://www.officeinfosystems.com/OISSSOAPI/api',
 
-    apiBaseUrl: 'https://localhost:7235/api',
-  ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_Dev/api'
+  apiBaseUrl: 'https://localhost:7235/api',
+  ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_Dev/api',
+  signalRUrl: 'https://localhost:7235/hubs/meeting'
 };

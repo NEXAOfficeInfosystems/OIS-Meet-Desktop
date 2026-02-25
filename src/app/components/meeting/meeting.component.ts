@@ -1,35 +1,35 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { Subscription, interval, forkJoin, Subject } from 'rxjs';
-import { switchMap, takeUntil } from 'rxjs/operators';
-import * as bootstrap from 'bootstrap';
 import { Clipboard } from '@angular/cdk/clipboard';
+import * as bootstrap from 'bootstrap';
+import SimplePeer from 'simple-peer';
 
 // Services
 import { SessionService } from '../../core/services/session.service';
-import { MeetingService, MeetingResponse, ParticipantResponse } from '../../core/services/meeting.service';
-import { SignalRService } from '../../core/services/signalr.service';
+import { MeetingService } from '../../core/services/meeting.service';
+import { SignalRService, MeetingParticipant } from '../../core/services/signalr.service';
+import { StorageService } from '../../core/services/storage.service';
 
 @Component({
   selector: 'app-meeting',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatDialogModule, MatSnackBarModule],
+  imports: [CommonModule, FormsModule, MatSnackBarModule],
   templateUrl: './meeting.component.html',
   styleUrls: ['./meeting.component.scss']
 })
-export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
+export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('localVideo') localVideo!: ElementRef<HTMLVideoElement>;
   @ViewChild('screenShareVideo') screenShareVideo!: ElementRef<HTMLVideoElement>;
-  @ViewChild('chatMessagesContainer') chatMessagesContainer!: ElementRef;
+  @ViewChild('remoteVideosContainer') remoteVideosContainer!: ElementRef<HTMLDivElement>;
+  @ViewChild('chatMessagesContainer') chatMessagesContainer!: ElementRef<HTMLDivElement>;
 
   // Meeting Info
   meetingId: string = '';
   meetingTopic: string = 'OIS Meet';
-  meetingDetails: MeetingResponse | null = null;
+  meetingDetails: any = null;
   isHost: boolean = false;
 
   // UI States
@@ -39,7 +39,6 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
   isRecording: boolean = false;
   showParticipants: boolean = false;
   showChat: boolean = false;
-  showSettings: boolean = false;
   isLoading: boolean = true;
 
   private tooltips: bootstrap.Tooltip[] = [];
@@ -51,102 +50,129 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Participants
   participants: Participant[] = [];
-  private participantsMap = new Map<string, Participant>();
+  private peers: Map<string, any> = new Map();
+  private remoteVideoElements: Map<string, HTMLVideoElement> = new Map();
 
   // Chat Messages
   chatMessages: ChatMessage[] = [];
   newMessage: string = '';
-  private messageId = 0;
 
   // Grid Layout
   gridLayout: 'grid' | 'speaker' = 'grid';
 
-  // Subscriptions
-  private subscriptions: Subscription[] = [];
   private mediaStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
-  private destroy$ = new Subject<void>();
 
   // User Info
   userFullName: string;
   userId: string;
-  private pollingSubscription: Subscription | null = null;
+  oisMeetUserId: string = '';
+  private connectionId: string | null = null;
 
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private sessionService: SessionService,
     private clipboard: Clipboard,
     private meetingService: MeetingService,
-    private signalRService: SignalRService
+    private signalRService: SignalRService,
+    private storageService: StorageService,
+    private ngZone: NgZone
   ) {
     this.userFullName = this.sessionService.getFullName() || 'User';
-    this.userId = this.sessionService.getOISMeetUserId() || '';
+    this.userId = this.sessionService.getUserId() || '';
+    this.oisMeetUserId = this.storageService.getItem('oisMeetUserId') || this.userId;
   }
 
-  ngOnInit() {
-    this.meetingId = this.route.snapshot.paramMap.get('meetingId') || '';
-    this.isHost = this.route.snapshot.queryParamMap.get('host') === 'true';
+ async ngOnInit() {
+  console.log('🎥 MeetingComponent initialized');
 
-    const micParam = this.route.snapshot.queryParamMap.get('mic');
-    const camParam = this.route.snapshot.queryParamMap.get('cam');
+  this.meetingId = this.route.snapshot.paramMap.get('meetingId') || '';
+  this.isHost = this.route.snapshot.queryParamMap.get('host') === 'true';
 
-    this.isMuted = micParam === 'false';
-    this.isVideoOff = camParam === 'false';
+  // Get mic and cam settings from query params
+  const micParam = this.route.snapshot.queryParamMap.get('mic');
+  const camParam = this.route.snapshot.queryParamMap.get('cam');
 
-    if (!this.meetingId) {
-      this.snackBar.open('Invalid meeting ID', 'Close', { duration: 3000 });
-      this.router.navigate(['/chat']);
-      return;
+  // Set initial media states
+  this.isMuted = micParam === 'false';
+  this.isVideoOff = camParam === 'false';
+
+  console.log('Meeting params:', {
+    meetingId: this.meetingId,
+    isHost: this.isHost,
+    isMuted: this.isMuted,
+    isVideoOff: this.isVideoOff
+  });
+
+  if (!this.meetingId) {
+    this.snackBar.open('Invalid meeting ID', 'Close', { duration: 3000 });
+    this.router.navigate(['/chat']);
+    return;
+  }
+
+  // Start SignalR connection
+  console.log('Starting SignalR connection...');
+  await this.signalRService.startConnection(this.userId);
+
+  // Load meeting details FIRST
+  await this.loadMeetingDetails();
+
+  // Load existing participants via REST API BEFORE joining SignalR
+  await this.loadExistingParticipants();
+
+  // Initialize media
+  await this.initializeMedia();
+
+  // Setup SignalR listeners for real-time updates
+  this.setupSignalRListeners();
+
+  this.startTimer();
+}
+
+// New method to load participants via REST API
+private async loadExistingParticipants() {
+  try {
+    console.log('Loading existing participants via API for meeting:', this.meetingId);
+    const response: any = await this.meetingService.getMeetingParticipants(this.meetingId).toPromise();
+
+    if (response.success && response.data) {
+      console.log('📋 Existing participants from API:', response.data);
+
+      // Convert API response to MeetingParticipant format
+      const participants: MeetingParticipant[] = response.data.map((p: any) => ({
+        connectionId: p.id, // Note: API might not have connectionId yet
+        userId: p.userId,
+        userName: p.userName,
+        isAudioEnabled: !p.isMuted,
+        isVideoEnabled: !p.isVideoOff,
+        isScreenSharing: false
+      }));
+
+      // Add all participants to the list
+      this.ngZone.run(() => {
+        this.participants = []; // Clear existing
+        participants.forEach(p => {
+          this.addParticipant(p);
+        });
+        console.log('Participants after API load:', this.participants.map(p => p.name));
+      });
     }
-
-    // Load meeting details
-    this.loadMeetingDetails();
-
-    // Initialize media
-    this.initializeLocalMedia();
-
-    // Start the timer
-    this.startTimer();
-
-    // Setup SignalR for real-time updates
-    this.setupSignalR();
-
-    // Start polling for participants (fallback if SignalR not available)
-    this.startPolling();
-
-    this.subscriptions.push(
-      this.route.queryParams.subscribe(params => {
-        if (params['topic']) {
-          this.meetingTopic = params['topic'];
-        }
-      })
-    );
+  } catch (error) {
+    console.error('Error loading existing participants:', error);
   }
+}
 
   ngAfterViewInit() {
-    setTimeout(() => {
-      this.initializeTooltips();
-    });
+    setTimeout(() => this.initializeTooltips(), 500);
   }
 
   ngOnDestroy() {
+    console.log('Destroying meeting component');
     this.stopTimer();
-    this.stopPolling();
-
     this.tooltips.forEach(t => t.dispose());
-    this.tooltips = [];
 
-    // Leave meeting if not host, or end if host
-    if (this.isHost) {
-      this.endMeetingForAll();
-    } else {
-      this.leaveMeetingForSelf();
-    }
-
-    // Clean up media streams
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(track => track.stop());
     }
@@ -154,306 +180,517 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
       this.screenStream.getTracks().forEach(track => track.stop());
     }
 
-    this.subscriptions.forEach(sub => sub.unsubscribe());
-    this.destroy$.next();
-    this.destroy$.complete();
+    this.peers.forEach(peer => peer.destroy());
+    this.peers.clear();
+
+    this.remoteVideoElements.forEach(video => video.remove());
+    this.remoteVideoElements.clear();
+
+    if (this.meetingId && this.userId) {
+      this.signalRService.leaveMeeting(this.meetingId, this.userId);
+    }
+
+    this.signalRService.stopConnection();
   }
 
-  /* ===================== MEETING API METHODS ===================== */
-
-  private loadMeetingDetails() {
+  private async loadMeetingDetails() {
     this.isLoading = true;
+    try {
+      console.log('Loading meeting details for:', this.meetingId);
+      const response: any = await this.meetingService.getMeeting(this.meetingId).toPromise();
+      console.log('Meeting details response:', response);
 
-    this.meetingService.getMeeting(this.meetingId).subscribe({
-      next: (response: any) => {
-        if (response.success) {
-          this.meetingDetails = response.data;
-          this.meetingTopic = this.meetingDetails?.topic || 'OIS Meet';
+      if (response.success) {
+        this.meetingDetails = response.data;
+        this.meetingTopic = this.meetingDetails?.topic || 'OIS Meet';
+      }
+    } catch (error) {
+      console.error('Error loading meeting:', error);
+      this.snackBar.open('Error loading meeting details', 'Close', { duration: 3000 });
+    } finally {
+      this.isLoading = false;
+    }
+  }
 
-          // Load participants
-          this.loadParticipants();
+  private async initializeMedia() {
+    try {
+      const requestVideo = !this.isVideoOff; // This will be false if video is off
+      const requestAudio = !this.isMuted;     // This will be true if mic is on
+
+      console.log('Initializing media with:', { requestVideo, requestAudio });
+
+      if (!requestVideo && !requestAudio) {
+        console.log('No media requested, joining without media');
+        await this.signalRService.joinMeeting(this.meetingId, this.oisMeetUserId, this.userFullName);
+        this.connectionId = this.signalRService.getConnectionId();
+        return;
+      }
+
+      // Request media based on settings
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: requestVideo,
+        audio: requestAudio
+      });
+
+      if (this.localVideo && requestVideo) {
+        this.localVideo.nativeElement.srcObject = this.mediaStream;
+        console.log('Local video set');
+      }
+
+      console.log('Joining meeting via SignalR...');
+      await this.signalRService.joinMeeting(this.meetingId, this.oisMeetUserId, this.userFullName);
+      this.connectionId = this.signalRService.getConnectionId();
+      console.log('Joined meeting, connectionId:', this.connectionId);
+
+    } catch (error) {
+      console.error('Error accessing media devices:', error);
+      this.snackBar.open('Could not access camera or microphone', 'Close', { duration: 3000 });
+
+      console.log('Joining meeting without media...');
+      await this.signalRService.joinMeeting(this.meetingId, this.oisMeetUserId, this.userFullName);
+      this.connectionId = this.signalRService.getConnectionId();
+    }
+  }
+
+  checkParticipants() {
+    console.log('=== PARTICIPANTS LIST ===');
+    this.participants.forEach(p => {
+      console.log(`- ${p.name} (ID: ${p.id}, Host: ${p.isHost})`);
+    });
+    console.log('=========================');
+  }
+private setupSignalRListeners() {
+  console.log('Setting up SignalR listeners');
+
+  // Handle current participants list (sent immediately after joining)
+  this.signalRService.currentParticipants$.subscribe((participants: MeetingParticipant[]) => {
+    console.log('📋 SignalR current participants received:', participants.length);
+    this.ngZone.run(() => {
+      // Instead of clearing, merge with existing participants
+      participants.forEach(p => {
+        // Check if participant already exists (by userId)
+        const existingParticipant = this.participants.find(
+          existing => existing.id === p.userId
+        );
+
+        if (!existingParticipant) {
+          console.log('Adding new participant from SignalR:', p.userName);
+          this.addParticipant(p);
         } else {
-          this.snackBar.open('Meeting not found', 'Close', { duration: 3000 });
-          setTimeout(() => this.router.navigate(['/chat']), 2000);
+          // Update connectionId if needed
+          existingParticipant.connectionId = p.connectionId;
         }
-        this.isLoading = false;
-      },
-      error: (error) => {
-        console.error('Error loading meeting:', error);
-        this.snackBar.open('Error loading meeting details', 'Close', { duration: 3000 });
-        this.isLoading = false;
+      });
+    });
+  });
+
+  // Handle new participant joining
+  this.signalRService.participantJoined$.subscribe((participant: MeetingParticipant) => {
+    console.log('👤 SignalR participant joined:', participant);
+    this.ngZone.run(() => {
+      // Check if participant already exists
+      const existingParticipant = this.participants.find(
+        p => p.id === participant.userId
+      );
+
+      if (!existingParticipant) {
+        // New participant, add them
+        this.addParticipant(participant);
+
+        // Create peer for this new participant
+        if (participant.connectionId !== this.connectionId && this.mediaStream) {
+          console.log('Creating peer for new participant:', participant.userName);
+          setTimeout(() => {
+            this.createPeer(participant.connectionId, participant.userName, true);
+          }, 1000);
+        }
+
+        this.snackBar.open(`${participant.userName} joined`, 'Close', {
+          duration: 2000,
+          verticalPosition: 'bottom'
+        });
+      } else {
+        // Update existing participant's connectionId
+        existingParticipant.connectionId = participant.connectionId;
+        console.log('Updated connectionId for:', existingParticipant.name);
       }
     });
-  }
+  });
 
-  private loadParticipants() {
-  this.meetingService.getMeetingParticipants(this.meetingId).subscribe({
-    next: (response: any) => {
-      if (response.success) {
-        this.updateParticipantsList(response.data);
+  // Handle participant leaving
+  this.signalRService.participantLeft$.subscribe(({ connectionId, userId }) => {
+    console.log('👋 Participant left:', connectionId);
+    this.ngZone.run(() => {
+      const participant = this.participants.find(p => p.connectionId === connectionId);
+      if (participant) {
+        this.snackBar.open(`${participant.name} left`, 'Close', {
+          duration: 2000,
+          verticalPosition: 'bottom'
+        });
       }
-    },
-    error: (error) => console.error('Error loading participants:', error)
+      this.removeParticipant(connectionId);
+      this.removePeer(connectionId);
+    });
+  });
+
+  this.signalRService.participantDisconnected$.subscribe(({ connectionId, userId }) => {
+    console.log('🔌 Participant disconnected:', connectionId);
+    this.ngZone.run(() => {
+      this.removeParticipant(connectionId);
+      this.removePeer(connectionId);
+    });
+  });
+
+  // WebRTC signaling
+  this.signalRService.receiveOffer$.subscribe(({ fromConnectionId, offer }) => {
+    console.log('📞 Received offer from:', fromConnectionId);
+    this.ngZone.run(() => {
+      this.handleOffer(fromConnectionId, offer);
+    });
+  });
+
+  this.signalRService.receiveAnswer$.subscribe(({ fromConnectionId, answer }) => {
+    console.log('📞 Received answer from:', fromConnectionId);
+    this.ngZone.run(() => {
+      this.handleAnswer(fromConnectionId, answer);
+    });
+  });
+
+  this.signalRService.receiveIceCandidate$.subscribe(({ fromConnectionId, candidate }) => {
+    console.log('🧊 Received ICE candidate from:', fromConnectionId);
+    this.ngZone.run(() => {
+      this.handleIceCandidate(fromConnectionId, candidate);
+    });
+  });
+
+  // Media toggles
+  this.signalRService.audioToggled$.subscribe(({ connectionId, userId, isEnabled }) => {
+    console.log('🔊 Audio toggled:', { connectionId, isEnabled });
+    this.ngZone.run(() => {
+      const participant = this.participants.find(p => p.connectionId === connectionId);
+      if (participant) {
+        participant.isMuted = !isEnabled;
+        console.log(`Participant ${participant.name} mute status:`, participant.isMuted);
+      }
+    });
+  });
+
+  this.signalRService.videoToggled$.subscribe(({ connectionId, userId, isEnabled }) => {
+    console.log('📹 Video toggled:', { connectionId, isEnabled });
+    this.ngZone.run(() => {
+      const participant = this.participants.find(p => p.connectionId === connectionId);
+      if (participant) {
+        participant.isVideoOff = !isEnabled;
+        console.log(`Participant ${participant.name} video status:`, participant.isVideoOff);
+      }
+    });
+  });
+
+  // Screen sharing
+  this.signalRService.screenShareStarted$.subscribe(({ connectionId, userId }) => {
+    console.log('🖥️ Screen share started by:', userId);
+  });
+
+  this.signalRService.screenShareStopped$.subscribe(({ connectionId, userId }) => {
+    console.log('🖥️ Screen share stopped by:', userId);
+  });
+
+  // Chat messages
+  this.signalRService.meetingMessageReceived$.subscribe((data: any) => {
+    console.log('💬 Chat message received:', data);
+    this.ngZone.run(() => {
+      this.chatMessages.push({
+        id: Date.now().toString(),
+        sender: data.userName,
+        senderId: data.userId,
+        message: data.message,
+        timestamp: new Date(data.timestamp),
+        isMe: data.userId === this.userId
+      });
+      this.scrollChatToBottom();
+    });
+  });
+
+  // Meeting ended
+  this.signalRService.meetingEnded$.subscribe(() => {
+    console.log('🏁 Meeting ended by host');
+    this.ngZone.run(() => {
+      this.snackBar.open('Meeting ended by host', 'Close', { duration: 5000 });
+      setTimeout(() => this.router.navigate(['/chat']), 3000);
+    });
   });
 }
 
-  private updateParticipantsList(participants: ParticipantResponse[]) {
-    this.participants = participants.map(p => ({
-      id: p.userId,
-      name: p.userName,
-      isMuted: p.isMuted,
-      isVideoOff: p.isVideoOff,
-      isHost: p.userId === this.meetingDetails?.hostId,
-      isSpeaking: false,
-      avatarColor: this.getRandomColor(p.userId)
-    }));
+  private addParticipant(participant: MeetingParticipant) {
+    // Check if participant already exists (by userId)
+    const existingParticipant = this.participants.find(p => p.id === participant.userId);
 
-    // Update map for quick lookup
-    this.participantsMap.clear();
-    this.participants.forEach(p => this.participantsMap.set(p.id, p));
-  }
-
-  private leaveMeetingForSelf() {
-    console.log('Leaving meeting for self',this.userId);
-    if (!this.userId || !this.meetingId) return;
-
-    this.meetingService.leaveMeeting(this.meetingId, this.userId).subscribe({
-      next: () => console.log('Left meeting successfully'),
-      error: (error) => console.error('Error leaving meeting:', error)
-    });
-  }
-
-  private endMeetingForAll() {
-    console.log('Ending meeting for all participants',this.userId);
-    if (!this.userId || !this.meetingId) return;
-
-    this.meetingService.endMeeting(this.meetingId, this.userId).subscribe({
-      next: () => console.log('Meeting ended successfully'),
-      error: (error) => console.error('Error ending meeting:', error)
-    });
-  }
-
-  /* ===================== SIGNALR SETUP ===================== */
-
-  private setupSignalR() {
-    // Start SignalR connection
-    this.signalRService.startConnection(this.userId);
-
-    // Listen for new participants
-    this.signalRService.participantJoined$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((participant: any) => {
-        this.handleParticipantJoined(participant);
-      });
-
-    // Listen for participants leaving
-    this.signalRService.participantLeft$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((data: any) => {
-        this.handleParticipantLeft(data.userId);
-      });
-
-    // Listen for participant status changes
-    this.signalRService.participantStatusChanged$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((data: any) => {
-        this.handleParticipantStatusChange(data);
-      });
-
-    // Listen for chat messages
-    this.signalRService.meetingMessageReceived$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((message: any) => {
-        this.handleNewMessage(message);
-      });
-
-    // Listen for screen sharing
-    this.signalRService.screenSharingChanged$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((data: any) => {
-        if (data.userId !== this.userId) {
-          // Handle remote screen sharing
-          console.log('Remote user sharing screen:', data);
-        }
-      });
-
-    // Join meeting room
-    setTimeout(() => {
-      this.signalRService.joinMeeting(this.meetingId);
-    }, 1000);
-  }
-
-  private handleParticipantJoined(participant: any) {
-    if (!this.participantsMap.has(participant.userId)) {
-      const newParticipant: Participant = {
+    if (!existingParticipant) {
+      const newParticipant = {
+        connectionId: participant.connectionId,
         id: participant.userId,
         name: participant.userName,
-        isMuted: false,
-        isVideoOff: false,
+        isMuted: !participant.isAudioEnabled,
+        isVideoOff: !participant.isVideoEnabled,
+        isScreenSharing: participant.isScreenSharing,
         isHost: participant.userId === this.meetingDetails?.hostId,
         isSpeaking: false,
         avatarColor: this.getRandomColor(participant.userId)
       };
 
-      this.participants.push(newParticipant);
-      this.participantsMap.set(participant.userId, newParticipant);
-
-      this.snackBar.open(`${participant.userName} joined`, 'Close', { duration: 2000 });
+      this.participants = [...this.participants, newParticipant];
+      console.log('✅ Added participant:', newParticipant.name, 'Host:', newParticipant.isHost);
+      console.log('Current participants:', this.participants.map(p => ({ name: p.name, isHost: p.isHost })));
     }
   }
 
-  private handleParticipantLeft(userId: string) {
-    const participant = this.participantsMap.get(userId);
-    if (participant) {
-      this.participants = this.participants.filter(p => p.id !== userId);
-      this.participantsMap.delete(userId);
+  removeParticipant(connectionId: string) {
+    this.participants = this.participants.filter(p => p.connectionId !== connectionId);
+    console.log('Participants after removal:', this.participants.length);
+  }
 
-      this.snackBar.open(`${participant.name} left`, 'Close', { duration: 2000 });
+  private createPeer(targetConnectionId: string, targetName: string, initiator: boolean) {
+  if (this.peers.has(targetConnectionId)) {
+    console.log('Peer already exists for:', targetName);
+    return;
+  }
+
+  if (!this.mediaStream) {
+    console.log('No media stream available, waiting...');
+    // Wait for media stream and try again
+    setTimeout(() => {
+      if (this.mediaStream) {
+        this.createPeer(targetConnectionId, targetName, initiator);
+      }
+    }, 1000);
+    return;
+  }
+
+  console.log(`Creating ${initiator ? 'initiator' : 'receiver'} peer for:`, targetName);
+
+  try {
+    const peer = new SimplePeer({
+      initiator: initiator,
+      trickle: false,
+      stream: this.mediaStream,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      }
+    });
+
+    peer.on('signal', (signal: any) => {
+      console.log('Peer signal generated for:', targetName);
+      if (initiator) {
+        this.signalRService.sendOffer(this.meetingId, targetConnectionId, signal);
+      } else {
+        this.signalRService.sendAnswer(this.meetingId, targetConnectionId, signal);
+      }
+    });
+
+    peer.on('stream', (stream: MediaStream) => {
+      console.log('Received stream from:', targetName);
+      this.addRemoteVideo(targetConnectionId, stream, targetName);
+    });
+
+    peer.on('error', (err: Error) => {
+      console.error('Peer error for', targetName, ':', err);
+    });
+
+    peer.on('connect', () => {
+      console.log('Peer connected to:', targetName);
+    });
+
+    peer.on('close', () => {
+      console.log('Peer closed for:', targetName);
+      this.removeRemoteVideo(targetConnectionId);
+    });
+
+    this.peers.set(targetConnectionId, peer);
+    console.log('Peer created and stored for:', targetName);
+
+  } catch (error) {
+    console.error('Error creating peer:', error);
+  }
+}
+
+private handleOffer(fromConnectionId: string, offer: any) {
+  console.log('Handling offer from:', fromConnectionId);
+
+  // Check if we already have this participant
+  let participant = this.participants.find(p => p.connectionId === fromConnectionId);
+
+  if (participant) {
+    console.log('Found participant immediately:', participant.name);
+
+    if (!this.peers.has(fromConnectionId)) {
+      console.log('Creating receiver peer for:', participant.name);
+      this.createPeer(fromConnectionId, participant.name, false);
+    }
+
+    setTimeout(() => {
+      const peer = this.peers.get(fromConnectionId);
+      if (peer) {
+        console.log('Signaling offer to peer');
+        peer.signal(offer);
+      }
+    }, 500);
+
+  } else {
+    console.log('Participant not found yet, checking participants list:',
+      this.participants.map(p => ({ id: p.connectionId, name: p.name })));
+
+    // The participant list should arrive very soon
+    // Check every 200ms for up to 3 seconds
+    let attempts = 0;
+    const maxAttempts = 15; // 3 seconds total
+
+    const checkInterval = setInterval(() => {
+      attempts++;
+      participant = this.participants.find(p => p.connectionId === fromConnectionId);
+
+      if (participant) {
+        clearInterval(checkInterval);
+        console.log(`Found participant after ${attempts * 200}ms:`, participant.name);
+
+        if (!this.peers.has(fromConnectionId)) {
+          this.createPeer(fromConnectionId, participant.name, false);
+        }
+
+        setTimeout(() => {
+          const peer = this.peers.get(fromConnectionId);
+          if (peer) {
+            console.log('Signaling offer after participant found');
+            peer.signal(offer);
+          }
+        }, 500);
+
+      } else if (attempts >= maxAttempts) {
+        clearInterval(checkInterval);
+        console.log('Timed out waiting for participant, creating peer with connectionId');
+
+        // Create peer with connectionId as name as last resort
+        if (!this.peers.has(fromConnectionId)) {
+          this.createPeer(fromConnectionId, `User-${fromConnectionId.substring(0, 5)}`, false);
+        }
+
+        setTimeout(() => {
+          const peer = this.peers.get(fromConnectionId);
+          if (peer) {
+            console.log('Signaling offer with fallback peer');
+            peer.signal(offer);
+          }
+        }, 500);
+      }
+    }, 200);
+  }
+}
+
+  private handleAnswer(fromConnectionId: string, answer: any) {
+    console.log('Handling answer from:', fromConnectionId);
+    const peer = this.peers.get(fromConnectionId);
+    if (peer) {
+      console.log('Signaling answer to peer');
+      peer.signal(answer);
     }
   }
 
-  private handleParticipantStatusChange(data: any) {
-    const participant = this.participantsMap.get(data.userId);
-    if (participant) {
-      if (data.isMuted !== undefined) participant.isMuted = data.isMuted;
-      if (data.isVideoOff !== undefined) participant.isVideoOff = data.isVideoOff;
+  private handleIceCandidate(fromConnectionId: string, candidate: any) {
+    console.log('Handling ICE candidate from:', fromConnectionId);
+    const peer = this.peers.get(fromConnectionId);
+    if (peer) {
+      peer.signal(candidate);
     }
   }
 
-  private handleNewMessage(message: any) {
-    const chatMessage: ChatMessage = {
-      id: (++this.messageId).toString(),
-      sender: message.userName,
-      senderId: message.userId,
-      message: message.content,
-      timestamp: new Date(),
-      isMe: message.userId === this.userId
-    };
-
-    this.chatMessages.push(chatMessage);
-    this.scrollChatToBottom();
+  private removePeer(connectionId: string) {
+    console.log('Removing peer:', connectionId);
+    const peer = this.peers.get(connectionId);
+    if (peer) {
+      peer.destroy();
+      this.peers.delete(connectionId);
+    }
   }
 
-  /* ===================== POLLING (FALLBACK) ===================== */
+  private addRemoteVideo(connectionId: string, stream: MediaStream, userName: string) {
+    console.log('Adding remote video for:', userName);
 
-  private startPolling() {
-    this.pollingSubscription = interval(5000).subscribe(() => {
-      if (this.meetingId) {
-        this.loadParticipants();
+    this.ngZone.run(() => {
+      let videoElement = this.remoteVideoElements.get(connectionId);
+
+      if (!videoElement && this.remoteVideosContainer) {
+        videoElement = document.createElement('video');
+        videoElement.id = `remote-video-${connectionId}`;
+        videoElement.autoplay = true;
+        videoElement.playsInline = true;
+        videoElement.className = 'remote-video';
+
+        const container = document.createElement('div');
+        container.className = 'remote-video-container';
+        container.appendChild(videoElement);
+
+        const label = document.createElement('div');
+        label.className = 'participant-name-label';
+        label.innerText = userName;
+        container.appendChild(label);
+
+        this.remoteVideosContainer.nativeElement.appendChild(container);
+        this.remoteVideoElements.set(connectionId, videoElement);
+        console.log('Remote video element created for:', userName);
+      }
+
+      if (videoElement) {
+        videoElement.srcObject = stream;
+        console.log('Remote video stream set for:', userName);
       }
     });
   }
 
-  private stopPolling() {
-    if (this.pollingSubscription) {
-      this.pollingSubscription.unsubscribe();
-    }
-  }
-
-  /* ===================== MEDIA CONTROLS ===================== */
-
-  private async initializeLocalMedia() {
-    try {
-      if (this.isVideoOff && this.isMuted) {
-        console.log('No media requested');
-        return;
-      }
-
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: !this.isVideoOff,
-        audio: !this.isMuted
-      });
-
-      if (this.localVideo) {
-        this.localVideo.nativeElement.srcObject = this.mediaStream;
-      }
-
-      // Update status on server
-      this.updateParticipantStatus();
-    } catch (error) {
-      console.error('Error accessing media devices:', error);
-      this.snackBar.open('Could not access camera or microphone', 'Close', {
-        duration: 3000
-      });
+  private removeRemoteVideo(connectionId: string) {
+    console.log('Removing remote video for connection:', connectionId);
+    const videoElement = this.remoteVideoElements.get(connectionId);
+    if (videoElement) {
+      videoElement.parentElement?.remove();
+      this.remoteVideoElements.delete(connectionId);
     }
   }
 
   async toggleMute() {
+    console.log('Toggling mute, current:', this.isMuted);
     this.isMuted = !this.isMuted;
 
-    try {
-      if (this.mediaStream) {
-        const audioTracks = this.mediaStream.getAudioTracks();
-        audioTracks.forEach(track => track.enabled = !this.isMuted);
-      }
-
-      // Update status on server
-      this.updateParticipantStatus({ isMuted: this.isMuted });
-
-      // Send via SignalR
-      this.signalRService.updateParticipantStatus(this.meetingId, {
-        isMuted: this.isMuted
-      });
-
-    } catch (error) {
-      console.error('Error toggling mute:', error);
+    if (this.mediaStream) {
+      const audioTracks = this.mediaStream.getAudioTracks();
+      audioTracks.forEach(track => track.enabled = !this.isMuted);
+      console.log('Audio tracks enabled:', !this.isMuted);
     }
+
+    await this.signalRService.toggleAudio(this.meetingId, !this.isMuted);
+    console.log('Audio toggle sent to server:', !this.isMuted);
     this.refreshTooltips();
   }
 
   async toggleVideo() {
+    console.log('Toggling video, current:', this.isVideoOff);
     this.isVideoOff = !this.isVideoOff;
 
-    try {
-      if (this.mediaStream) {
-        const videoTracks = this.mediaStream.getVideoTracks();
-        videoTracks.forEach(track => track.enabled = !this.isVideoOff);
-      }
-
-      // If both off, stop stream
-      if (this.isVideoOff && this.isMuted && this.mediaStream) {
-        this.mediaStream.getTracks().forEach(track => track.stop());
-        this.mediaStream = null;
-        if (this.localVideo) {
-          this.localVideo.nativeElement.srcObject = null;
-        }
-      } else if (!this.mediaStream) {
-        // Recreate stream if needed
-        await this.initializeLocalMedia();
-      }
-
-      // Update status on server
-      this.updateParticipantStatus({ isVideoOff: this.isVideoOff });
-
-      // Send via SignalR
-      this.signalRService.updateParticipantStatus(this.meetingId, {
-        isVideoOff: this.isVideoOff
-      });
-
-    } catch (error) {
-      console.error('Error toggling video:', error);
+    if (this.mediaStream) {
+      const videoTracks = this.mediaStream.getVideoTracks();
+      videoTracks.forEach(track => track.enabled = !this.isVideoOff);
+      console.log('Video tracks enabled:', !this.isVideoOff);
     }
+
+    await this.signalRService.toggleVideo(this.meetingId, !this.isVideoOff);
+    console.log('Video toggle sent to server:', !this.isVideoOff);
     this.refreshTooltips();
-  }
-
-  private updateParticipantStatus(updates?: any) {
-    if (!this.userId || !this.meetingId) return;
-
-    const data = {
-      isMuted: this.isMuted,
-      isVideoOff: this.isVideoOff,
-      ...updates
-    };
-
-    this.meetingService.updateParticipantStatus(this.meetingId, this.userId, data)
-      .subscribe({
-        error: (error) => console.error('Error updating status:', error)
-      });
   }
 
   async toggleScreenShare() {
     if (!this.isScreenSharing) {
       try {
+        console.log('Starting screen share');
         this.screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
           audio: true
@@ -464,24 +701,46 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
           this.screenShareVideo.nativeElement.srcObject = this.screenStream;
         }
 
-        // Notify others via SignalR
-        this.signalRService.screenSharingStarted(this.meetingId);
+        const videoTrack = this.mediaStream?.getVideoTracks()[0];
+        if (videoTrack) this.mediaStream?.removeTrack(videoTrack);
 
-        // Stop screen sharing when user clicks "Stop sharing"
+        const screenTrack = this.screenStream.getVideoTracks()[0];
+        this.mediaStream?.addTrack(screenTrack);
+
+        await this.signalRService.startScreenShare(this.meetingId);
+        console.log('Screen share started');
+
         this.screenStream.getVideoTracks()[0].onended = () => {
+          console.log('Screen share ended by user');
           this.stopScreenSharing();
         };
       } catch (error) {
         console.error('Error sharing screen:', error);
       }
     } else {
-      this.stopScreenSharing();
+      await this.stopScreenSharing();
     }
     this.refreshTooltips();
   }
 
-  private stopScreenSharing() {
+  private async stopScreenSharing() {
+    console.log('Stopping screen share');
     this.isScreenSharing = false;
+    await this.signalRService.stopScreenShare(this.meetingId);
+
+    if (this.mediaStream) {
+      const screenTrack = this.mediaStream.getVideoTracks()[0];
+      if (screenTrack) this.mediaStream.removeTrack(screenTrack);
+
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        const videoTrack = newStream.getVideoTracks()[0];
+        this.mediaStream.addTrack(videoTrack);
+      } catch (err) {
+        console.error('Error restarting camera:', err);
+      }
+    }
+
     if (this.screenStream) {
       this.screenStream.getTracks().forEach(track => track.stop());
       this.screenStream = null;
@@ -489,181 +748,98 @@ export class MeetingComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.screenShareVideo) {
       this.screenShareVideo.nativeElement.srcObject = null;
     }
-
-    // Notify others via SignalR
-    this.signalRService.screenSharingStopped(this.meetingId);
   }
 
   toggleRecording() {
     this.isRecording = !this.isRecording;
+    console.log('Recording toggled:', this.isRecording);
     this.refreshTooltips();
-    // Implement recording logic if needed
   }
 
-  /* ===================== MEETING ACTIONS ===================== */
-
-leaveMeeting() {
-  if (confirm('Are you sure you want to leave the meeting?')) {
-    const userId = this.sessionService.getOISMeetUserId();
-
-    this.meetingService.leaveMeeting(this.meetingId, userId).subscribe({
-      next: (response) => {
-        if (response.success) {
-          this.signalRService.leaveMeeting(this.meetingId);
-          this.router.navigate(['/chat']);
-        }
-      },
-      error: (error) => {
-        console.error('Error leaving meeting:', error);
-        this.router.navigate(['/chat']);
-      }
-    });
-  }
-}
-
-endMeeting() {
-  if (this.isHost && confirm('End meeting for everyone?')) {
-    const userId = this.sessionService.getOISMeetUserId();
-
-    this.meetingService.endMeeting(this.meetingId, userId).subscribe({
-      next: (response) => {
-        if (response.success) {
-          this.signalRService.endMeeting(this.meetingId);
-          this.router.navigate(['/chat']);
-        }
-      },
-      error: (error) => {
-        console.error('Error ending meeting:', error);
-        this.router.navigate(['/chat']);
-      }
-    });
-  }
-}
-
-  /* ===================== PARTICIPANT MANAGEMENT ===================== */
-
-  muteParticipant(participantId: string) {
-    if (!this.isHost) return;
-
-    // Send mute command via SignalR
-    this.signalRService.muteParticipant(this.meetingId, participantId);
-
-    this.snackBar.open('Participant muted', 'Close', { duration: 2000 });
-  }
-
-  removeParticipant(participantId: string) {
-    if (!this.isHost) return;
-
-    if (confirm('Remove this participant from the meeting?')) {
-      // Send remove command via SignalR
-      this.signalRService.removeParticipant(this.meetingId, participantId);
-
-      // Remove from local list
-      this.participants = this.participants.filter(p => p.id !== participantId);
-      this.participantsMap.delete(participantId);
-    }
-  }
-
-  /* ===================== CHAT FUNCTIONS ===================== */
-
-  sendMessage() {
+  async sendMessage() {
     if (!this.newMessage.trim()) return;
 
-    // Send via SignalR
-    this.signalRService.sendMeetingMessage(this.meetingId, {
-      content: this.newMessage,
-      userName: this.userFullName,
-      userId: this.userId
-    });
+    console.log('Sending message:', this.newMessage);
+    await this.signalRService.sendMeetingMessage(this.meetingId, this.newMessage);
 
-    // Add to local list
-    const message: ChatMessage = {
-      id: (++this.messageId).toString(),
+    this.chatMessages.push({
+      id: Date.now().toString(),
       sender: this.userFullName,
       senderId: this.userId,
       message: this.newMessage,
       timestamp: new Date(),
       isMe: true
-    };
+    });
 
-    this.chatMessages.push(message);
     this.newMessage = '';
     this.scrollChatToBottom();
+  }
+
+  leaveMeeting() {
+    console.log('Leaving meeting');
+    if (confirm('Are you sure you want to leave the meeting?')) {
+      if (!this.isHost) {
+        this.meetingService.leaveMeeting(this.meetingId, this.oisMeetUserId).subscribe();
+      }
+      this.signalRService.leaveMeeting(this.meetingId, this.userId);
+      this.router.navigate(['/chat']);
+    }
+  }
+
+  endMeeting() {
+    console.log('Ending meeting');
+    if (this.isHost && confirm('End meeting for everyone?')) {
+      this.meetingService.endMeeting(this.meetingId, this.oisMeetUserId).subscribe({
+        next: () => {
+          this.signalRService.endMeeting(this.meetingId, this.userId);
+          this.router.navigate(['/chat']);
+        }
+      });
+    }
+  }
+
+  muteParticipant(participantId: string) {
+    console.log('Mute participant:', participantId);
+    // Implement if needed
+  }
+
+
+  copyMeetingCode(event: Event): void {
+    event.preventDefault();
+    this.clipboard.copy(this.meetingId);
+    this.snackBar.open('Meeting code copied!', 'Close', { duration: 2000 });
+  }
+
+  copyMeetingLink(event?: Event) {
+    if (event) event.preventDefault();
+    this.clipboard.copy(window.location.href);
+    this.snackBar.open('Meeting link copied!', 'Close', { duration: 2000 });
+  }
+
+  shareToTeams(event: Event) {
+    event.preventDefault();
+    const teamsUrl = `https://teams.microsoft.com/l/meeting/new?subject=${encodeURIComponent(this.meetingTopic)}&body=${encodeURIComponent(`Join meeting: ${window.location.href}`)}`;
+    window.open(teamsUrl, '_blank');
+  }
+
+  shareToMail(event: Event) {
+    event.preventDefault();
+    const subject = encodeURIComponent(`Join OIS Meet: ${this.meetingTopic}`);
+    const body = encodeURIComponent(`Meeting Code: ${this.meetingId}\n\nJoin here: ${window.location.href}`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
   }
 
   private scrollChatToBottom() {
     setTimeout(() => {
       if (this.chatMessagesContainer) {
-        const element = this.chatMessagesContainer.nativeElement;
-        element.scrollTop = element.scrollHeight;
+        this.chatMessagesContainer.nativeElement.scrollTop =
+          this.chatMessagesContainer.nativeElement.scrollHeight;
       }
     }, 100);
   }
 
-  /* ===================== INVITE & SHARE ===================== */
-
-  copyMeetingCode(event: Event): void {
-    event.preventDefault();
-    this.clipboard.copy(this.meetingId);
-
-    this.snackBar.open('Meeting code copied to clipboard!', 'Close', {
-      duration: 3000,
-      horizontalPosition: 'center',
-      verticalPosition: 'bottom'
-    });
-  }
-
-  copyMeetingLink(event: Event): void {
-    event.preventDefault();
-    const url = window.location.href;
-    this.clipboard.copy(url);
-    this.snackBar.open('Meeting link copied!', 'Close', {
-      duration: 2000
-    });
-  }
-
-  shareToTeams(event: Event): void {
-    event.preventDefault();
-
-    const meetingSubject = encodeURIComponent(this.meetingTopic || 'OIS Meet');
-    const meetingBody = encodeURIComponent(
-      `Join OIS Meet meeting\n\n` +
-      `Meeting Code: ${this.meetingId}\n` +
-      `Meeting Link: ${window.location.href}\n\n` +
-      `Click the link to join the meeting.`
-    );
-
-    const teamsDeepLink = `https://teams.microsoft.com/l/meeting/new?subject=${meetingSubject}&body=${meetingBody}`;
-    window.open(teamsDeepLink, '_blank');
-
-    this.snackBar.open('Opening Microsoft Teams...', 'Close', {
-      duration: 2000
-    });
-  }
-
-  shareToMail(event: Event): void {
-    event.preventDefault();
-
-    const subject = encodeURIComponent(`Join OIS Meet: ${this.meetingTopic || 'Meeting'}`);
-    const body = encodeURIComponent(
-      `You're invited to join an OIS Meet meeting.\n\n` +
-      `Meeting Code: ${this.meetingId}\n` +
-      `Meeting Link: ${window.location.href}\n\n` +
-      `Join using the link above or enter the meeting code in OIS Meet app.`
-    );
-
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-
-    this.snackBar.open('Email client opened!', 'Close', {
-      duration: 2000
-    });
-  }
-
-  /* ===================== UTILITY FUNCTIONS ===================== */
-
   private initializeTooltips(): void {
     const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-
     tooltipTriggerList.forEach((el: Element) => {
       const existing = bootstrap.Tooltip.getInstance(el);
       if (existing) existing.dispose();
@@ -671,12 +847,8 @@ endMeeting() {
       const tooltip = new bootstrap.Tooltip(el, {
         placement: 'top',
         trigger: 'hover',
-        container: 'body',
-        animation: true,
-        delay: { show: 200, hide: 100 },
-        html: false
+        container: 'body'
       });
-
       this.tooltips.push(tooltip);
     });
   }
@@ -688,7 +860,7 @@ endMeeting() {
   }
 
   getParticipantGridColumns(): number {
-    const count = this.participants.length;
+    const count = this.participants.length + 1;
     if (this.isScreenSharing) return 1;
     if (count <= 2) return 1;
     if (count <= 4) return 2;
@@ -706,16 +878,14 @@ endMeeting() {
   getEmptyTileCount(): number {
     if (this.isScreenSharing) return 0;
     const columns = this.getParticipantGridColumns();
-    const rows = columns;
-    const totalSlots = columns * rows;
-    const filledSlots = this.participants.length;
+    const totalSlots = columns * columns;
+    const filledSlots = this.participants.length + 1;
     return Math.max(0, totalSlots - filledSlots);
   }
 
   startTimer(): void {
     this.meetingDuration = 0;
     this.updateFormattedDuration();
-
     this.timerInterval = setInterval(() => {
       this.meetingDuration++;
       this.updateFormattedDuration();
@@ -723,10 +893,7 @@ endMeeting() {
   }
 
   stopTimer(): void {
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
-    }
+    if (this.timerInterval) clearInterval(this.timerInterval);
   }
 
   updateFormattedDuration(): void {
@@ -755,12 +922,13 @@ endMeeting() {
   }
 }
 
-// Interfaces
 interface Participant {
+  connectionId: string;
   id: string;
   name: string;
   isMuted: boolean;
   isVideoOff: boolean;
+  isScreenSharing: boolean;
   isHost: boolean;
   isSpeaking: boolean;
   avatarColor: string;

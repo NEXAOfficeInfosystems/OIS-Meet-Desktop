@@ -22,7 +22,6 @@ export interface MeetingSettings {
   allowChat: boolean;
   allowScreenShare: boolean;
   maxParticipants: number;
-  waitingRoom: boolean;
 }
 
 export interface MeetingResponse {
@@ -49,17 +48,6 @@ export interface ParticipantResponse {
   isHost: boolean;
 }
 
-export interface MeetingParticipant {
-  id: string;
-  meetingId: string;
-  userId: string;
-  userName: string;
-  joinedAt: Date;
-  leftAt?: Date;
-  isMuted: boolean;
-  isVideoOff: boolean;
-}
-
 @Injectable({
   providedIn: 'root'
 })
@@ -84,24 +72,16 @@ export class MeetingService {
     return this.http.get(`${this.apiUrl}/${meetingId}`);
   }
 
-  // getMeetingParticipants(meetingId: string): Observable<any> {
-  //   return this.http.get(`${this.apiUrl}/${meetingId}/participants`);
-  // }
-
   getMeetingParticipants(meetingId: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/${meetingId}/participants`);
   }
 
-  endMeeting(meetingId: string, userId: any): Observable<any> {
-    return this.http.post(`${this.apiUrl}/${meetingId}/end?userId=${userId}`, {});
+  endMeeting(meetingId: string, userId: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/${meetingId}/end`, { userId: userId });
   }
 
-  leaveMeeting(meetingId: string, userId: any): Observable<any> {
-    return this.http.post(`${this.apiUrl}/${meetingId}/leave?userId=${userId}`, {});
-  }
-
-  updateParticipantStatus(meetingId: string, userId: string, data: any): Observable<any> {
-    return this.http.put(`${this.apiUrl}/${meetingId}/participant/${userId}`, data);
+  leaveMeeting(meetingId: string, userId: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/${meetingId}/leave`, { userId: userId });
   }
 
   getUserActiveMeetings(userId: string): Observable<any> {

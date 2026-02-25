@@ -36,7 +36,9 @@
               "./node_modules/@angular/cdk/overlay-prebuilt.css",
               "src/styles.scss"
             ],
-            "scripts": [],
+            "scripts": [
+              "src/global-fix.js"
+            ],
             "allowedCommonJsDependencies": [
               "crypto-js"
             ]
