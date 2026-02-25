@@ -167,9 +167,7 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
 
     // Meeting Events
 this.hubConnection.on('CurrentParticipants', (participants: any[]) => {
-  console.log('📋 Current participants received:', participants);
   this.ngZone.run(() => {
-    // Map the data to ensure it matches MeetingParticipant interface
     const mappedParticipants = participants.map(p => ({
       connectionId: p.connectionId,
       userId: p.userId,
@@ -183,7 +181,6 @@ this.hubConnection.on('CurrentParticipants', (participants: any[]) => {
 });
 
 this.hubConnection.on('UserJoined', (data: any) => {
-  console.log('👤 User joined:', data);
   this.ngZone.run(() => {
     const participant: MeetingParticipant = {
       connectionId: data.connectionId,
@@ -198,7 +195,6 @@ this.hubConnection.on('UserJoined', (data: any) => {
 });
 
     this.hubConnection.on('UserLeft', (data: { connectionId: string; userId: string }) => {
-    console.log('👋 User left:', data);
     this.ngZone.run(() => this.participantLeftSubject.next(data));
   });
 
@@ -277,11 +273,12 @@ this.hubConnection.on('UserJoined', (data: any) => {
   }
 
   // Meeting Methods
-public async joinMeeting(meetingId: string, userId: string, userName: string): Promise<void> {
+// In signalr.service.ts
+public async joinMeeting(meetingId: string, userId: string, userName: string, isAudioEnabled: boolean, isVideoEnabled: boolean): Promise<void> {
   if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
     try {
-      console.log(`Invoking JoinMeeting: ${meetingId}, ${userId}, ${userName}`);
-      await this.hubConnection.invoke('JoinMeeting', meetingId, userId, userName);
+      console.log(`Invoking JoinMeeting: ${meetingId}, ${userId}, ${userName}, Audio:${isAudioEnabled}, Video:${isVideoEnabled}`);
+      await this.hubConnection.invoke('JoinMeeting', meetingId, userId, userName, isAudioEnabled, isVideoEnabled);
       console.log(`✅ Joined meeting: ${meetingId}`);
     } catch (err) {
       console.error('Error joining meeting:', err);

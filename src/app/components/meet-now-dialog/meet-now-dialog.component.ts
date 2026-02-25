@@ -14,7 +14,7 @@ import { MeetingService } from '../../core/services/meeting.service';
 export class MeetNowDialogComponent implements OnInit {
   mode: 'meet-now' | 'join-meeting' = 'meet-now';
   meetingId = '';
-  micOn = true; // Default mic ON
+  micOn = false; // Default mic OFF
   camOn = false; // Default camera OFF (as requested)
   isValidating = false;
   meetingError = '';

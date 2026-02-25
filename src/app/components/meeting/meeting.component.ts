@@ -98,6 +98,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   // Set initial media states
   this.isMuted = micParam === 'false';
   this.isVideoOff = camParam === 'false';
+  if (camParam === null) {
+      this.isVideoOff = true;
+    }
 
   console.log('Meeting params:', {
     meetingId: this.meetingId,
@@ -105,7 +108,6 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     isMuted: this.isMuted,
     isVideoOff: this.isVideoOff
   });
-
   if (!this.meetingId) {
     this.snackBar.open('Invalid meeting ID', 'Close', { duration: 3000 });
     this.router.navigate(['/chat']);
@@ -116,58 +118,74 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   console.log('Starting SignalR connection...');
   await this.signalRService.startConnection(this.oisMeetUserId);
 
-  // Load meeting details FIRST
+  // IMPORTANT: register SignalR listeners BEFORE any join/participant activity
+  // so we don't miss the initial CurrentParticipants/UserJoined events
+  this.setupSignalRListeners();
+
+  // Load meeting details
   await this.loadMeetingDetails();
 
-  // Load existing participants via REST API BEFORE joining SignalR
+  // Load existing participants via REST API
   await this.loadExistingParticipants();
 
-  // Initialize media
+  // Initialize media and join the meeting
   await this.initializeMedia();
-
-  // Setup SignalR listeners for real-time updates
-  this.setupSignalRListeners();
 
   this.startTimer();
 }
 
 // New method to load participants via REST API
-  private async loadExistingParticipants() {
-    try {
-      console.log('Loading existing participants via API for meeting:', this.meetingId);
-      const response: any = await this.meetingService.getMeetingParticipants(this.meetingId).toPromise();
+private async loadExistingParticipants() {
+  try {
+    console.log('Loading existing participants via API for meeting:', this.meetingId);
+    const response: any = await this.meetingService.getMeetingParticipants(this.meetingId).toPromise();
 
-      if (response.success && response.data) {
-        console.log('📋 Existing participants from API:', response.data);
+    if (response.success && response.data) {
+      console.log('📋 Existing participants from API:', response.data);
 
-        // Convert API response to MeetingParticipant format
-        const participants: MeetingParticipant[] = response.data.map((p: any) => ({
-          connectionId: p.id,
-          userId: p.userId,
-          userName: p.userName,
-          isAudioEnabled: !p.isMuted,
-          isVideoEnabled: !p.isVideoOff,
-          isScreenSharing: false
-        }));
+      // FIX: Map API response correctly to MeetingParticipant format
+      const participants: MeetingParticipant[] = response.data.map((p: any) => ({
+        connectionId: p.id,
+        userId: p.userId,
+        userName: p.userName,
+        // FIX: API uses isMuted (true = muted), SignalR uses isAudioEnabled (true = unmuted)
+        isAudioEnabled: !p.isMuted,  // Convert API isMuted to isAudioEnabled
+        isVideoEnabled: !p.isVideoOff, // Convert API isVideoOff to isVideoEnabled
+        isScreenSharing: false
+      }));
 
-        // FILTER OUT the current user from participants list
-        const filteredParticipants = participants.filter(p => p.userId !== this.oisMeetUserId);
+      console.log('Converted participants:', participants.map(p => ({
+        name: p.userName,
+        isAudioEnabled: p.isAudioEnabled,
+        isMuted: !p.isAudioEnabled
+      })));
 
-        console.log('Filtered participants (excluding current user):', filteredParticipants.map(p => p.userName));
+      // FILTER OUT the current user from participants list
+      const filteredParticipants = participants.filter(p => p.userId !== this.oisMeetUserId);
 
-        // Add only filtered participants to the list
-        this.ngZone.run(() => {
-          this.participants = []; // Clear existing
-          filteredParticipants.forEach(p => {
-            this.addParticipant(p);
-          });
-          console.log('Participants after API load:', this.participants.map(p => p.name));
+      console.log('Filtered participants (excluding current user):',
+        filteredParticipants.map(p => ({
+          name: p.userName,
+          isAudioEnabled: p.isAudioEnabled,
+          isMuted: !p.isAudioEnabled
+        })));
+
+      // Add only filtered participants to the list
+      this.ngZone.run(() => {
+        this.participants = []; // Clear existing
+        filteredParticipants.forEach(p => {
+          this.addParticipant(p);
         });
-      }
-    } catch (error) {
-      console.error('Error loading existing participants:', error);
+        console.log('Participants after API load:', this.participants.map(p => ({
+          name: p.name,
+          isMuted: p.isMuted
+        })));
+      });
     }
+  } catch (error) {
+    console.error('Error loading existing participants:', error);
   }
+}
 
   ngAfterViewInit() {
     setTimeout(() => this.initializeTooltips(), 500);
@@ -219,14 +237,22 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async initializeMedia() {
     try {
-      const requestVideo = !this.isVideoOff; // This will be false if video is off
-      const requestAudio = !this.isMuted;     // This will be true if mic is on
+      // Get media states from query params (passed from dialog)
+      const requestVideo = !this.isVideoOff; // This comes from cam param
+      const requestAudio = !this.isMuted;    // This comes from mic param
 
       console.log('Initializing media with:', { requestVideo, requestAudio });
 
       if (!requestVideo && !requestAudio) {
         console.log('No media requested, joining without media');
-        await this.signalRService.joinMeeting(this.meetingId, this.oisMeetUserId, this.userFullName);
+        // Pass the media states to joinMeeting
+        await this.signalRService.joinMeeting(
+          this.meetingId,
+          this.oisMeetUserId,
+          this.userFullName,
+          requestAudio,  // Pass audio state
+          requestVideo   // Pass video state
+        );
         this.connectionId = this.signalRService.getConnectionId();
         return;
       }
@@ -243,7 +269,14 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       }
 
       console.log('Joining meeting via SignalR...');
-      await this.signalRService.joinMeeting(this.meetingId, this.oisMeetUserId, this.userFullName);
+      // Pass the media states to joinMeeting
+      await this.signalRService.joinMeeting(
+        this.meetingId,
+        this.oisMeetUserId,
+        this.userFullName,
+        requestAudio,  // Pass audio state
+        requestVideo   // Pass video state
+      );
       this.connectionId = this.signalRService.getConnectionId();
       console.log('Joined meeting, connectionId:', this.connectionId);
 
@@ -252,7 +285,14 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       this.snackBar.open('Could not access camera or microphone', 'Close', { duration: 3000 });
 
       console.log('Joining meeting without media...');
-      await this.signalRService.joinMeeting(this.meetingId, this.oisMeetUserId, this.userFullName);
+      // Pass the media states even on error (will be false)
+      await this.signalRService.joinMeeting(
+        this.meetingId,
+        this.oisMeetUserId,
+        this.userFullName,
+        false,  // Audio off on error
+        false   // Video off on error
+      );
       this.connectionId = this.signalRService.getConnectionId();
     }
   }
@@ -275,24 +315,36 @@ this.signalRService.currentParticipants$.subscribe((participants: MeetingPartici
     const filteredParticipants = participants.filter(p => p.userId !== this.oisMeetUserId);
 
     filteredParticipants.forEach(p => {
-      // Check if participant already exists (by userId)
+      // Check if participant already exists
       const existingParticipant = this.participants.find(
         existing => existing.id === p.userId
       );
 
       if (!existingParticipant) {
-        console.log('Adding new participant from SignalR:', p.userName);
+        console.log('Adding new participant from SignalR:', p.userName,
+                    'AudioEnabled:', p.isAudioEnabled,
+                    'VideoEnabled:', p.isVideoEnabled);
         this.addParticipant(p);
       } else {
-        // Update connectionId if needed
+        // Update ALL properties
         existingParticipant.connectionId = p.connectionId;
+        existingParticipant.isMuted = !p.isAudioEnabled;
+        existingParticipant.isVideoOff = !p.isVideoEnabled;
+        existingParticipant.isScreenSharing = p.isScreenSharing;
+
+        console.log('🔄 Updated participant from current list:', existingParticipant.name,
+                    'Muted:', existingParticipant.isMuted,
+                    'VideoOff:', existingParticipant.isVideoOff);
       }
     });
+
+    // Force change detection
+    this.participants = [...this.participants];
   });
 });
 
   // Handle new participant joining
-this.signalRService.participantJoined$.subscribe((participant: MeetingParticipant) => {
+  this.signalRService.participantJoined$.subscribe((participant: MeetingParticipant) => {
   console.log('👤 SignalR participant joined:', participant);
   this.ngZone.run(() => {
     // Don't add self
@@ -310,6 +362,10 @@ this.signalRService.participantJoined$.subscribe((participant: MeetingParticipan
       // New participant, add them
       this.addParticipant(participant);
 
+      console.log('✅ New participant added:', participant.userName,
+                  'Muted:', !participant.isAudioEnabled,
+                  'VideoOff:', !participant.isVideoEnabled);
+
       // Create peer for this new participant
       if (participant.connectionId !== this.connectionId && this.mediaStream) {
         console.log('Creating peer for new participant:', participant.userName);
@@ -323,9 +379,17 @@ this.signalRService.participantJoined$.subscribe((participant: MeetingParticipan
         verticalPosition: 'bottom'
       });
     } else {
-      // Update existing participant's connectionId
+      // Update existing participant's connectionId and media states
       existingParticipant.connectionId = participant.connectionId;
-      console.log('Updated connectionId for:', existingParticipant.name);
+      existingParticipant.isMuted = !participant.isAudioEnabled;
+      existingParticipant.isVideoOff = !participant.isVideoEnabled;
+
+      // Force change detection
+      this.participants = [...this.participants];
+
+      console.log('🔄 Updated existing participant:', existingParticipant.name,
+                  'Muted:', existingParticipant.isMuted,
+                  'VideoOff:', existingParticipant.isVideoOff);
     }
   });
 });
@@ -378,23 +442,53 @@ this.signalRService.participantJoined$.subscribe((participant: MeetingParticipan
 
   // Media toggles
   this.signalRService.audioToggled$.subscribe(({ connectionId, userId, isEnabled }) => {
-    console.log('🔊 Audio toggled:', { connectionId, isEnabled });
+    console.log('🔊 Audio toggled:', { connectionId, userId, isEnabled });
     this.ngZone.run(() => {
-      const participant = this.participants.find(p => p.connectionId === connectionId);
+      // Find participant by connectionId OR userId
+      let participant = this.participants.find(p => p.connectionId === connectionId);
+
+      if (!participant) {
+        participant = this.participants.find(p => p.id === userId);
+      }
+
       if (participant) {
+        // CRITICAL: isEnabled = true means audio is ON, so isMuted = false
         participant.isMuted = !isEnabled;
-        console.log(`Participant ${participant.name} mute status:`, participant.isMuted);
+
+        // Force change detection
+        this.participants = [...this.participants];
+
+        console.log(`✅ Updated ${participant.name} mute status:`,
+                    'isMuted:', participant.isMuted,
+                    'from isEnabled:', isEnabled);
+      } else {
+        console.log('Participant not found for audio toggle:', connectionId, userId);
       }
     });
   });
 
   this.signalRService.videoToggled$.subscribe(({ connectionId, userId, isEnabled }) => {
-    console.log('📹 Video toggled:', { connectionId, isEnabled });
+    console.log('📹 Video toggled:', { connectionId, userId, isEnabled });
     this.ngZone.run(() => {
-      const participant = this.participants.find(p => p.connectionId === connectionId);
+      // Find participant by connectionId OR userId
+      let participant = this.participants.find(p => p.connectionId === connectionId);
+
+      if (!participant) {
+        participant = this.participants.find(p => p.id === userId);
+      }
+
       if (participant) {
+        // CRITICAL: isEnabled = true means video is ON, so isVideoOff = false
         participant.isVideoOff = !isEnabled;
-        console.log(`Participant ${participant.name} video status:`, participant.isVideoOff);
+
+        // Force change detection
+        this.participants = [...this.participants];
+
+        console.log(`✅ Updated ${participant.name} video status:`,
+                    'isVideoOff:', participant.isVideoOff,
+                    'from isEnabled:', isEnabled);
+      } else {
+        console.log('Participant not found for video toggle:', connectionId, userId);
       }
     });
   });
@@ -442,29 +536,49 @@ this.signalRService.participantJoined$.subscribe((participant: MeetingParticipan
 }
 
   private addParticipant(participant: MeetingParticipant) {
-    // Prevent adding current user to participants array (by userId or connectionId)
+    // Prevent adding current user
     if (participant.userId === this.oisMeetUserId || participant.connectionId === this.connectionId) {
+      console.log('Skipping self from addParticipant');
       return;
     }
-    // Check if participant already exists (by userId or connectionId)
+
+    // Check if participant already exists
     const existingParticipant = this.participants.find(
-      p => p.id === participant.userId || p.connectionId === participant.connectionId
+      p => p.id === participant.userId
     );
+
     if (!existingParticipant) {
       const newParticipant = {
         connectionId: participant.connectionId,
         id: participant.userId,
         name: participant.userName,
-        isMuted: !participant.isAudioEnabled,
-        isVideoOff: !participant.isVideoEnabled,
+        isMuted: !participant.isAudioEnabled,  // CRITICAL: Convert isAudioEnabled to isMuted
+        isVideoOff: !participant.isVideoEnabled, // CRITICAL: Convert isVideoEnabled to isVideoOff
         isScreenSharing: participant.isScreenSharing,
         isHost: participant.userId === this.meetingDetails?.hostId,
         isSpeaking: false,
         avatarColor: this.getRandomColor(participant.userId)
       };
+
       this.participants = [...this.participants, newParticipant];
-      console.log('✅ Added participant:', newParticipant.name, 'Host:', newParticipant.isHost);
-      console.log('Current participants:', this.participants.map(p => ({ name: p.name, isHost: p.isHost })));
+      console.log('✅ Added participant:', newParticipant.name,
+                  'Muted:', newParticipant.isMuted,
+                  'VideoOff:', newParticipant.isVideoOff,
+                  'Host:', newParticipant.isHost);
+    } else {
+      // Update existing participant's media states
+      existingParticipant.isMuted = !participant.isAudioEnabled;
+      existingParticipant.isVideoOff = !participant.isVideoEnabled;
+      existingParticipant.connectionId = participant.connectionId;
+      existingParticipant.isHost = participant.userId === this.meetingDetails?.hostId;
+
+      // Force change detection
+      this.participants = [...this.participants];
+
+      console.log('🔄 Updated participant:', existingParticipant.name,
+                  'Muted:', existingParticipant.isMuted,
+                  'VideoOff:', existingParticipant.isVideoOff,
+                  'Host:', existingParticipant.isHost);
     }
   }
 
@@ -702,8 +816,27 @@ private handleOffer(fromConnectionId: string, offer: any) {
 
     if (this.mediaStream) {
       const videoTracks = this.mediaStream.getVideoTracks();
+
+    if (videoTracks.length > 0) {
+      // If we have video tracks, just enable/disable them
       videoTracks.forEach(track => track.enabled = !this.isVideoOff);
       console.log('Video tracks enabled:', !this.isVideoOff);
+    } else if (!this.isVideoOff) {
+      // If turning video on but no video tracks, need to get camera
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        const videoTrack = newStream.getVideoTracks()[0];
+        this.mediaStream.addTrack(videoTrack);
+
+        if (this.localVideo) {
+          this.localVideo.nativeElement.srcObject = this.mediaStream;
+        }
+      } catch (err) {
+        console.error('Error starting camera:', err);
+        this.isVideoOff = true; // Revert if failed
+        this.snackBar.open('Could not start camera', 'Close', { duration: 3000 });
+      }
+    }
     }
 
     await this.signalRService.toggleVideo(this.meetingId, !this.isVideoOff);
