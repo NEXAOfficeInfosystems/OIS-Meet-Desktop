@@ -642,9 +642,11 @@ private handleOffer(fromConnectionId: string, offer: any) {
 
     setTimeout(() => {
       const peer = this.peers.get(fromConnectionId);
-      if (peer) {
+      if (peer && !peer.destroyed) {
         console.log('Signaling offer to peer');
         peer.signal(offer);
+      } else {
+        console.warn('Cannot signal offer: peer is destroyed for', fromConnectionId);
       }
     }, 500);
 
@@ -671,9 +673,11 @@ private handleOffer(fromConnectionId: string, offer: any) {
 
         setTimeout(() => {
           const peer = this.peers.get(fromConnectionId);
-          if (peer) {
+          if (peer && !peer.destroyed) {
             console.log('Signaling offer after participant found');
             peer.signal(offer);
+          } else {
+            console.warn('Cannot signal offer: peer is destroyed for', fromConnectionId);
           }
         }, 500);
 
@@ -688,9 +692,11 @@ private handleOffer(fromConnectionId: string, offer: any) {
 
         setTimeout(() => {
           const peer = this.peers.get(fromConnectionId);
-          if (peer) {
+          if (peer && !peer.destroyed) {
             console.log('Signaling offer with fallback peer');
             peer.signal(offer);
+          } else {
+            console.warn('Cannot signal offer: peer is destroyed for', fromConnectionId);
           }
         }, 500);
       }
@@ -701,17 +707,21 @@ private handleOffer(fromConnectionId: string, offer: any) {
   private handleAnswer(fromConnectionId: string, answer: any) {
     console.log('Handling answer from:', fromConnectionId);
     const peer = this.peers.get(fromConnectionId);
-    if (peer) {
+    if (peer && !peer.destroyed) {
       console.log('Signaling answer to peer');
       peer.signal(answer);
+    } else {
+      console.warn('Cannot signal answer: peer is destroyed for', fromConnectionId);
     }
   }
 
   private handleIceCandidate(fromConnectionId: string, candidate: any) {
     console.log('Handling ICE candidate from:', fromConnectionId);
     const peer = this.peers.get(fromConnectionId);
-    if (peer) {
+    if (peer && !peer.destroyed) {
       peer.signal(candidate);
+    } else {
+      console.warn('Cannot signal ICE: peer is destroyed for', fromConnectionId);
     }
   }
 
@@ -728,48 +738,27 @@ private handleOffer(fromConnectionId: string, offer: any) {
     console.log('Adding remote media stream for:', userName);
 
     this.ngZone.run(() => {
-      let videoElement = this.remoteVideoElements.get(connectionId);
+      // For now we focus on AUDIO only: create (or reuse) a hidden <audio> element per connection.
+      let audioElement = document.getElementById(`remote-audio-${connectionId}`) as HTMLAudioElement | null;
 
-      // First try to bind to the Angular template video element for this participant
-      if (!videoElement) {
-        const participant = this.participants.find(
-          p => p.connectionId === connectionId || p.name === userName
-        );
-
-        if (participant) {
-          const domVideo = document.getElementById(`video-${participant.id}`) as HTMLVideoElement | null;
-          if (domVideo) {
-            videoElement = domVideo;
-            this.remoteVideoElements.set(connectionId, videoElement);
-            console.log('Bound remote stream to template video element for:', userName);
-          }
-        }
+      if (!audioElement) {
+        audioElement = document.createElement('audio');
+        audioElement.id = `remote-audio-${connectionId}`;
+        audioElement.autoplay = true;
+        audioElement.controls = false;
+        audioElement.style.display = 'none';
+        document.body.appendChild(audioElement);
+        console.log('Remote audio element created for:', userName);
       }
 
-      // Fallback: create a hidden video container if no template element is found
-      if (!videoElement && this.remoteVideosContainer) {
-        videoElement = document.createElement('video');
-        videoElement.id = `remote-video-${connectionId}`;
-        videoElement.autoplay = true;
-        videoElement.playsInline = true;
-        videoElement.className = 'remote-video';
+      audioElement.srcObject = stream;
+      audioElement.muted = false;
+      audioElement.volume = 1.0;
+      audioElement.play().catch(err => {
+        console.warn('Error playing remote audio stream:', err);
+      });
 
-        const container = document.createElement('div');
-        container.className = 'remote-video-container';
-        container.style.display = 'none';
-        container.appendChild(videoElement);
-
-        this.remoteVideosContainer.nativeElement.appendChild(container);
-        this.remoteVideoElements.set(connectionId, videoElement);
-        console.log('Fallback remote video element created for:', userName);
-      }
-
-      if (videoElement) {
-        videoElement.srcObject = stream;
-        console.log('Remote media stream set for:', userName);
-      } else {
-        console.warn('No video element found to attach remote stream for:', userName);
-      }
+      console.log('Remote audio stream set and playing for:', userName);
     });
   }
 
@@ -787,43 +776,45 @@ private handleOffer(fromConnectionId: string, offer: any) {
   async toggleMute() {
     const wasMuted = this.isMuted;
     this.isMuted = !this.isMuted;
-  
-    if (!this.mediaStream) {
-      this.mediaStream = new MediaStream();
-    }
-  
-    if (wasMuted && !this.isMuted) {
-      // MUTED -> UNMUTED: first time we actually ask for mic
-      console.log('Unmuting: requesting microphone access...');
-      const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      const audioTrack = newStream.getAudioTracks()[0];
-  
-      this.mediaStream.addTrack(audioTrack);
-  
-      // Tell all peers about the new audio track
-      this.peers.forEach(peer => {
-        try {
-          // simple-peer renegotiates when you addTrack/addStream
-          peer.addTrack(audioTrack, this.mediaStream);
-        } catch (e) {
-          console.error('Error adding track to peer:', e);
-        }
-      });
-  
-      console.log('Mic is now ON; OS should show microphone in use');
-    } else if (!wasMuted && this.isMuted) {
-      // UNMUTED -> MUTED: stop and remove audio track so OS releases mic
-      console.log('Muting: stopping microphone...');
+
+    if (this.mediaStream) {
       const audioTracks = this.mediaStream.getAudioTracks();
-      audioTracks.forEach(track => {
-        track.stop();                      // stops capture -> OS mic icon turns off
-        this.mediaStream!.removeTrack(track);
-      });
-  
-      // (Optional) you can also call peer.removeTrack if you want,
-      // but most apps just stop the track; peers simply receive silence.
+      if (!this.isMuted) {
+        // Unmuting: enable audio track or add if missing
+        if (audioTracks.length === 0) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const newTrack = stream.getAudioTracks()[0];
+            // Remove all old audio tracks (should be none)
+            this.mediaStream.getAudioTracks().forEach(track => this.mediaStream!.removeTrack(track));
+            this.mediaStream.addTrack(newTrack);
+            // Destroy and recreate all peers with the new stream
+            this.peers.forEach(peer => peer.destroy());
+            this.peers.clear();
+            this.participants.forEach(p => {
+              if (p.connectionId && p.connectionId !== this.connectionId) {
+                this.createPeer(p.connectionId, p.name, true);
+              }
+            });
+            // Optionally update local video element if used
+            if (this.localVideo) {
+              this.localVideo.nativeElement.srcObject = this.mediaStream;
+            }
+            console.log('Peers recreated with new audio track after unmuting.');
+          } catch (err) {
+            console.error('Error accessing microphone:', err);
+            this.isMuted = true;
+            this.snackBar.open('Microphone access denied', 'Close', { duration: 3000 });
+          }
+        } else {
+          audioTracks.forEach(track => (track.enabled = true));
+        }
+      } else {
+        // Muting: disable audio track
+        audioTracks.forEach(track => (track.enabled = false));
+      }
     }
-  
+
     await this.signalRService.toggleAudio(this.meetingId, !this.isMuted);
   }
 
