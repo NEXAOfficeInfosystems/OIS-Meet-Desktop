@@ -68,6 +68,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   oisMeetUserId: string = '';
   private connectionId: string | null = null;
 
+  private processedMessageIds: Set<string> = new Set();
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
@@ -410,13 +412,20 @@ this.signalRService.participantJoined$.subscribe((participant: MeetingParticipan
   this.signalRService.meetingMessageReceived$.subscribe((data: any) => {
     console.log('💬 Chat message received:', data);
     this.ngZone.run(() => {
+      // Skip messages from self
+      if (data.userId === this.oisMeetUserId) {
+        console.log('Skipping own message');
+        return;
+      }
+
+      // Add message to chat (only for other users)
       this.chatMessages.push({
-        id: Date.now().toString(),
+        id: data.id || Date.now().toString(),
         sender: data.userName,
         senderId: data.userId,
         message: data.message,
         timestamp: new Date(data.timestamp),
-        isMe: data.userId === this.oisMeetUserId
+        isMe: false
       });
       this.scrollChatToBottom();
     });
@@ -775,19 +784,29 @@ private handleOffer(fromConnectionId: string, offer: any) {
     if (!this.newMessage.trim()) return;
 
     console.log('Sending message:', this.newMessage);
-    await this.signalRService.sendMeetingMessage(this.meetingId, this.newMessage);
 
+    // Generate a unique ID for this message
+    const messageId = Date.now().toString() + '-' + Math.random().toString(36).substring(2);
+
+    // Add to processed IDs to prevent duplication when broadcast returns
+    this.processedMessageIds.add(messageId);
+
+    // Add to UI immediately
     this.chatMessages.push({
-      id: Date.now().toString(),
+      id: messageId,
       sender: this.userFullName,
       senderId: this.oisMeetUserId,
       message: this.newMessage,
       timestamp: new Date(),
       isMe: true
     });
-
-    this.newMessage = '';
     this.scrollChatToBottom();
+
+    // Send via SignalR with the message ID
+    await this.signalRService.sendMeetingMessage(this.meetingId, this.newMessage, messageId);
+
+    // Clear input
+    this.newMessage = '';
   }
 
   leaveMeeting() {

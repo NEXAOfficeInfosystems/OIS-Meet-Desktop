@@ -341,9 +341,9 @@ public async joinMeeting(meetingId: string, userId: string, userName: string): P
     await this.hubConnection?.invoke('StopScreenShare', meetingId);
   }
 
-  public async sendMeetingMessage(meetingId: string, message: string): Promise<void> {
-    await this.hubConnection?.invoke('SendChatMessage', meetingId, message);
-  }
+public async sendMeetingMessage(meetingId: string, message: string, messageId?: string): Promise<void> {
+  await this.hubConnection?.invoke('SendChatMessage', meetingId, message, messageId);
+}
 
   public getConnectionId(): string | null {
     return this.hubConnection?.connectionId || null;
