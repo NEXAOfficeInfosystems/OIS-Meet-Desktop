@@ -33,7 +33,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   isHost: boolean = false;
 
   // UI States
-  isMuted: boolean = false;
+  isMuted: boolean = true;
   isVideoOff: boolean = false;
   isScreenSharing: boolean = false;
   isRecording: boolean = false;
@@ -235,67 +235,39 @@ private async loadExistingParticipants() {
     }
   }
 
-  private async initializeMedia() {
-    try {
-      // Get media states from query params (passed from dialog)
-      const requestVideo = !this.isVideoOff; // This comes from cam param
-      const requestAudio = !this.isMuted;    // This comes from mic param
+private async initializeMedia() {
+  try {
+    const startWithAudio = !this.isMuted; // only true if you want mic ON at join
 
-      console.log('Initializing media with:', { requestVideo, requestAudio });
-
-      if (!requestVideo && !requestAudio) {
-        console.log('No media requested, joining without media');
-        // Pass the media states to joinMeeting
-        await this.signalRService.joinMeeting(
-          this.meetingId,
-          this.oisMeetUserId,
-          this.userFullName,
-          requestAudio,  // Pass audio state
-          requestVideo   // Pass video state
-        );
-        this.connectionId = this.signalRService.getConnectionId();
-        return;
-      }
-
-      // Request media based on settings
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: requestVideo,
-        audio: requestAudio
-      });
-
-      if (this.localVideo && requestVideo) {
-        this.localVideo.nativeElement.srcObject = this.mediaStream;
-        console.log('Local video set');
-      }
-
-      console.log('Joining meeting via SignalR...');
-      // Pass the media states to joinMeeting
-      await this.signalRService.joinMeeting(
-        this.meetingId,
-        this.oisMeetUserId,
-        this.userFullName,
-        requestAudio,  // Pass audio state
-        requestVideo   // Pass video state
-      );
-      this.connectionId = this.signalRService.getConnectionId();
-      console.log('Joined meeting, connectionId:', this.connectionId);
-
-    } catch (error) {
-      console.error('Error accessing media devices:', error);
-      this.snackBar.open('Could not access camera or microphone', 'Close', { duration: 3000 });
-
-      console.log('Joining meeting without media...');
-      // Pass the media states even on error (will be false)
-      await this.signalRService.joinMeeting(
-        this.meetingId,
-        this.oisMeetUserId,
-        this.userFullName,
-        false,  // Audio off on error
-        false   // Video off on error
-      );
-      this.connectionId = this.signalRService.getConnectionId();
+    if (startWithAudio) {
+      // User wants mic ON at join
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      console.log('Got initial audio stream with mic ON');
+    } else {
+      // Join fully muted: NO mic access yet, OS icon stays off
+      this.mediaStream = new MediaStream(); // empty stream for SimplePeer
+      console.log('Joining muted: no audio track requested yet');
     }
+
+    await this.signalRService.joinMeeting(
+      this.meetingId,
+      this.oisMeetUserId,
+      this.userFullName,
+      startWithAudio, // isAudioEnabled
+      false           // isVideoEnabled
+    );
+    this.connectionId = this.signalRService.getConnectionId();
+  } catch (err) {
+    console.error('Error initializing media:', err);
+    await this.signalRService.joinMeeting(
+      this.meetingId,
+      this.oisMeetUserId,
+      this.userFullName,
+      false,
+      false
+    );
   }
+}
 
   checkParticipants() {
     console.log('=== PARTICIPANTS LIST ===');
@@ -753,11 +725,28 @@ private handleOffer(fromConnectionId: string, offer: any) {
   }
 
   private addRemoteVideo(connectionId: string, stream: MediaStream, userName: string) {
-    console.log('Adding remote video for:', userName);
+    console.log('Adding remote media stream for:', userName);
 
     this.ngZone.run(() => {
       let videoElement = this.remoteVideoElements.get(connectionId);
 
+      // First try to bind to the Angular template video element for this participant
+      if (!videoElement) {
+        const participant = this.participants.find(
+          p => p.connectionId === connectionId || p.name === userName
+        );
+
+        if (participant) {
+          const domVideo = document.getElementById(`video-${participant.id}`) as HTMLVideoElement | null;
+          if (domVideo) {
+            videoElement = domVideo;
+            this.remoteVideoElements.set(connectionId, videoElement);
+            console.log('Bound remote stream to template video element for:', userName);
+          }
+        }
+      }
+
+      // Fallback: create a hidden video container if no template element is found
       if (!videoElement && this.remoteVideosContainer) {
         videoElement = document.createElement('video');
         videoElement.id = `remote-video-${connectionId}`;
@@ -767,47 +756,75 @@ private handleOffer(fromConnectionId: string, offer: any) {
 
         const container = document.createElement('div');
         container.className = 'remote-video-container';
+        container.style.display = 'none';
         container.appendChild(videoElement);
-
-        const label = document.createElement('div');
-        label.className = 'participant-name-label';
-        label.innerText = userName;
-        container.appendChild(label);
 
         this.remoteVideosContainer.nativeElement.appendChild(container);
         this.remoteVideoElements.set(connectionId, videoElement);
-        console.log('Remote video element created for:', userName);
+        console.log('Fallback remote video element created for:', userName);
       }
 
       if (videoElement) {
         videoElement.srcObject = stream;
-        console.log('Remote video stream set for:', userName);
+        console.log('Remote media stream set for:', userName);
+      } else {
+        console.warn('No video element found to attach remote stream for:', userName);
       }
     });
   }
 
   private removeRemoteVideo(connectionId: string) {
-    console.log('Removing remote video for connection:', connectionId);
+    console.log('Removing remote media stream for connection:', connectionId);
     const videoElement = this.remoteVideoElements.get(connectionId);
     if (videoElement) {
-      videoElement.parentElement?.remove();
+      try {
+        (videoElement as HTMLVideoElement).srcObject = null;
+      } catch {}
       this.remoteVideoElements.delete(connectionId);
     }
   }
 
   async toggleMute() {
-    console.log('Toggling mute, current:', this.isMuted);
+    const wasMuted = this.isMuted;
     this.isMuted = !this.isMuted;
-
-    if (this.mediaStream) {
-      const audioTracks = this.mediaStream.getAudioTracks();
-      audioTracks.forEach(track => track.enabled = !this.isMuted);
-      console.log('Audio tracks enabled:', !this.isMuted);
+  
+    if (!this.mediaStream) {
+      this.mediaStream = new MediaStream();
     }
-
+  
+    if (wasMuted && !this.isMuted) {
+      // MUTED -> UNMUTED: first time we actually ask for mic
+      console.log('Unmuting: requesting microphone access...');
+      const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const audioTrack = newStream.getAudioTracks()[0];
+  
+      this.mediaStream.addTrack(audioTrack);
+  
+      // Tell all peers about the new audio track
+      this.peers.forEach(peer => {
+        try {
+          // simple-peer renegotiates when you addTrack/addStream
+          peer.addTrack(audioTrack, this.mediaStream);
+        } catch (e) {
+          console.error('Error adding track to peer:', e);
+        }
+      });
+  
+      console.log('Mic is now ON; OS should show microphone in use');
+    } else if (!wasMuted && this.isMuted) {
+      // UNMUTED -> MUTED: stop and remove audio track so OS releases mic
+      console.log('Muting: stopping microphone...');
+      const audioTracks = this.mediaStream.getAudioTracks();
+      audioTracks.forEach(track => {
+        track.stop();                      // stops capture -> OS mic icon turns off
+        this.mediaStream!.removeTrack(track);
+      });
+  
+      // (Optional) you can also call peer.removeTrack if you want,
+      // but most apps just stop the track; peers simply receive silence.
+    }
+  
     await this.signalRService.toggleAudio(this.meetingId, !this.isMuted);
-    console.log('Audio toggle sent to server:', !this.isMuted);
-    this.refreshTooltips();
   }
 
   async toggleVideo() {
