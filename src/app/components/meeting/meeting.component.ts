@@ -65,7 +65,6 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // User Info
   userFullName: string;
-  userId: string;
   oisMeetUserId: string = '';
   private connectionId: string | null = null;
 
@@ -77,12 +76,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     private clipboard: Clipboard,
     private meetingService: MeetingService,
     private signalRService: SignalRService,
-    private storageService: StorageService,
     private ngZone: NgZone
   ) {
     this.userFullName = this.sessionService.getFullName() || 'User';
-    this.userId = this.sessionService.getUserId() || '';
-    this.oisMeetUserId = this.storageService.getItem('oisMeetUserId') || this.userId;
+    this.oisMeetUserId = this.sessionService.getOISMeetUserId() || '';
+    // this.oisMeetUserId = this.storageService.getItem('oisMeetUserId') || this.oisMeetUserId;
   }
 
  async ngOnInit() {
@@ -114,7 +112,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Start SignalR connection
   console.log('Starting SignalR connection...');
-  await this.signalRService.startConnection(this.userId);
+  await this.signalRService.startConnection(this.oisMeetUserId);
 
   // Load meeting details FIRST
   await this.loadMeetingDetails();
@@ -132,37 +130,42 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 }
 
 // New method to load participants via REST API
-private async loadExistingParticipants() {
-  try {
-    console.log('Loading existing participants via API for meeting:', this.meetingId);
-    const response: any = await this.meetingService.getMeetingParticipants(this.meetingId).toPromise();
+  private async loadExistingParticipants() {
+    try {
+      console.log('Loading existing participants via API for meeting:', this.meetingId);
+      const response: any = await this.meetingService.getMeetingParticipants(this.meetingId).toPromise();
 
-    if (response.success && response.data) {
-      console.log('📋 Existing participants from API:', response.data);
+      if (response.success && response.data) {
+        console.log('📋 Existing participants from API:', response.data);
 
-      // Convert API response to MeetingParticipant format
-      const participants: MeetingParticipant[] = response.data.map((p: any) => ({
-        connectionId: p.id, // Note: API might not have connectionId yet
-        userId: p.userId,
-        userName: p.userName,
-        isAudioEnabled: !p.isMuted,
-        isVideoEnabled: !p.isVideoOff,
-        isScreenSharing: false
-      }));
+        // Convert API response to MeetingParticipant format
+        const participants: MeetingParticipant[] = response.data.map((p: any) => ({
+          connectionId: p.id,
+          userId: p.userId,
+          userName: p.userName,
+          isAudioEnabled: !p.isMuted,
+          isVideoEnabled: !p.isVideoOff,
+          isScreenSharing: false
+        }));
 
-      // Add all participants to the list
-      this.ngZone.run(() => {
-        this.participants = []; // Clear existing
-        participants.forEach(p => {
-          this.addParticipant(p);
+        // FILTER OUT the current user from participants list
+        const filteredParticipants = participants.filter(p => p.userId !== this.oisMeetUserId);
+
+        console.log('Filtered participants (excluding current user):', filteredParticipants.map(p => p.userName));
+
+        // Add only filtered participants to the list
+        this.ngZone.run(() => {
+          this.participants = []; // Clear existing
+          filteredParticipants.forEach(p => {
+            this.addParticipant(p);
+          });
+          console.log('Participants after API load:', this.participants.map(p => p.name));
         });
-        console.log('Participants after API load:', this.participants.map(p => p.name));
-      });
+      }
+    } catch (error) {
+      console.error('Error loading existing participants:', error);
     }
-  } catch (error) {
-    console.error('Error loading existing participants:', error);
   }
-}
 
   ngAfterViewInit() {
     setTimeout(() => this.initializeTooltips(), 500);
@@ -186,8 +189,8 @@ private async loadExistingParticipants() {
     this.remoteVideoElements.forEach(video => video.remove());
     this.remoteVideoElements.clear();
 
-    if (this.meetingId && this.userId) {
-      this.signalRService.leaveMeeting(this.meetingId, this.userId);
+    if (this.meetingId && this.oisMeetUserId) {
+      this.signalRService.leaveMeeting(this.meetingId, this.oisMeetUserId);
     }
 
     this.signalRService.stopConnection();
@@ -263,59 +266,67 @@ private setupSignalRListeners() {
   console.log('Setting up SignalR listeners');
 
   // Handle current participants list (sent immediately after joining)
-  this.signalRService.currentParticipants$.subscribe((participants: MeetingParticipant[]) => {
-    console.log('📋 SignalR current participants received:', participants.length);
-    this.ngZone.run(() => {
-      // Instead of clearing, merge with existing participants
-      participants.forEach(p => {
-        // Check if participant already exists (by userId)
-        const existingParticipant = this.participants.find(
-          existing => existing.id === p.userId
-        );
+this.signalRService.currentParticipants$.subscribe((participants: MeetingParticipant[]) => {
+  console.log('📋 SignalR current participants received:', participants.length);
+  this.ngZone.run(() => {
+    // Filter out current user
+    const filteredParticipants = participants.filter(p => p.userId !== this.oisMeetUserId);
 
-        if (!existingParticipant) {
-          console.log('Adding new participant from SignalR:', p.userName);
-          this.addParticipant(p);
-        } else {
-          // Update connectionId if needed
-          existingParticipant.connectionId = p.connectionId;
-        }
-      });
-    });
-  });
-
-  // Handle new participant joining
-  this.signalRService.participantJoined$.subscribe((participant: MeetingParticipant) => {
-    console.log('👤 SignalR participant joined:', participant);
-    this.ngZone.run(() => {
-      // Check if participant already exists
+    filteredParticipants.forEach(p => {
+      // Check if participant already exists (by userId)
       const existingParticipant = this.participants.find(
-        p => p.id === participant.userId
+        existing => existing.id === p.userId
       );
 
       if (!existingParticipant) {
-        // New participant, add them
-        this.addParticipant(participant);
-
-        // Create peer for this new participant
-        if (participant.connectionId !== this.connectionId && this.mediaStream) {
-          console.log('Creating peer for new participant:', participant.userName);
-          setTimeout(() => {
-            this.createPeer(participant.connectionId, participant.userName, true);
-          }, 1000);
-        }
-
-        this.snackBar.open(`${participant.userName} joined`, 'Close', {
-          duration: 2000,
-          verticalPosition: 'bottom'
-        });
+        console.log('Adding new participant from SignalR:', p.userName);
+        this.addParticipant(p);
       } else {
-        // Update existing participant's connectionId
-        existingParticipant.connectionId = participant.connectionId;
-        console.log('Updated connectionId for:', existingParticipant.name);
+        // Update connectionId if needed
+        existingParticipant.connectionId = p.connectionId;
       }
     });
   });
+});
+
+  // Handle new participant joining
+this.signalRService.participantJoined$.subscribe((participant: MeetingParticipant) => {
+  console.log('👤 SignalR participant joined:', participant);
+  this.ngZone.run(() => {
+    // Don't add self
+    if (participant.userId === this.oisMeetUserId) {
+      console.log('Skipping self from participant joined event');
+      return;
+    }
+
+    // Check if participant already exists
+    const existingParticipant = this.participants.find(
+      p => p.id === participant.userId
+    );
+
+    if (!existingParticipant) {
+      // New participant, add them
+      this.addParticipant(participant);
+
+      // Create peer for this new participant
+      if (participant.connectionId !== this.connectionId && this.mediaStream) {
+        console.log('Creating peer for new participant:', participant.userName);
+        setTimeout(() => {
+          this.createPeer(participant.connectionId, participant.userName, true);
+        }, 1000);
+      }
+
+      this.snackBar.open(`${participant.userName} joined`, 'Close', {
+        duration: 2000,
+        verticalPosition: 'bottom'
+      });
+    } else {
+      // Update existing participant's connectionId
+      existingParticipant.connectionId = participant.connectionId;
+      console.log('Updated connectionId for:', existingParticipant.name);
+    }
+  });
+});
 
   // Handle participant leaving
   this.signalRService.participantLeft$.subscribe(({ connectionId, userId }) => {
@@ -405,7 +416,7 @@ private setupSignalRListeners() {
         senderId: data.userId,
         message: data.message,
         timestamp: new Date(data.timestamp),
-        isMe: data.userId === this.userId
+        isMe: data.userId === this.oisMeetUserId
       });
       this.scrollChatToBottom();
     });
@@ -422,9 +433,14 @@ private setupSignalRListeners() {
 }
 
   private addParticipant(participant: MeetingParticipant) {
-    // Check if participant already exists (by userId)
-    const existingParticipant = this.participants.find(p => p.id === participant.userId);
-
+    // Prevent adding current user to participants array (by userId or connectionId)
+    if (participant.userId === this.oisMeetUserId || participant.connectionId === this.connectionId) {
+      return;
+    }
+    // Check if participant already exists (by userId or connectionId)
+    const existingParticipant = this.participants.find(
+      p => p.id === participant.userId || p.connectionId === participant.connectionId
+    );
     if (!existingParticipant) {
       const newParticipant = {
         connectionId: participant.connectionId,
@@ -437,7 +453,6 @@ private setupSignalRListeners() {
         isSpeaking: false,
         avatarColor: this.getRandomColor(participant.userId)
       };
-
       this.participants = [...this.participants, newParticipant];
       console.log('✅ Added participant:', newParticipant.name, 'Host:', newParticipant.isHost);
       console.log('Current participants:', this.participants.map(p => ({ name: p.name, isHost: p.isHost })));
@@ -765,7 +780,7 @@ private handleOffer(fromConnectionId: string, offer: any) {
     this.chatMessages.push({
       id: Date.now().toString(),
       sender: this.userFullName,
-      senderId: this.userId,
+      senderId: this.oisMeetUserId,
       message: this.newMessage,
       timestamp: new Date(),
       isMe: true
@@ -781,7 +796,7 @@ private handleOffer(fromConnectionId: string, offer: any) {
       if (!this.isHost) {
         this.meetingService.leaveMeeting(this.meetingId, this.oisMeetUserId).subscribe();
       }
-      this.signalRService.leaveMeeting(this.meetingId, this.userId);
+      this.signalRService.leaveMeeting(this.meetingId, this.oisMeetUserId);
       this.router.navigate(['/chat']);
     }
   }
@@ -791,7 +806,7 @@ private handleOffer(fromConnectionId: string, offer: any) {
     if (this.isHost && confirm('End meeting for everyone?')) {
       this.meetingService.endMeeting(this.meetingId, this.oisMeetUserId).subscribe({
         next: () => {
-          this.signalRService.endMeeting(this.meetingId, this.userId);
+          this.signalRService.endMeeting(this.meetingId, this.oisMeetUserId);
           this.router.navigate(['/chat']);
         }
       });

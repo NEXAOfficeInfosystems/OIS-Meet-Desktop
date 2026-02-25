@@ -27,11 +27,13 @@
       <!-- Participant Videos Grid -->
       <div class="video-grid" [style.grid-template-columns]="'repeat(' + getParticipantGridColumns() + ', 1fr)'">
 
-        <!-- Local Video -->
+        <!-- LOCAL VIDEO - ALWAYS SHOW THIS (1 tile) -->
         <div class="video-tile local-video" [class.self-view]="true">
           <video #localVideo autoplay playsinline muted></video>
+
+          <!-- Video ON overlay -->
           <div class="participant-info" *ngIf="!isVideoOff">
-            <span class="participant-name">You</span>  <!-- Always show "You" for local video -->
+            <span class="participant-name">You</span>
             <span class="mic-indicator" *ngIf="isMuted">
               <i class="bi bi-mic-mute-fill"></i>
             </span>
@@ -39,12 +41,14 @@
               <i class="bi bi-mic-fill"></i>
             </span>
           </div>
+
+          <!-- Video OFF overlay -->
           <div class="video-controls-overlay" *ngIf="isVideoOff">
             <div class="avatar-placeholder" [style.background-color]="'#1a73e8'">
               {{ getInitials(userFullName) }}
             </div>
             <div class="participant-info" style="bottom: 8px; left: 8px; position: absolute;">
-              <span class="participant-name">You</span>  <!-- Always show "You" for local video -->
+              <span class="participant-name">You</span>
               <span class="mic-indicator" *ngIf="isMuted">
                 <i class="bi bi-mic-mute-fill"></i>
               </span>
@@ -55,13 +59,33 @@
           </div>
         </div>
 
-        <!-- Remote Participants -->
+        <!-- REMOTE PARTICIPANTS - These should ONLY be other users -->
+        <!-- No need for *ngIf="participant.id !== userId" because participants array already excludes current user -->
         <div class="video-tile" *ngFor="let participant of participants">
-          <ng-container *ngIf="participant.id !== userId">
-            <video *ngIf="!participant.isVideoOff" [id]="'video-' + participant.id" autoplay playsinline></video>
+          <!-- Video ON -->
+          <video *ngIf="!participant.isVideoOff" [id]="'video-' + participant.id" autoplay playsinline></video>
 
-            <!-- Participant Info (when video on) -->
-            <div class="participant-info" *ngIf="!participant.isVideoOff">
+          <!-- Participant Info (when video on) -->
+          <div class="participant-info" *ngIf="!participant.isVideoOff">
+            <span class="participant-name">{{ participant.name }}</span>
+            <span class="mic-indicator" *ngIf="participant.isMuted">
+              <i class="bi bi-mic-mute-fill"></i>
+            </span>
+            <span class="mic-indicator" *ngIf="!participant.isMuted">
+              <i class="bi bi-mic-fill"></i>
+            </span>
+            <span class="host-badge" *ngIf="participant.isHost" style="background: #1a73e8; color: white; padding: 2px 4px; border-radius: 3px; font-size: 9px; margin-left: 4px;">Host</span>
+          </div>
+
+          <!-- Speaking Indicator -->
+          <div class="speaking-indicator" *ngIf="participant.isSpeaking"></div>
+
+          <!-- Video OFF Overlay -->
+          <div class="video-controls-overlay" *ngIf="participant.isVideoOff">
+            <div class="avatar-placeholder" [style.background-color]="participant.avatarColor">
+              {{ getInitials(participant.name) }}
+            </div>
+            <div class="participant-info" style="bottom: 8px; left: 8px; position: absolute;">
               <span class="participant-name">{{ participant.name }}</span>
               <span class="mic-indicator" *ngIf="participant.isMuted">
                 <i class="bi bi-mic-mute-fill"></i>
@@ -71,27 +95,7 @@
               </span>
               <span class="host-badge" *ngIf="participant.isHost" style="background: #1a73e8; color: white; padding: 2px 4px; border-radius: 3px; font-size: 9px; margin-left: 4px;">Host</span>
             </div>
-
-            <!-- Speaking Indicator -->
-            <div class="speaking-indicator" *ngIf="participant.isSpeaking"></div>
-
-            <!-- Video Off Overlay -->
-            <div class="video-controls-overlay" *ngIf="participant.isVideoOff">
-              <div class="avatar-placeholder" [style.background-color]="participant.avatarColor">
-                {{ getInitials(participant.name) }}
-              </div>
-              <div class="participant-info" style="bottom: 8px; left: 8px; position: absolute;">
-                <span class="participant-name">{{ participant.name }}</span>
-                <span class="mic-indicator" *ngIf="participant.isMuted">
-                  <i class="bi bi-mic-mute-fill"></i>
-                </span>
-                <span class="mic-indicator" *ngIf="!participant.isMuted">
-                  <i class="bi bi-mic-fill"></i>
-                </span>
-                <span class="host-badge" *ngIf="participant.isHost" style="background: #1a73e8; color: white; padding: 2px 4px; border-radius: 3px; font-size: 9px; margin-left: 4px;">Host</span>
-              </div>
-            </div>
-          </ng-container>
+          </div>
         </div>
 
         <!-- Empty Tiles for Grid Fill -->
@@ -158,14 +162,14 @@
           <i class="bi" [ngClass]="isMuted ? 'bi-mic-mute-fill' : 'bi-mic-fill'"></i>
         </button>
 
-        <!-- Video On/Off -->
-        <button  *ngIf="false" class="control-btn" [class.active]="!isVideoOff" [class.danger]="isVideoOff" (click)="toggleVideo()"
+        <!-- Video On/Off - Hidden -->
+        <button *ngIf="false" class="control-btn" [class.active]="!isVideoOff" [class.danger]="isVideoOff" (click)="toggleVideo()"
           data-bs-toggle="tooltip" [attr.data-bs-title]="isVideoOff ? 'Start Video' : 'Stop Video'">
           <i class="bi" [ngClass]="isVideoOff ? 'bi-camera-video-off-fill' : 'bi-camera-video-fill'"></i>
         </button>
 
-        <!-- Screen Share -->
-        <button  *ngIf="false" class="control-btn" [class.active]="isScreenSharing" (click)="toggleScreenShare()"
+        <!-- Screen Share - Hidden -->
+        <button *ngIf="false" class="control-btn" [class.active]="isScreenSharing" (click)="toggleScreenShare()"
           data-bs-toggle="tooltip" [attr.data-bs-title]="isScreenSharing ? 'Stop Sharing' : 'Share Screen'">
           <i class="bi bi-display"></i>
         </button>
@@ -213,12 +217,12 @@
   <!-- Participants Sidebar -->
   <div class="participants-sidebar" *ngIf="showParticipants && !isLoading">
     <div class="sidebar-header">
-      <h6>Participants ({{ participants.length + 1 }})</h6>  <!-- +1 for current user -->
+      <h6>Participants ({{ participants.length + 1 }})</h6>
       <button class="btn-close" (click)="showParticipants = false"></button>
     </div>
 
     <div class="participants-list">
-      <!-- Current user (You) -->
+      <!-- CURRENT USER - Always show this -->
       <div class="participant-item">
         <div class="participant-avatar" [style.background-color]="'#1a73e8'">
           {{ getInitials(userFullName) }}
@@ -236,7 +240,7 @@
         </div>
       </div>
 
-      <!-- Other participants -->
+      <!-- OTHER PARTICIPANTS - These come from participants array (already filtered) -->
       <div class="participant-item" *ngFor="let participant of participants">
         <div class="participant-avatar" [style.background-color]="participant.avatarColor">
           {{ getInitials(participant.name) }}
@@ -252,7 +256,7 @@
             <span class="host-badge" *ngIf="participant.isHost">Host</span>
           </span>
         </div>
-        <div class="participant-actions" *ngIf="isHost && participant.id !== userId">
+        <div class="participant-actions" *ngIf="isHost && participant.id !== oisMeetUserId">
           <button class="btn btn-link text-danger p-1" (click)="removeParticipant(participant.id)"
             data-bs-toggle="tooltip" data-bs-title="Remove Participant">
             <i class="bi bi-person-x"></i>
