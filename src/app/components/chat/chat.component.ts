@@ -4,17 +4,14 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, Subscription, takeUntil } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
+import * as signalR from '@microsoft/signalr';
 
 // Services
-import { ChatService, ChatUser, Message, SendMessageRequest, Conversation, ApiResponse } from '../../core/services/chat.service';
-import { SignalRService } from '../../core/services/signalr.service';
 import { SessionService } from '../../core/services/session.service';
-import { AuthService } from '../../core/services/auth.service';
 import { CommonService } from '../../core/services/common.service';
-import { SsoApiService } from '../../core/services/sso-api.service';
-// import { FileSizePipe } from '../../core/pipes/file-size.pipe';
-
-// Pipes
+import { UserService } from '../../core/services/user.service';
+import { ChatService } from '../../core/services/chat.service';
+import { ChatSignalrService, SendMessageRequest } from '../../core/services/chat-signalr.service';
 
 // Declare bootstrap for modal
 declare var bootstrap: any;
@@ -26,7 +23,6 @@ declare var bootstrap: any;
     CommonModule,
     FormsModule,
     HttpClientModule,
-    // FileSizePipe
   ],
   templateUrl: './chat.component.html',
   styleUrls: ['./chat.component.scss']
@@ -36,15 +32,15 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   @ViewChild('fileInput') fileInput!: ElementRef;
 
   // User data
-  users: ChatUser[] = [];
-   ssoUsers: any[] = [];
-  filteredUsers: ChatUser[] = [];
-  selectedUser: ChatUser | null = null;
-  selectedConversation: Conversation | null = null;
-  currentUserId: string = '';
+  users: any[] = [];
+  ssoUsers: any[] = [];
+  filteredUsers: any[] = [];
+  selectedUser: any | null = null;
+  selectedConversation: any | null = null;
+  currentUserId: string | null = null;
 
   // Messages
-  messages: Message[] = [];
+  messages: any[] = [];
   newMessage = '';
 
   // UI States
@@ -63,40 +59,48 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   // Image viewer
   selectedImage: any = null;
-private companySubscription!: Subscription;
+  private companySubscription!: Subscription;
   private syncSubscription!: Subscription;
   private isCompanyChanging = false;
+
   // Cleanup
   private destroy$ = new Subject<void>();
-
+ private connectionStateSubscription: Subscription;
   constructor(
-    private chatService: ChatService,
-    private signalRService: SignalRService,
     private sessionService: SessionService,
     private commonService: CommonService,
+    private userService: UserService,
     private storageService: StorageService,
-    private commonSvc: CommonService
+    private chatService: ChatService,
+    private chatSignalrService: ChatSignalrService
   ) {
-     const userId = this.sessionService.getUserId() ?? '11111111-1111-1111-1111-111111111111';
-    this.currentUserId = userId;
+    this.connectionStateSubscription = this.chatSignalrService.connectionState$.subscribe(
+      state => {
+        console.log('SignalR connection state changed:', state);
+        if (state === signalR.HubConnectionState.Connected && this.selectedConversation) {
+          // Rejoin conversation if connection is reestablished
+          this.chatSignalrService.joinConversation(this.selectedConversation.id);
+        }
+      }
+    );
   }
 
   ngOnInit() {
-    this.signalRService.startConnection(this.currentUserId);
-    this.setupSignalREvents();
-
+    this.currentUserId =  this.sessionService.getOISMeetUserId() || null;
+     if (this.currentUserId) {
+      this.chatSignalrService.startConnection(this.currentUserId);
+    }
     // Check if we have a pending company change
     const pendingCompanyId = sessionStorage.getItem('selectedCompanyId');
     if (pendingCompanyId) {
       console.log('⏳ Pending company change detected, waiting for sync...');
       this.isCompanyChanging = true;
-      this.isLoading = true; // Show loading immediately
+      this.isLoading = true;
     } else {
       // Initial load
       this.loadUsersForCurrentCompany();
       this.loadConversations();
     }
-
     // Listen for company changes
     this.companySubscription = this.commonService.companyChanged$
       .pipe(takeUntil(this.destroy$))
@@ -119,10 +123,13 @@ private companySubscription!: Subscription;
   }
 
   ngOnDestroy() {
+        if (this.connectionStateSubscription) {
+      this.connectionStateSubscription.unsubscribe();
+    }
     if (this.typingTimeout) {
       clearTimeout(this.typingTimeout);
     }
-    this.signalRService.stopConnection();
+    this.chatSignalrService.stopConnection();
     this.destroy$.next();
     this.destroy$.complete();
 
@@ -140,28 +147,19 @@ private companySubscription!: Subscription;
     this.filteredUsers = [];
     this.selectedUser = null;
     this.messages = [];
-
-    // Set loading state
     this.isLoading = true;
     this.isCompanyChanging = true;
-
-    // Clear any existing data in UI
   }
 
-   private handleSyncComplete() {
+  private handleSyncComplete() {
     console.log('🔄 Sync complete, now loading users...');
     this.isCompanyChanging = false;
-
-    // Clear session storage flags
     sessionStorage.removeItem('selectedCompanyId');
-
-    // Now load users (they should be available after sync)
     this.loadUsersForCurrentCompany();
     this.loadConversations();
   }
 
   private loadUsersForCurrentCompany(): void {
-    // Don't load if company is still changing
     if (this.isCompanyChanging) {
       console.log('⏳ Company still changing, waiting before loading users...');
       return;
@@ -172,12 +170,12 @@ private companySubscription!: Subscription;
     const clientId = this.sessionService.getClientId() ?? '';
     const companyId = this.sessionService.getCompanyId() ?? 0;
 
-    this.chatService.getOisMeetUsers(clientId, companyId)
+    this.userService.getOisMeetUsers(clientId, companyId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
           if (res.success && res.data) {
-            console.log(`✅ Loaded : ${res}`);
+            console.log('✅ Loaded users:', res.data);
             const loggedInSSOUserId = this.sessionService.getUserId() || '';
             const currentUser = res.data.find(
               (u: any) => u.ssoUserId === loggedInSSOUserId
@@ -186,13 +184,16 @@ private companySubscription!: Subscription;
             if (currentUser) {
               this.storageService.setItem('oisMeetUserId', currentUser.id);
               console.log('✅ OIS Meet UserId stored:', currentUser.id);
+              this.currentUserId = currentUser.id; // Update currentUserId
+              // this.chatSignalrService.startConnection(this.currentUserId);
+              this.setupSignalREvents();
             }
 
             const transformed = this.transformSSOUsersToChatUsers(res.data);
 
             // Exclude logged-in user
             this.users = transformed.filter(
-              user => user.id !== this.currentUserId
+              (user: any) => user.id !== this.currentUserId
             );
 
             this.filteredUsers = [...this.users];
@@ -203,8 +204,6 @@ private companySubscription!: Subscription;
         error: (err) => {
           console.error('❌ Failed to load users', err);
           this.isLoading = false;
-
-          // If error, try one more time after a delay
           setTimeout(() => {
             if (!this.isCompanyChanging) {
               this.loadUsersForCurrentCompany();
@@ -214,63 +213,84 @@ private companySubscription!: Subscription;
       });
   }
 
+  private transformSSOUsersToChatUsers(users: any[]): any[] {
+    return users.map(user => ({
+      id: user.id,
+      userId: user.ssoUserId || user.id,
+      name: user.fullName || user.name || 'Unknown',
+      fullName: user.fullName || user.name || 'Unknown',
+      email: user.email || '',
+      isOnline: true,
+      online: true,
+      lastMessage: '',
+      lastMessageTime: '',
+      lastMessageType: '',
+      unreadCount: 0,
+      avatarColor: this.commonService.getRandomColor(),
+      status: 'Available',
+      clientId: user.clientId,
+      companyId: user.companyId
+    }));
+  }
 
-  // Helper method to get display name
-  getUserDisplayName(user: ChatUser): string {
-    return user?.fullName || 'Unknown';
+  getUserDisplayName(user: any): string {
+    return user?.fullName || user?.name || 'Unknown';
   }
 
   private setupSignalREvents(): void {
-    // Handle new messages
-    this.signalRService.messageReceived$
+    this.chatSignalrService.messageReceived$
       .pipe(takeUntil(this.destroy$))
       .subscribe(message => {
         this.handleNewMessage(message);
       });
 
-    // Handle typing indicators
-    this.signalRService.userTyping$
+    this.chatSignalrService.userTyping$
       .pipe(takeUntil(this.destroy$))
       .subscribe(data => {
-        if (this.selectedUser?.userId === data.userId) {
+        if (data && this.selectedUser?.userId === data.userId) {
           this.isTyping = data.isTyping;
-          // Auto-hide typing indicator after 3 seconds
           setTimeout(() => this.isTyping = false, 3000);
         }
       });
 
-    // Handle message status updates
-    this.signalRService.messageStatus$
+    this.chatSignalrService.messageStatus$
       .pipe(takeUntil(this.destroy$))
       .subscribe(data => {
-        this.updateMessageStatus(data.messageId, data.status);
+        if (data) {
+          this.updateMessageStatus(data.messageId, data.status);
+        }
       });
 
-    // Handle user online/offline status
-    this.signalRService.userOnline$
+    this.chatSignalrService.userOnline$
       .pipe(takeUntil(this.destroy$))
       .subscribe(userId => {
-        this.updateUserOnlineStatus(userId, true);
+        if (userId) {
+          this.updateUserOnlineStatus(userId, true);
+        }
       });
 
-    this.signalRService.userOffline$
+    this.chatSignalrService.userOffline$
       .pipe(takeUntil(this.destroy$))
       .subscribe(userId => {
-        this.updateUserOnlineStatus(userId, false);
+        if (userId) {
+          this.updateUserOnlineStatus(userId, false);
+        }
       });
 
-    // Handle deleted messages
-    this.signalRService.messageDeleted$
+    this.chatSignalrService.messageDeleted$
       .pipe(takeUntil(this.destroy$))
       .subscribe(messageId => {
-        this.deleteMessageFromUI(messageId);
+        if (messageId) {
+          this.deleteMessageFromUI(messageId);
+        }
       });
 
-    // Handle new conversations
-    this.signalRService.newConversation$
+    this.chatSignalrService.newConversation$
       .pipe(takeUntil(this.destroy$))
       .subscribe(conversation => {
-        this.addNewConversation(conversation);
+        if (conversation) {
+          this.addNewConversation(conversation);
+        }
       });
   }
 
@@ -289,173 +309,187 @@ private companySubscription!: Subscription;
   }
 
   loadConversations(): void {
-    // Don't load if company is still changing
-    if (this.isCompanyChanging) {
-      console.log('⏳ Company still changing, waiting before loading conversations...');
-      return;
-    }
-
-    this.isLoading = true;
-
-    const clientId = this.sessionService.getClientId() ?? '';
-    const companyId = this.sessionService.getCompanyId() ?? 0;
-
-    this.chatService.getConversations(clientId, companyId)
+    this.chatService.getConversations()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response: ApiResponse<ChatUser[]>) => {
-          if (response.success) {
-            console.log(`✅ Loaded ${response.data.length} conversations for company ${companyId}`);
+        next: (res) => {
+          if (res.success && res.data) {
+            const conversations = res.data;
+            const usersFromConversations = conversations.map((conv: any) => {
+              const otherParticipant = conv.participants?.[0] || {};
+              return {
+                id: otherParticipant.userId,
+                userId: otherParticipant.userId,
+                name: otherParticipant.name,
+                fullName: otherParticipant.name,
+                email: otherParticipant.email,
+                isOnline: otherParticipant.isOnline || false,
+                lastMessage: conv.lastMessage?.content || '',
+                lastMessageTime: conv.lastMessage?.sentAt ? this.formatMessageTime(new Date(conv.lastMessage.sentAt)) : '',
+                lastMessageType: conv.lastMessage?.messageType || '',
+                unreadCount: conv.unreadCount || 0,
+                conversationId: conv.id,
+                avatarColor: this.commonService.getRandomColor()
+              };
+            });
 
-            // Merge with users
-            if (this.users.length > 0) {
-              this.mergeConversationData(response.data);
+            // Merge with existing users
+            const existingUserIds = new Set(this.users.map(u => u.id));
+            const newUsers = usersFromConversations.filter((u: any) => !existingUserIds.has(u.id));
+            this.users = [...this.users, ...newUsers];
+            this.filteredUsers = [...this.users];
+          }
+        },
+        error: (err) => console.error('Failed to load conversations', err)
+      });
+  }
+
+  loadMessages(conversationId: string): void {
+    if (!conversationId) return;
+
+    this.isLoading = true;
+    this.chatService.getMessages(conversationId, this.currentPage)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          if (res.success && res.data) {
+            if (this.currentPage === 1) {
+              this.messages = res.data;
             } else {
-              this.users = response.data.map(user => ({
-                ...user,
-                name: user.fullName,
-                online: user.isOnline
-              }));
-              this.filteredUsers = [...this.users];
+              this.messages = [...res.data, ...this.messages];
             }
-
-            this.loadUnreadCount();
+            this.hasMoreMessages = res.data.length === 50;
+            setTimeout(() => this.markVisibleMessagesAsRead(), 1000);
           }
           this.isLoading = false;
         },
-        error: (error) => {
-          console.error('Error loading conversations:', error);
+        error: (err) => {
+          console.error('Failed to load messages', err);
           this.isLoading = false;
         }
       });
   }
 
   loadUnreadCount(): void {
-    this.chatService.getUnreadCount()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (response: ApiResponse<number>) => {
-          if (response.success) {
-            this.totalUnreadCount = response.data;
-          }
-        },
-        error: (error) => console.error('Error loading unread count:', error)
-      });
+    // Implement if needed
   }
 
-  // Update selectUser method to handle case when conversation is not yet created
-  selectUser(user: ChatUser): void {
-    this.selectedUser = user;
-    this.messages = [];
-    this.currentPage = 1;
-    this.hasMoreMessages = true;
+async selectUser(user: any): Promise<void> {
+  console.log('User Selected Details:', user);
+  this.selectedUser = user;
+  this.messages = [];
+  this.currentPage = 1;
+  this.hasMoreMessages = true;
 
-    // If we already have conversationId, use it
-    if (user.conversationId) {
-      this.selectedConversation = { id: user.conversationId } as Conversation;
-      this.signalRService.joinConversation(user.conversationId);
+  // Leave previous conversation if any
+  if (this.selectedConversation) {
+    this.chatSignalrService.leaveConversation(this.selectedConversation.id);
+  }
+
+  if (user.conversationId) {
+    this.selectedConversation = { id: user.conversationId };
+    try {
+      await this.chatSignalrService.joinConversation(user.conversationId);
       this.loadMessages(user.conversationId);
       user.unreadCount = 0;
-      this.markConversationAsRead();
-    } else {
-      // Get or create conversation
-      this.chatService.getOrCreateConversation(user.userId)
-        .pipe(takeUntil(this.destroy$))
-        .subscribe({
-          next: (response: ApiResponse<Conversation>) => {
-            if (response.success) {
-              this.selectedConversation = response.data;
-              user.conversationId = response.data.id;
-
-              // Join conversation room in SignalR
-              this.signalRService.joinConversation(this.selectedConversation!.id);
-
-              // Load messages
-              this.loadMessages(this.selectedConversation!.id);
-
-              // Reset unread count for this user
-              user.unreadCount = 0;
-
-              // Mark conversation as read
-              this.markConversationAsRead();
+      this.totalUnreadCount = this.users.reduce(
+        (sum, u) => sum + (u.unreadCount || 0),
+        0
+      );
+    } catch (err) {
+      console.error('Failed to join conversation:', err);
+    }
+  } else {
+    this.isLoading = true;
+    this.chatService.createOrGetDirectConversation(user.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: async (res) => {
+          if (res.success && res.data) {
+            user.conversationId = res.data;
+            this.selectedConversation = { id: res.data };
+            try {
+              await this.chatSignalrService.joinConversation(res.data);
+              this.loadMessages(res.data);
+            } catch (err) {
+              console.error('Failed to join conversation:', err);
             }
-          },
-          error: (error) => {
-            console.error('Error getting conversation:', error);
-            // this.commonSvc.showError('Failed to open conversation');
           }
-        });
+          this.isLoading = false;
+        },
+        error: (err) => {
+          console.error('Failed to create conversation', err);
+          this.isLoading = false;
+        }
+      });
+  }
+}
+
+ async sendMessage(): Promise<void> {
+  if (!this.newMessage.trim() || !this.selectedConversation || this.isSendingFile) return;
+
+  if (!this.currentUserId) {
+    console.error('No current user ID available');
+    return;
+  }
+
+  const request: SendMessageRequest = {
+    conversationId: this.selectedConversation.id,
+    messageType: 'Text',
+    content: this.newMessage.trim(),
+    senderId: this.currentUserId
+  };
+
+  try {
+    this.isSendingFile = true;
+
+    // Show appropriate message based on connection state
+    if (this.chatSignalrService.isReconnecting()) {
+      console.log('Connection reconnecting, message will be sent when connection is restored');
+      // You could show a toast notification here
+    }
+
+    await this.chatSignalrService.sendMessage(request);
+    this.newMessage = '';
+  } catch (err: any) {
+    console.error('Failed to send message:', err);
+
+    // Check if it's a HubException with a specific message
+    if (err.message) {
+      if (err.message.includes('Conversation not found')) {
+        alert('Conversation not found. Please select the user again.');
+        this.selectedConversation = null;
+      } else if (err.message.includes('User not in conversation')) {
+        alert('You are no longer in this conversation.');
+        this.selectedConversation = null;
+      } else if (err.message.includes('Connection is Disconnected')) {
+        alert('Lost connection to chat. Trying to reconnect...');
+        // Try to restart connection
+        if (this.currentUserId) {
+          this.chatSignalrService.startConnection(this.currentUserId);
+        }
+      } else {
+        alert(`Failed to send message: ${err.message}`);
+      }
+    } else {
+      alert('Failed to send message. Please try again.');
+    }
+  } finally {
+    this.isSendingFile = false;
+  }
+}
+
+  selectConversation(conversation: any): void {
+    if (this.selectedConversation) {
+      this.chatSignalrService.leaveConversation(this.selectedConversation.id);
+    }
+
+    this.selectedConversation = conversation;
+
+    if (this.chatSignalrService.isConnected()) {
+      this.chatSignalrService.joinConversation(conversation.id);
     }
   }
-
-  loadMessages(conversationId: string): void {
-    this.isLoading = true;
-    this.chatService.getMessages(conversationId, this.currentPage)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (response: ApiResponse<Message[]>) => {
-          if (response.success) {
-            // Prepend older messages (they come in reverse chronological order)
-            const newMessages = response.data.reverse();
-            this.messages = [...newMessages, ...this.messages];
-            this.hasMoreMessages = response.data.length === 50; // page size
-
-            // Mark messages as read
-            if (this.messages.length > 0) {
-              this.markVisibleMessagesAsRead();
-            }
-          }
-          this.isLoading = false;
-        },
-        error: (error) => {
-          console.error('Error loading messages:', error);
-          this.isLoading = false;
-          // this.commonSvc.showError('Failed to load messages');
-        }
-      });
-  }
-
-  loadMoreMessages(): void {
-    if (!this.hasMoreMessages || this.isLoading || !this.selectedConversation) return;
-    this.currentPage++;
-    this.loadMessages(this.selectedConversation.id);
-  }
-
-  sendMessage(): void {
-    if (!this.newMessage.trim() || !this.selectedConversation || !this.selectedUser) return;
-
-    const request: SendMessageRequest = {
-      conversationId: this.selectedConversation.id,
-      messageType: 'Text',
-      content: this.newMessage.trim()
-    };
-
-    this.chatService.sendMessage(request)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (response: ApiResponse<Message>) => {
-          if (response.success) {
-            this.messages.push(response.data);
-            this.newMessage = '';
-
-            // Update user's last message in sidebar
-            const user = this.users.find(u => u.id === this.selectedUser?.id);
-            if (user) {
-              user.lastMessage = response.data.content;
-              user.lastMessageTime = this.formatMessageTime(new Date(response.data.sentAt));
-              user.lastMessageType = 'Text';
-            }
-
-            this.scrollToBottom();
-          }
-        },
-        error: (error) => {
-          console.error('Error sending message:', error);
-          // this.commonSvc.showError('Failed to send message');
-        }
-      });
-  }
-
   onFileSelected(event: any): void {
     const file = event.target.files[0];
     if (file) {
@@ -468,9 +502,8 @@ private companySubscription!: Subscription;
 
     this.isSendingFile = true;
 
-    // Check file size (10MB limit)
     if (file.size > 10 * 1024 * 1024) {
-      // this.commonSvc.showError('File size exceeds 10MB limit');
+      alert('File size exceeds 10MB limit');
       this.isSendingFile = false;
       return;
     }
@@ -483,6 +516,7 @@ private companySubscription!: Subscription;
         conversationId: this.selectedConversation!.id,
         messageType: file.type.startsWith('image/') ? 'Image' : 'File',
         content: '',
+        senderId: this.currentUserId,
         attachments: [{
           fileName: file.name,
           fileData: base64Data,
@@ -491,94 +525,109 @@ private companySubscription!: Subscription;
         }]
       };
 
-      this.chatService.sendMessage(request)
-        .pipe(takeUntil(this.destroy$))
-        .subscribe({
-          next: (response: ApiResponse<Message>) => {
-            if (response.success) {
-              this.messages.push(response.data);
-
-              // Update user's last message in sidebar
-              const user = this.users.find(u => u.id === this.selectedUser?.id);
-              if (user) {
-                user.lastMessage = file.type.startsWith('image/') ? '📷 Image' : `📎 ${file.name}`;
-                user.lastMessageTime = this.formatMessageTime(new Date());
-                user.lastMessageType = file.type.startsWith('image/') ? 'Image' : 'File';
-              }
-
-              this.scrollToBottom();
-            }
-            this.isSendingFile = false;
-          },
-          error: (error) => {
-            console.error('Error sending file:', error);
-            // this.commonSvc.showError('Failed to send file');
-            this.isSendingFile = false;
+      this.chatSignalrService.sendMessage(request)
+        .then(() => {
+          this.isSendingFile = false;
+          if (this.fileInput) {
+            this.fileInput.nativeElement.value = '';
           }
+        })
+        .catch(err => {
+          console.error('Failed to send file:', err);
+          this.isSendingFile = false;
         });
     };
     reader.readAsDataURL(file);
   }
 
-  onTyping(): void {
-    if (!this.selectedConversation) return;
-
-    if (this.typingTimeout) {
-      clearTimeout(this.typingTimeout);
-    }
-
-    this.signalRService.sendTypingIndicator(this.selectedConversation.id, true);
-
-    this.typingTimeout = setTimeout(() => {
-      this.signalRService.sendTypingIndicator(this.selectedConversation!.id, false);
-    }, 1000);
+  loadMoreMessages(): void {
+    if (!this.hasMoreMessages || this.isLoading || !this.selectedConversation) return;
+    this.currentPage++;
+    this.loadMessages(this.selectedConversation.id);
   }
 
-  private handleNewMessage(message: Message): void {
-    // Add message to current conversation if selected
-    if (this.selectedConversation?.id === message.conversationId) {
-      this.messages.push(message);
-      this.scrollToBottom();
+onTyping(): void {
+  if (!this.selectedConversation || !this.currentUserId) return;
 
-      // Mark message as read after a short delay
-      setTimeout(() => {
-        this.markMessageAsRead(message.id);
-      }, 1000);
-    }
-
-    // Update user's last message in sidebar
-    const user = this.users.find(u => u.userId === message.senderId);
-    if (user) {
-      user.lastMessage = message.messageType === 'Text' ? message.content :
-                        message.messageType === 'Image' ? '📷 Image' :
-                        `📎 ${message.fileName || 'File'}`;
-      user.lastMessageTime = this.formatMessageTime(new Date(message.sentAt));
-      user.lastMessageType = message.messageType;
-
-      if (this.selectedUser?.userId !== message.senderId) {
-        user.unreadCount++;
-        this.totalUnreadCount++;
-      }
-    } else {
-      // New user/conversation - refresh list
-      this.loadConversations();
-    }
+  if (this.typingTimeout) {
+    clearTimeout(this.typingTimeout);
   }
+
+  this.chatSignalrService.sendTypingIndicator(this.selectedConversation.id, true);
+
+  this.typingTimeout = setTimeout(() => {
+    if (this.selectedConversation) {
+      this.chatSignalrService.sendTypingIndicator(this.selectedConversation.id, false);
+    }
+    this.typingTimeout = null;
+  }, 2000); // Increased to 2 seconds
+}
+
+private handleNewMessage(message: any): void {
+
+  if (!message || !message.conversationId) {
+    console.warn('Invalid message received:', message);
+    return;
+  }
+
+  const conversationId = message.conversationId;
+  const isActiveConversation = this.selectedConversation?.id === conversationId;
+  const alreadyExists = this.messages?.some(m => m.id === message.id);
+  if (!alreadyExists && isActiveConversation) {
+    this.messages.push(message);
+    this.scrollToBottom();
+
+    setTimeout(() => {
+      this.markMessageAsRead(message.id);
+    }, 500);
+  }
+  const user = this.users?.find(u => u.conversationId === conversationId);
+
+  if (user) {
+
+    // Preview text
+    if (message.messageType === 'Text') {
+      user.lastMessage = message.content;
+    }
+    else if (message.messageType === 'Image') {
+      user.lastMessage = '📷 Image';
+    }
+    else {
+      user.lastMessage = `📎 ${message.attachments?.[0]?.fileName || 'File'}`;
+    }
+
+    user.lastMessageTime = this.formatMessageTime(
+      new Date(message.sentAt)
+    );
+
+    user.lastMessageType = message.messageType;
+
+    if (!isActiveConversation) {
+      user.unreadCount = (user.unreadCount || 0) + 1;
+
+      this.totalUnreadCount = this.users.reduce(
+        (sum, u) => sum + (u.unreadCount || 0),
+        0
+      );
+    }
+
+  } else {
+    // Conversation not found — reload once
+    console.warn('Conversation not found. Reloading...');
+    this.loadConversations();
+  }
+}
 
   private markMessageAsRead(messageId: string): void {
     if (!this.selectedConversation) return;
 
-    const request = {
-      messageId: messageId,
-      status: 'Read' as const
-    };
+    this.chatService.markMessagesAsRead(this.selectedConversation.id, [messageId])
+      .subscribe({
+        error: (err) => console.error('Failed to mark message as read:', err)
+      });
 
-    this.chatService.updateMessageStatus(request)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe();
-
-    // Notify others via SignalR
-    this.signalRService.markMessagesAsRead(this.selectedConversation.id, [messageId]);
+    this.chatSignalrService.markMessagesAsRead(this.selectedConversation.id, [messageId])
+      .catch(err => console.error('Failed to mark message as read via SignalR:', err));
   }
 
   private markVisibleMessagesAsRead(): void {
@@ -589,9 +638,9 @@ private companySubscription!: Subscription;
       .map(m => m.id);
 
     if (unreadMessages.length > 0) {
-      this.signalRService.markMessagesAsRead(this.selectedConversation.id, unreadMessages);
+      this.chatSignalrService.markMessagesAsRead(this.selectedConversation.id, unreadMessages)
+        .catch(err => console.error('Failed to mark messages as read:', err));
 
-      // Update status locally
       unreadMessages.forEach(id => {
         const msg = this.messages.find(m => m.id === id);
         if (msg) {
@@ -604,10 +653,7 @@ private companySubscription!: Subscription;
 
   private markConversationAsRead(): void {
     if (!this.selectedConversation) return;
-
-    this.chatService.markConversationAsRead(this.selectedConversation.id)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe();
+    // Implement if needed
   }
 
   private updateMessageStatus(messageId: string, status: string): void {
@@ -639,11 +685,16 @@ private companySubscription!: Subscription;
     }
   }
 
-  private addNewConversation(conversation: Conversation): void {
-    // Extract the other participant
-    const otherUser = conversation.participants[0];
+  private addNewConversation(conversation: any): void {
+    const otherUser = conversation.participants?.[0];
     if (otherUser && !this.users.find(u => u.userId === otherUser.userId)) {
-      this.users.unshift(otherUser);
+      const newUser = {
+        ...otherUser,
+        id: otherUser.userId,
+        conversationId: conversation.id,
+        avatarColor: this.commonService.getRandomColor()
+      };
+      this.users.unshift(newUser);
       this.filteredUsers = [...this.users];
     }
   }
@@ -654,18 +705,15 @@ private companySubscription!: Subscription;
 
   downloadAttachment(attachment: any): void {
     if (!attachment) return;
-
-    // Open in new tab or trigger download
     window.open(attachment.fileUrl, '_blank');
   }
 
-  viewImage(message: Message): void {
+  viewImage(message: any): void {
     this.selectedImage = {
       fileName: message.fileName || message.attachments?.[0]?.fileName,
       fileUrl: message.fileUrl || message.attachments?.[0]?.fileUrl
     };
 
-    // Show modal
     const modal = new bootstrap.Modal(document.getElementById('imageViewerModal'));
     modal.show();
   }
@@ -673,31 +721,23 @@ private companySubscription!: Subscription;
   startVoiceCall(): void {
     if (this.selectedUser) {
       console.log('Starting voice call with:', this.getUserDisplayName(this.selectedUser));
-      // Implement voice call logic
-      // this.commonSvc.showInfo('Voice call feature coming soon');
     }
   }
 
   startVideoCall(): void {
     if (this.selectedUser) {
       console.log('Starting video call with:', this.getUserDisplayName(this.selectedUser));
-      // Implement video call logic
-      // this.commonSvc.showInfo('Video call feature coming soon');
     }
   }
 
   showUserInfo(): void {
     if (this.selectedUser) {
       console.log('Showing info for:', this.getUserDisplayName(this.selectedUser));
-      // Implement user info modal
-      // this.commonSvc.showInfo('User info feature coming soon');
     }
   }
 
   showEmojiPicker(): void {
-    // Implement emoji picker
     console.log('Emoji picker clicked');
-    // this.commonSvc.showInfo('Emoji picker coming soon');
   }
 
   private scrollToBottom(): void {
@@ -726,160 +766,16 @@ private companySubscription!: Subscription;
       return `${hours}h ago`;
     }
     if (diffMinutes < 2880) return 'Yesterday';
-
     return messageDate.toLocaleDateString();
   }
 
-// Update transform method if needed (keep as is)
-private transformSSOUsersToChatUsers(users: any[]): ChatUser[] {
-  console.log('Users fetched from SSO:', users);
-  return users.map(user => ({
-    id: user.id,
-    userId: user.ssoUserId || user.id,
-    name: user.fullName || user.name || 'Unknown',
-    fullName: user.fullName || user.name || 'Unknown',
-    email: user.email || '',
-    isOnline: true,
-    online: true,
-    lastMessage: '',
-    lastMessageTime: '',
-    lastMessageType: '',
-    unreadCount: 0,
-    avatarColor: this.commonSvc.getRandomColor(),
-    status: 'Available',
-    clientId: user.clientId,
-    companyId: user.companyId
-  }));
-}
+  getFileSize(bytes: number | undefined | null): string {
+    if (!bytes || bytes === 0) return '0 Bytes';
 
-  private initializeConversations(): void {
-    if (this.users.length === 0) {
-      console.log('No users to initialize conversations');
-      this.isLoading = false;
-      return;
-    }
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-    console.log(`Initializing conversations for ${this.users.length} users`);
-
-    // Track how many conversations are initialized
-    let initializedCount = 0;
-    const totalUsers = this.users.length;
-
-    // Initialize conversation for each user
-    this.users.forEach(user => {
-      this.chatService.getOrCreateConversation(user.userId)
-        .pipe(takeUntil(this.destroy$))
-        .subscribe({
-          next: (response: ApiResponse<Conversation>) => {
-            initializedCount++;
-
-            if (response.success) {
-              console.log(`✅ Conversation initialized for user: ${user.fullName}`);
-
-              // Update user's conversation ID if needed
-              user.conversationId = response.data.id;
-            }
-
-            // Check if all conversations are initialized
-            if (initializedCount === totalUsers) {
-              this.onAllConversationsInitialized();
-            }
-          },
-          error: (error) => {
-            initializedCount++;
-            console.error(`❌ Error initializing conversation for user ${user.fullName}:`, error);
-
-            // Check if all conversations are initialized (even with errors)
-            if (initializedCount === totalUsers) {
-              this.onAllConversationsInitialized();
-            }
-          }
-        });
-    });
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
-
-   private onAllConversationsInitialized(): void {
-    console.log('✅ All conversations initialized');
-    this.isLoading = false;
-
-    // Load actual conversations from the server
-    this.loadConversationsFromServer();
-  }
-
-   private loadConversationsFromServer(): void {
-    console.log('Loading conversations from server...');
-
-    this.chatService.getConversations()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (response: ApiResponse<ChatUser[]>) => {
-          if (response.success && response.data.length > 0) {
-            console.log(`✅ Loaded ${response.data.length} conversations from server`);
-
-            // Merge server data with SSO user data
-            this.mergeConversationData(response.data);
-          } else {
-            console.log('No existing conversations found, using SSO users');
-            // Just use the SSO users we already have
-            this.filteredUsers = [...this.users];
-
-            if (this.users.length > 0 && !this.selectedUser) {
-              this.selectUser(this.users[0]);
-            }
-          }
-        },
-        error: (error) => {
-          console.error('Error loading conversations from server:', error);
-          // Still use SSO users even if server fails
-          this.filteredUsers = [...this.users];
-
-          if (this.users.length > 0 && !this.selectedUser) {
-            this.selectUser(this.users[0]);
-          }
-        }
-      });
-  }
-
-  private mergeConversationData(serverUsers: ChatUser[]): void {
-    // Create a map of server users by userId for quick lookup
-    const serverUserMap = new Map(serverUsers.map(u => [u.userId, u]));
-
-    // Merge server data with SSO users
-    this.users = this.users.map(ssoUser => {
-      const serverUser = serverUserMap.get(ssoUser.userId);
-      if (serverUser) {
-        // Merge server data (like lastMessage, unreadCount) with SSO user
-        return {
-          ...ssoUser,
-          lastMessage: serverUser.lastMessage || '',
-          lastMessageTime: serverUser.lastMessageTime || '',
-          lastMessageType: serverUser.lastMessageType || '',
-          unreadCount: serverUser.unreadCount || 0,
-          // Preserve conversation ID
-          conversationId: serverUser.conversationId
-        };
-      }
-      return ssoUser;
-    });
-
-    this.filteredUsers = [...this.users];
-
-    // Auto-select first user if none selected
-    if (this.users.length > 0 && !this.selectedUser) {
-      this.selectUser(this.users[0]);
-    }
-
-    // Load unread count
-    this.loadUnreadCount();
-  }
-  // Add this method to your ChatComponent
-getFileSize(bytes: number | undefined | null): string {
-  if (!bytes || bytes === 0) return '0 Bytes';
-
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
 }

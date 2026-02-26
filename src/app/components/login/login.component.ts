@@ -4,14 +4,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { forkJoin, Observable, of, Subject } from 'rxjs';
 import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
-import { ApplicationItem, SsoApiService, UserDetailsResponse } from '../../core/services/sso-api.service';
+import { SsoApiService } from '../../core/services/sso-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { StorageService } from '../../core/services/storage.service';
-import { CompanyUrlResponse, MeetUrlResponse } from '../../core/models/session.models';
 import { encryptValueSixteen } from '../../core/utils/encrypt';
 import { CommonService } from '../../core/services/common.service';
 import { SessionService } from '../../core/services/session.service';
-import { ChatService } from '../../core/services/chat.service';
+import { UserService } from '../../core/services/user.service';
 
 @Component({
   selector: 'app-login',
@@ -58,7 +57,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     private storageService: StorageService,
     private commonService: CommonService,
     private sessionService: SessionService,
-    private chatService: ChatService,
+    private userService: UserService,
     private router: Router
   ) { }
 
@@ -273,7 +272,33 @@ private loadPostLoginData(token: string, userinfo: string): void {
 
       // Sync users NOW before navigating
       this.loadingMessage = 'Syncing users...';
+      // return this.syncUsersBeforeNavigation(token, userinfo).pipe(
+      //   map(() => ({ meetUrl, companyUrl }))
+      // );
       return this.syncUsersBeforeNavigation(token, userinfo).pipe(
+        switchMap(() => {
+          const clientId = this.sessionService.getClientId() ?? '';
+          const companyId = this.sessionService.getCompanyId() ?? 0;
+
+          return this.userService.getOisMeetUsers(clientId, companyId);
+        }),
+        tap((res: any) => {
+          if (res?.success && res?.data?.length) {
+
+            const loggedInSSOUserId = this.sessionService.getUserId() || '';
+
+            const currentUser = res.data.find(
+              (u: any) => u.ssoUserId === loggedInSSOUserId
+            );
+
+            if (currentUser) {
+              this.storageService.setItem('oisMeetUserId', currentUser.id);
+              console.log('OIS Meet UserId stored:', currentUser.id);
+            } else {
+              console.warn('Logged-in user not found in OIS Users table');
+            }
+          }
+        }),
         map(() => ({ meetUrl, companyUrl }))
       );
     })
@@ -311,7 +336,7 @@ private syncUsersBeforeNavigation(token: string, userinfo: string): Observable<a
         }
 
         // Pass client and company to sync method
-        return this.chatService.syncSsoUsers(ssoUsers, client, companyId);
+        return this.userService.syncSsoUsers(ssoUsers, client, companyId);
       }),
       tap((response) => {
         if (response) {

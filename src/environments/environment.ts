@@ -18,5 +18,5 @@ export const environment = {
   // local environment
   apiBaseUrl: 'https://localhost:7235/api',
   ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_Dev/api',
-  signalRUrl: 'https://localhost:7235/hubs/meeting'
+  signalRUrl: 'https://localhost:7235/hubs',
 };

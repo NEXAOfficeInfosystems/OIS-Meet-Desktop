@@ -11,7 +11,7 @@ import { SsoApiService } from '../../../core/services/sso-api.service';
 import { StorageService } from '../../../core/services/storage.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog.component';
 import { switchMap } from 'rxjs';
-import { ChatService } from '../../../core/services/chat.service';
+import { UserService } from '../../../core/services/user.service';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -44,7 +44,7 @@ export class HeaderComponent {
     private commonService: CommonService,
     private ssoApiService: SsoApiService,
     private storageService: StorageService,
-    private chatService: ChatService,
+    private userService: UserService,
     private dialog: MatDialog
   ) {
     this.userFullName = this.sessionService.getFullName();
@@ -126,7 +126,7 @@ private resyncUsersForCompany(company: any) {
   this.ssoApiService.getSSOUserList(token, userinfo, client, company.companyId.toString(), appId)
     .pipe(
       switchMap((ssoUsers: any[]) => {
-        return this.chatService.syncSsoUsers(ssoUsers, client, company.companyId);
+        return this.userService.syncSsoUsers(ssoUsers, client, company.companyId);
       })
     )
     .subscribe({

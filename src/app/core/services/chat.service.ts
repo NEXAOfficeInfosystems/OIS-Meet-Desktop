@@ -1,91 +1,22 @@
+import { SessionService } from './session.service';
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-
-export interface ChatUser {
-  id: string;
-  userId: string;
-  name?: string;           // Keep for backward compatibility
-  fullName?: string;       // New property
-  email: string;
-  avatarColor: string;
-  isOnline: boolean;
-  online?: boolean;        // Keep for backward compatibility
-  lastSeen?: Date;
-  status: string;
-  lastMessage: string;
-  lastMessageTime: string;
-  lastMessageType?: string; // Added this property
-  unreadCount: number;
-  conversationId?: string;
-}
-
-export interface Message {
-  id: string;
-  conversationId: string;
-  senderId: string;
-  senderName: string;
-  messageType: 'Text' | 'Image' | 'File' | 'System';
-  content: string;
-  fileUrl?: string;
-  fileName?: string;
-  fileSize?: number;
-  sentAt: Date;
-  sentAtFormatted: string;
-  isRead: boolean;
-  isDelivered: boolean;
-  attachments?: Attachment[];
-}
-
-export interface Attachment {
-  id: string;
-  fileName: string;
-  fileUrl: string;
-  fileSize: number;
-  mimeType: string;
-  fileSizeFormatted: string;
-}
-
-export interface Conversation {
-  id: string;
-  conversationType: 'Direct' | 'Group';
-  conversationName?: string;
-  participants: ChatUser[];
-  lastMessage?: Message;
-  lastMessageAt?: Date;
-  unreadCount: number;
-}
 
 export interface SendMessageRequest {
   conversationId: string;
   messageType: 'Text' | 'Image' | 'File' | 'System';
   content: string;
-  attachments?: FileAttachment[];
+  replyToMessageId?: string;
+  attachments?: AttachmentDto[];
 }
 
-export interface FileAttachment {
+export interface AttachmentDto {
   fileName: string;
-  fileData: string; // Base64
+  fileData: string;
   fileSize: number;
   mimeType: string;
-}
-
-export interface TypingIndicatorRequest {
-  conversationId: string;
-  isTyping: boolean;
-}
-
-export interface MessageStatusUpdateRequest {
-  messageId: string;
-  status: 'Sent' | 'Delivered' | 'Read';
-}
-
-export interface ApiResponse<T> {
-  success: boolean;
-  message: string;
-  data: T;
-  errors?: string[];
 }
 
 @Injectable({
@@ -94,82 +25,93 @@ export interface ApiResponse<T> {
 export class ChatService {
   private apiUrl = `${environment.apiBaseUrl}/chat`;
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    private sessionService: SessionService
+  ) {}
 
-  getConversations(clientId?: string, companyId?: any) {
-    let params = new HttpParams();
+  private getHeaders(): HttpHeaders {
+    return new HttpHeaders({
+      'Content-Type': 'application/json'
+    });
+  }
 
-    if (clientId) {
-      params = params.set('clientId', clientId);
-    }
-    if (companyId) {
-      params = params.set('companyId', companyId.toString());
-    }
+  private getCurrentUserId(): string {
+    // Get the current user ID from your session service
+    // You need to implement this method in your session service
+    return this.sessionService.getOISMeetUserId() || '';
+  }
 
-    return this.http.get<ApiResponse<ChatUser[]>>(
-      `${environment.apiBaseUrl}/Conversation`,
-      { params }
+  getUsers(clientId: string, companyId: number): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    return this.http.get(`${this.apiUrl}/users`, {
+      headers: this.getHeaders(),
+      params: {
+        clientId,
+        companyId: companyId.toString(),
+        currentUserId: currentUserId
+      }
+    });
+  }
+
+  getConversations(): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    return this.http.get(`${this.apiUrl}/conversations`, {
+      headers: this.getHeaders(),
+      params: { currentUserId: currentUserId }
+    });
+  }
+
+  getMessages(conversationId: string, page: number = 1, pageSize: number = 50): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    return this.http.get(`${this.apiUrl}/messages/${conversationId}`, {
+      headers: this.getHeaders(),
+      params: {
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+        currentUserId: currentUserId
+      }
+    });
+  }
+
+  createOrGetDirectConversation(otherUserId: string): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    const requestBody = {
+      otherUserId: otherUserId,
+      currentUserId: currentUserId
+    };
+
+    return this.http.post(
+      `${this.apiUrl}/conversations/direct`,
+      requestBody,
+      {
+        headers: this.getHeaders()
+      }
     );
   }
 
-  getOrCreateConversation(otherUserId: string): Observable<ApiResponse<Conversation>> {
-    return this.http.get<ApiResponse<Conversation>>(`${this.apiUrl}/conversation/${otherUserId}`);
+  markMessagesAsRead(conversationId: string, messageIds: string[]): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    const requestBody = {
+      conversationId: conversationId,
+      messageIds: messageIds,
+      currentUserId: currentUserId
+    };
+
+    return this.http.post(
+      `${this.apiUrl}/messages/read`,
+      requestBody,
+      {
+        headers: this.getHeaders()
+      }
+    );
   }
 
-  getMessages(conversationId: string, page: number = 1, pageSize: number = 50): Observable<ApiResponse<Message[]>> {
-    return this.http.get<ApiResponse<Message[]>>(`${this.apiUrl}/messages/${conversationId}`, {
-      params: { page: page.toString(), pageSize: pageSize.toString() }
+  deleteMessage(messageId: string): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    return this.http.delete(`${this.apiUrl}/messages/${messageId}`, {
+      headers: this.getHeaders(),
+      params: { currentUserId: currentUserId }
     });
   }
-
-  sendMessage(request: SendMessageRequest): Observable<ApiResponse<Message>> {
-    return this.http.post<ApiResponse<Message>>(`${this.apiUrl}/messages/send`, request);
-  }
-
-  updateMessageStatus(request: MessageStatusUpdateRequest): Observable<ApiResponse<boolean>> {
-    return this.http.post<ApiResponse<boolean>>(`${this.apiUrl}/messages/status`, request);
-  }
-
-  updateTypingIndicator(request: TypingIndicatorRequest): Observable<ApiResponse<boolean>> {
-    return this.http.post<ApiResponse<boolean>>(`${this.apiUrl}/typing`, request);
-  }
-
-  markConversationAsRead(conversationId: string): Observable<ApiResponse<boolean>> {
-    return this.http.post<ApiResponse<boolean>>(`${this.apiUrl}/conversation/${conversationId}/read`, {});
-  }
-
-  getUnreadCount(): Observable<ApiResponse<number>> {
-    return this.http.get<ApiResponse<number>>(`${this.apiUrl}/unread/count`);
-  }
-
-  deleteMessage(messageId: string, deleteForEveryone: boolean = false): Observable<ApiResponse<boolean>> {
-    return this.http.delete<ApiResponse<boolean>>(`${this.apiUrl}/messages/${messageId}`, {
-      params: { deleteForEveryone: deleteForEveryone.toString() }
-    });
-  }
-
-  uploadFile(file: File): Observable<ApiResponse<Attachment>> {
-    const formData = new FormData();
-    formData.append('file', file);
-    return this.http.post<ApiResponse<Attachment>>(`${this.apiUrl}/upload`, formData);
-  }
-
-  syncSsoUsers(users: any[], clientId: string, companyId: any) {
-    const usersWithClientInfo = users.map(user => ({
-      ...user,
-      clientId: clientId,
-      companyId: companyId
-    }));
-    return this.http.post<ApiResponse<any>>(`${environment.apiBaseUrl}/User/sync-sso-users`, usersWithClientInfo );
-  }
-
-getOisMeetUsers(clientId: string, companyId: any) {
-  const params = new HttpParams()
-    .set('clientId', clientId)
-    .set('companyId', companyId.toString());
-  return this.http.get<ApiResponse<any[]>>(
-    `${environment.apiBaseUrl}/User`,
-    { params }
-  );
-}
 }

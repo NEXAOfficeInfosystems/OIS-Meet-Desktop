@@ -2,7 +2,6 @@ import { Injectable, NgZone } from '@angular/core';
 import * as signalR from '@microsoft/signalr';
 import { environment } from '../../../environments/environment';
 import { Subject } from 'rxjs';
-import { Message } from './chat.service';
 import { SessionService } from './session.service';
 
 export interface MeetingParticipant {
@@ -21,7 +20,7 @@ export class SignalRService {
   private hubConnection!: signalR.HubConnection;
 private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconnected';
   // Chat Subjects
-  private messageReceivedSubject = new Subject<Message>();
+  private messageReceivedSubject = new Subject<any>();
   private userTypingSubject = new Subject<{ userId: string; isTyping: boolean }>();
   private messageStatusSubject = new Subject<{ messageId: string; status: string; userId: string }>();
   private userOnlineSubject = new Subject<string>();
@@ -79,7 +78,7 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
     this.userName = this.sessionService.getFullName() || '';
   }
 
-  public async startConnection(userId?: string): Promise<void> {
+  public async startConnection(userId?: string | null): Promise<void> {
     // Check current state
     if (this.connectionState === 'connected' && this.hubConnection?.state === signalR.HubConnectionState.Connected) {
       console.log('SignalR already connected');
@@ -145,7 +144,7 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
     if (!this.hubConnection) return;
 
     // Chat Events
-    this.hubConnection.on('ReceiveMessage', (message: Message) => {
+    this.hubConnection.on('ReceiveMessage', (message: any) => {
       this.ngZone.run(() => this.messageReceivedSubject.next(message));
     });
 

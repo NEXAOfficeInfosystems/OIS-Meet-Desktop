@@ -184,11 +184,11 @@
                  [(ngModel)]="newMessage"
                  (keydown.enter)="sendMessage()"
                  (input)="onTyping()">
-          <div *ngIf="isTyping" class="typing-indicator">
+          <!-- <div *ngIf="isTyping" class="typing-indicator">
             <span></span>
             <span></span>
             <span></span>
-          </div>
+          </div> -->
         </div>
 
         <button class="btn btn-link text-primary send-btn"
