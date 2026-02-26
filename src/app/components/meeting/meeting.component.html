@@ -17,7 +17,7 @@
 
       <!-- Screen Share View (if active) -->
       <div class="screen-share-container" *ngIf="isScreenSharing">
-        <video #screenShareVideo autoplay playsinline></video>
+        <video #screenShareVideo autoplay playsinline [muted]="true"></video>
         <div class="screen-share-label">
           <i class="bi bi-display"></i>
           <span>Your Screen</span>
@@ -29,7 +29,7 @@
 
         <!-- LOCAL VIDEO - ALWAYS SHOW THIS (1 tile) -->
         <div class="video-tile local-video" [class.self-view]="true">
-          <video #localVideo autoplay playsinline muted></video>
+          <video #localVideo autoplay playsinline [muted]="true"></video>
 
           <!-- Video ON overlay -->
           <div class="participant-info" *ngIf="!isVideoOff">
