@@ -119,7 +119,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   ngAfterViewChecked() {
-    this.scrollToBottom();
+    if (this.shouldScroll) {
+      this.scrollToBottom();
+      this.shouldScroll = false;
+    }
   }
 
   ngOnDestroy() {
@@ -355,6 +358,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           if (res.success && res.data) {
             if (this.currentPage === 1) {
               this.messages = res.data;
+              this.shouldScroll = true;
+              this.scrollToBottom();
             } else {
               this.messages = [...res.data, ...this.messages];
             }
@@ -575,6 +580,7 @@ private handleNewMessage(message: any): void {
   const alreadyExists = this.messages?.some(m => m.id === message.id);
   if (!alreadyExists && isActiveConversation) {
     this.messages.push(message);
+    this.shouldScroll = true;
     this.scrollToBottom();
 
     setTimeout(() => {
@@ -740,11 +746,15 @@ private handleNewMessage(message: any): void {
     console.log('Emoji picker clicked');
   }
 
+  private shouldScroll = false;
+
   private scrollToBottom(): void {
     try {
       if (this.chatMessagesContainer) {
-        const element = this.chatMessagesContainer.nativeElement;
-        element.scrollTop = element.scrollHeight;
+        setTimeout(() => {
+          const element = this.chatMessagesContainer.nativeElement;
+          element.scrollTop = element.scrollHeight;
+        }, 0);
       }
     } catch (err) { }
   }

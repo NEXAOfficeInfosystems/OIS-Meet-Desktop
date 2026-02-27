@@ -12,6 +12,7 @@ import { SessionService } from '../../core/services/session.service';
 import { MeetingService } from '../../core/services/meeting.service';
 import { SignalRService, MeetingParticipant } from '../../core/services/signalr.service';
 import { StorageService } from '../../core/services/storage.service';
+import { AudioRecorderService } from '../../core/services/audio-recorder.service';
 
 @Component({
   selector: 'app-meeting',
@@ -78,7 +79,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     private clipboard: Clipboard,
     private meetingService: MeetingService,
     private signalRService: SignalRService,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private audioRecorderService: AudioRecorderService
   ) {
     this.userFullName = this.sessionService.getFullName() || 'User';
     this.oisMeetUserId = this.sessionService.getOISMeetUserId() || '';
@@ -191,10 +193,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     setTimeout(() => this.initializeTooltips(), 500);
   }
 
-  ngOnDestroy() {
+  async ngOnDestroy() {
     console.log('Destroying meeting component');
     this.stopTimer();
     this.tooltips.forEach(t => t.dispose());
+
+    if (this.isRecording) {
+      console.log('Stopping recording before destroy...');
+      await this.audioRecorderService.stopRecording();
+    }
+    this.audioRecorderService.dispose();
 
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(track => track.stop());
@@ -930,10 +938,61 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  toggleRecording() {
-    this.isRecording = !this.isRecording;
-    console.log('Recording toggled:', this.isRecording);
+  async toggleRecording() {
+    if (!this.isRecording) {
+      await this.startRecording();
+    } else {
+      await this.stopRecording();
+    }
     this.refreshTooltips();
+  }
+
+  private async startRecording() {
+    if (!this.mediaStream) {
+      this.snackBar.open('No audio stream available', 'Close', { duration: 3000 });
+      return;
+    }
+
+    const audioTracks = this.mediaStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      this.snackBar.open('No audio tracks available for recording', 'Close', { duration: 3000 });
+      return;
+    }
+
+    const started = await this.audioRecorderService.startRecording(this.mediaStream);
+
+    if (started) {
+      this.isRecording = true;
+      this.snackBar.open('Recording started', 'Close', { duration: 2000 });
+      console.log('🎙️ Meeting recording started');
+    } else {
+      this.snackBar.open('Failed to start recording', 'Close', { duration: 3000 });
+    }
+  }
+
+  private async stopRecording() {
+    const audioBlob = await this.audioRecorderService.stopRecording();
+
+    if (audioBlob) {
+      this.isRecording = false;
+      this.snackBar.open('Recording stopped. Saving...', 'Close', { duration: 2000 });
+
+      const result = await this.audioRecorderService.saveRecordingAsWav(audioBlob, this.meetingId);
+
+      if (result.success) {
+        if (result.filePath) {
+          this.snackBar.open(`Recording saved: ${result.filePath}`, 'Close', { duration: 5000 });
+        } else {
+          this.snackBar.open('Recording saved successfully', 'Close', { duration: 3000 });
+        }
+        console.log('🎙️ Meeting recording saved:', result.filePath);
+      } else if (!('canceled' in result) || !result.canceled) {
+        this.snackBar.open(`Failed to save recording: ${result.error}`, 'Close', { duration: 5000 });
+      }
+    } else {
+      this.isRecording = false;
+      this.snackBar.open('No recording data available', 'Close', { duration: 3000 });
+    }
   }
 
   async sendMessage() {

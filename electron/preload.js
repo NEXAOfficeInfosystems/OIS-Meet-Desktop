@@ -1,5 +1,13 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('oisMeet', {
-  // Placeholder for safe, future IPC APIs
+  isElectron: true,
+
+  saveAudioFile: (buffer, defaultFileName) => {
+    return ipcRenderer.invoke('save-audio-file', { buffer, defaultFileName });
+  },
+
+  getRecordingsPath: () => {
+    return ipcRenderer.invoke('get-recordings-path');
+  }
 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -43,4 +43,38 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+// IPC Handlers for Audio Recording
+ipcMain.handle('save-audio-file', async (event, { buffer, defaultFileName }) => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save Meeting Recording',
+      defaultPath: path.join(app.getPath('documents'), defaultFileName || 'meeting-recording.wav'),
+      filters: [
+        { name: 'WAV Audio', extensions: ['wav'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const uint8Array = new Uint8Array(buffer);
+    fs.writeFileSync(result.filePath, Buffer.from(uint8Array));
+
+    return { success: true, filePath: result.filePath };
+  } catch (error) {
+    console.error('Error saving audio file:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-recordings-path', () => {
+  const recordingsPath = path.join(app.getPath('documents'), 'OIS-Meet-Recordings');
+  if (!fs.existsSync(recordingsPath)) {
+    fs.mkdirSync(recordingsPath, { recursive: true });
+  }
+  return recordingsPath;
 });
