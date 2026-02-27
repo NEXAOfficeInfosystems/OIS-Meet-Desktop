@@ -16,7 +16,9 @@ declare global {
 export class AudioRecorderService {
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
-  private audioContext: AudioContext | null = null;
+  private recordingAudioContext: AudioContext | null = null;
+  private mixedDestination: MediaStreamAudioDestinationNode | null = null;
+  private audioSources: Map<string, MediaStreamAudioSourceNode> = new Map();
   private isRecording = false;
 
   get recording(): boolean {
@@ -27,7 +29,34 @@ export class AudioRecorderService {
     return !!(window.oisMeet?.isElectron);
   }
 
-  async startRecording(stream: MediaStream): Promise<boolean> {
+  /**
+   * Convenience method for meeting recording:
+   * - Mixes local microphone audio
+   * - Mixes all current remote participant audio elements (audio[id^="remote-audio-"])
+   */
+  async startRecordingFromMeeting(localStream: MediaStream): Promise<boolean> {
+    try {
+      // Collect remote streams from existing hidden <audio> elements
+      const remoteStreams = new Map<string, MediaStream>();
+      const remoteAudioElements = document.querySelectorAll<HTMLAudioElement>('audio[id^="remote-audio-"]');
+
+      remoteAudioElements.forEach((el) => {
+        const stream = el.srcObject as MediaStream | null;
+        if (stream) {
+          remoteStreams.set(el.id, stream);
+        }
+      });
+
+      console.log(`🎙️ Found ${remoteStreams.size} remote audio element(s) for recording`);
+
+      return this.startRecording(localStream, remoteStreams);
+    } catch (error) {
+      console.error('Failed to start meeting recording:', error);
+      return false;
+    }
+  }
+
+  async startRecording(localStream: MediaStream, remoteStreams?: Map<string, MediaStream>): Promise<boolean> {
     try {
       if (this.isRecording) {
         console.warn('Recording already in progress');
@@ -35,17 +64,41 @@ export class AudioRecorderService {
       }
 
       this.audioChunks = [];
+      this.audioSources.clear();
 
-      const audioTracks = stream.getAudioTracks();
-      if (audioTracks.length === 0) {
-        console.error('No audio tracks available in stream');
+      this.recordingAudioContext = new AudioContext();
+      this.mixedDestination = this.recordingAudioContext.createMediaStreamDestination();
+
+      const localAudioTracks = localStream.getAudioTracks();
+      if (localAudioTracks.length > 0) {
+        const localAudioStream = new MediaStream(localAudioTracks);
+        const localSource = this.recordingAudioContext.createMediaStreamSource(localAudioStream);
+        localSource.connect(this.mixedDestination);
+        this.audioSources.set('local', localSource);
+        console.log('🎙️ Added local audio to mixer');
+      }
+
+      if (remoteStreams) {
+        remoteStreams.forEach((stream, peerId) => {
+          const audioTracks = stream.getAudioTracks();
+          if (audioTracks.length > 0) {
+            const audioStream = new MediaStream(audioTracks);
+            const source = this.recordingAudioContext!.createMediaStreamSource(audioStream);
+            source.connect(this.mixedDestination!);
+            this.audioSources.set(peerId, source);
+            console.log(`🎙️ Added remote audio from ${peerId} to mixer`);
+          }
+        });
+      }
+
+      if (this.audioSources.size === 0) {
+        console.error('No audio sources available for recording');
+        this.cleanupRecordingContext();
         return false;
       }
 
-      const audioStream = new MediaStream(audioTracks);
-
       const mimeType = this.getSupportedMimeType();
-      this.mediaRecorder = new MediaRecorder(audioStream, {
+      this.mediaRecorder = new MediaRecorder(this.mixedDestination.stream, {
         mimeType,
         audioBitsPerSecond: 128000
       });
@@ -63,11 +116,44 @@ export class AudioRecorderService {
       this.mediaRecorder.start(1000);
       this.isRecording = true;
 
-      console.log('🎙️ Audio recording started');
+      console.log(`🎙️ Audio recording started with ${this.audioSources.size} audio source(s)`);
       return true;
     } catch (error) {
       console.error('Failed to start recording:', error);
+      this.cleanupRecordingContext();
       return false;
+    }
+  }
+
+  addRemoteStream(peerId: string, stream: MediaStream): void {
+    if (!this.isRecording || !this.recordingAudioContext || !this.mixedDestination) {
+      return;
+    }
+
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length > 0 && !this.audioSources.has(peerId)) {
+      try {
+        const audioStream = new MediaStream(audioTracks);
+        const source = this.recordingAudioContext.createMediaStreamSource(audioStream);
+        source.connect(this.mixedDestination);
+        this.audioSources.set(peerId, source);
+        console.log(`🎙️ Added new remote audio from ${peerId} to recording`);
+      } catch (error) {
+        console.error(`Failed to add remote stream ${peerId}:`, error);
+      }
+    }
+  }
+
+  removeRemoteStream(peerId: string): void {
+    const source = this.audioSources.get(peerId);
+    if (source) {
+      try {
+        source.disconnect();
+      } catch (e) {
+        // Ignore disconnect errors
+      }
+      this.audioSources.delete(peerId);
+      console.log(`🎙️ Removed remote audio from ${peerId} from recording`);
     }
   }
 
@@ -87,12 +173,30 @@ export class AudioRecorderService {
 
         this.audioChunks = [];
         this.isRecording = false;
+        this.cleanupRecordingContext();
 
         resolve(audioBlob);
       };
 
       this.mediaRecorder.stop();
     });
+  }
+
+  private cleanupRecordingContext(): void {
+    this.audioSources.forEach((source) => {
+      try {
+        source.disconnect();
+      } catch (e) {
+        // Ignore
+      }
+    });
+    this.audioSources.clear();
+
+    if (this.recordingAudioContext) {
+      this.recordingAudioContext.close().catch(() => {});
+      this.recordingAudioContext = null;
+    }
+    this.mixedDestination = null;
   }
 
   async saveRecordingAsWav(audioBlob: Blob, meetingId: string): Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }> {
@@ -119,10 +223,11 @@ export class AudioRecorderService {
   private async convertToWav(audioBlob: Blob): Promise<Blob> {
     const arrayBuffer = await audioBlob.arrayBuffer();
 
-    this.audioContext = new AudioContext();
-    const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+    const audioContext = new AudioContext();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
     const wavBuffer = this.audioBufferToWav(audioBuffer);
+    audioContext.close().catch(() => {});
     return new Blob([wavBuffer], { type: 'audio/wav' });
   }
 
@@ -216,10 +321,7 @@ export class AudioRecorderService {
   }
 
   dispose(): void {
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
+    this.cleanupRecordingContext();
     this.mediaRecorder = null;
     this.audioChunks = [];
     this.isRecording = false;

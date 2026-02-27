@@ -53,6 +53,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   participants: Participant[] = [];
   private peers: Map<string, any> = new Map();
   private remoteVideoElements: Map<string, HTMLVideoElement> = new Map();
+  private remoteAudioStreams: Map<string, MediaStream> = new Map();
 
   // Chat Messages
   chatMessages: ChatMessage[] = [];
@@ -193,16 +194,10 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     setTimeout(() => this.initializeTooltips(), 500);
   }
 
-  async ngOnDestroy() {
+  ngOnDestroy() {
     console.log('Destroying meeting component');
     this.stopTimer();
     this.tooltips.forEach(t => t.dispose());
-
-    if (this.isRecording) {
-      console.log('Stopping recording before destroy...');
-      await this.audioRecorderService.stopRecording();
-    }
-    this.audioRecorderService.dispose();
 
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(track => track.stop());
@@ -754,6 +749,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log('Adding remote media stream for:', userName);
 
+    // Track remote audio streams for recording
+    this.remoteAudioStreams.set(connectionId, stream);
+
     this.ngZone.run(() => {
       // For now we focus on AUDIO only: create (or reuse) a hidden <audio> element per connection.
       let audioElement = document.getElementById(`remote-audio-${connectionId}`) as HTMLAudioElement | null;
@@ -781,6 +779,10 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private removeRemoteVideo(connectionId: string) {
     console.log('Removing remote media stream for connection:', connectionId);
+
+    // Remove from tracked remote streams
+    this.remoteAudioStreams.delete(connectionId);
+
     const videoElement = this.remoteVideoElements.get(connectionId);
     if (videoElement) {
       try {
@@ -940,26 +942,31 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async toggleRecording() {
     if (!this.isRecording) {
-      await this.startRecording();
+      await this.startMeetingRecording();
     } else {
-      await this.stopRecording();
+      await this.stopMeetingRecording();
     }
     this.refreshTooltips();
   }
 
-  private async startRecording() {
+  private async startMeetingRecording() {
     if (!this.mediaStream) {
       this.snackBar.open('No audio stream available', 'Close', { duration: 3000 });
       return;
     }
 
     const audioTracks = this.mediaStream.getAudioTracks();
-    if (audioTracks.length === 0) {
-      this.snackBar.open('No audio tracks available for recording', 'Close', { duration: 3000 });
+    const hasLocalAudio = audioTracks.length > 0;
+    const hasRemoteAudio = this.remoteAudioStreams.size > 0;
+
+    if (!hasLocalAudio && !hasRemoteAudio) {
+      this.snackBar.open('No audio sources available for recording', 'Close', { duration: 3000 });
       return;
     }
 
-    const started = await this.audioRecorderService.startRecording(this.mediaStream);
+    console.log(`🎙️ Starting recording with local audio: ${hasLocalAudio}, remote streams: ${this.remoteAudioStreams.size}`);
+
+    const started = await this.audioRecorderService.startRecording(this.mediaStream, this.remoteAudioStreams);
 
     if (started) {
       this.isRecording = true;
@@ -970,7 +977,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private async stopRecording() {
+  private async stopMeetingRecording() {
     const audioBlob = await this.audioRecorderService.stopRecording();
 
     if (audioBlob) {
@@ -986,7 +993,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           this.snackBar.open('Recording saved successfully', 'Close', { duration: 3000 });
         }
         console.log('🎙️ Meeting recording saved:', result.filePath);
-      } else if (!('canceled' in result) || !result.canceled) {
+      } else if (!result.canceled) {
         this.snackBar.open(`Failed to save recording: ${result.error}`, 'Close', { duration: 5000 });
       }
     } else {
