@@ -207,6 +207,11 @@ export class AudioRecorderService {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const defaultFileName = `meeting-${meetingId}-${timestamp}.wav`;
 
+      // Send to transcription service (fire-and-forget, log result)
+      this.sendToTranscriptionService(wavBlob, defaultFileName).catch(err => {
+        console.error('Failed to send recording for transcription:', err);
+      });
+
       if (this.isElectron && window.oisMeet) {
         const result = await window.oisMeet.saveAudioFile(arrayBuffer, defaultFileName);
         return result;
@@ -217,6 +222,28 @@ export class AudioRecorderService {
     } catch (error: any) {
       console.error('Failed to save recording:', error);
       return { success: false, canceled: false, error: error.message };
+    }
+  }
+
+  private async sendToTranscriptionService(wavBlob: Blob, fileName: string): Promise<void> {
+    try {
+      const formData = new FormData();
+      formData.append('file', wavBlob, fileName);
+
+      const response = await fetch('http://20.64.87.203:8002/transcribe', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        console.error('Transcription request failed with status:', response.status, response.statusText);
+        return;
+      }
+
+      const data = await response.json();
+      console.log('Transcription response:', data);
+    } catch (error) {
+      console.error('Error calling transcription service:', error);
     }
   }
 
