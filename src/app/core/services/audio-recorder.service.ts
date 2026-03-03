@@ -1,4 +1,6 @@
 import { Injectable } from '@angular/core';
+import { Subject } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 declare global {
   interface Window {
@@ -6,7 +8,7 @@ declare global {
       isElectron: boolean;
       saveAudioFile: (buffer: ArrayBuffer, defaultFileName: string) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>;
       getRecordingsPath: () => Promise<string>;
-      transcribeAudioFile?: (buffer: ArrayBuffer, fileName: string) => Promise<{ success: boolean; status?: number; statusText?: string; data?: any; canceled?: boolean; error?: string }>;
+      transcribeAudioFile?: (buffer: ArrayBuffer, fileName: string, transcriptionUrl?: string) => Promise<{ success: boolean; status?: number; statusText?: string; data?: any; canceled?: boolean; error?: string }>;
     };
   }
 }
@@ -15,6 +17,9 @@ declare global {
   providedIn: 'root'
 })
 export class AudioRecorderService {
+  private transcriptionSubject = new Subject<any>();
+  readonly transcription$ = this.transcriptionSubject.asObservable();
+
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
   private recordingAudioContext: AudioContext | null = null;
@@ -228,16 +233,21 @@ export class AudioRecorderService {
 
   private async sendToTranscriptionService(wavBlob: Blob, fileName: string): Promise<void> {
     try {
+      const baseUrl = (environment.aiApiBaseUrl || '').replace(/\/$/, '');
+      const transcriptionUrl = `${baseUrl}:8002/transcribe`;
+
       if (this.isElectron && window.oisMeet?.transcribeAudioFile) {
         const arrayBuffer = await wavBlob.arrayBuffer();
-        const result = await window.oisMeet.transcribeAudioFile(arrayBuffer, fileName);
+        const result = await window.oisMeet.transcribeAudioFile(arrayBuffer, fileName, transcriptionUrl);
 
         if (!result?.success) {
           console.error('Transcription (Electron IPC) failed:', result);
+          this.transcriptionSubject.next({ status: 'error', error: result?.error || 'Transcription failed' });
           return;
         }
 
         console.log('Transcription response (Electron IPC):', result.data);
+        this.transcriptionSubject.next(result.data);
         return;
       }
 
@@ -245,21 +255,24 @@ export class AudioRecorderService {
       const formData = new FormData();
       formData.append('file', wavBlob, fileName);
 
-      const response = await fetch('http://20.64.87.203:8002/transcribe', {
+      const response = await fetch(transcriptionUrl, {
         method: 'POST',
         body: formData
       });
 
       if (!response.ok) {
         console.error('Transcription request failed with status:', response.status, response.statusText);
+        this.transcriptionSubject.next({ status: 'error', error: `Transcription request failed: ${response.status} ${response.statusText}` });
         return;
       }
 
       const contentType = response.headers.get('content-type') || '';
       const data = contentType.includes('application/json') ? await response.json() : await response.text();
       console.log('Transcription response:', data);
+      this.transcriptionSubject.next(data);
     } catch (error) {
       console.error('Error calling transcription service:', error);
+      this.transcriptionSubject.next({ status: 'error', error: error && (error as any).message ? (error as any).message : String(error) });
     }
   }
 
