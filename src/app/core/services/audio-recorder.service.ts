@@ -1,6 +1,19 @@
 import { Injectable } from '@angular/core';
-import { Subject } from 'rxjs';
-import { environment } from '../../../environments/environment';
+import { Observable, Subject } from 'rxjs';
+
+export interface TranscriptionSegment {
+  start: number;
+  end: number;
+  text: string;
+  speaker?: string;
+}
+
+export interface TranscriptionResponse {
+  filename?: string;
+  status?: 'success' | 'error' | 'loading' | string;
+  result?: TranscriptionSegment[];
+  error?: string;
+}
 
 declare global {
   interface Window {
@@ -8,7 +21,7 @@ declare global {
       isElectron: boolean;
       saveAudioFile: (buffer: ArrayBuffer, defaultFileName: string) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>;
       getRecordingsPath: () => Promise<string>;
-      transcribeAudioFile?: (buffer: ArrayBuffer, fileName: string, transcriptionUrl?: string) => Promise<{ success: boolean; status?: number; statusText?: string; data?: any; canceled?: boolean; error?: string }>;
+      transcribeAudioFile?: (buffer: ArrayBuffer, fileName: string) => Promise<TranscriptionResponse>;
     };
   }
 }
@@ -17,15 +30,15 @@ declare global {
   providedIn: 'root'
 })
 export class AudioRecorderService {
-  private transcriptionSubject = new Subject<any>();
-  readonly transcription$ = this.transcriptionSubject.asObservable();
-
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
   private recordingAudioContext: AudioContext | null = null;
   private mixedDestination: MediaStreamAudioDestinationNode | null = null;
   private audioSources: Map<string, MediaStreamAudioSourceNode> = new Map();
   private isRecording = false;
+
+  private transcriptionSubject = new Subject<TranscriptionResponse>();
+  readonly transcription$: Observable<TranscriptionResponse> = this.transcriptionSubject.asObservable();
 
   get recording(): boolean {
     return this.isRecording;
@@ -49,7 +62,9 @@ export class AudioRecorderService {
       remoteAudioElements.forEach((el) => {
         const stream = el.srcObject as MediaStream | null;
         if (stream) {
-          remoteStreams.set(el.id, stream);
+          // Use connectionId as key so it matches addRemoteStream/removeRemoteStream
+          const key = el.id.startsWith('remote-audio-') ? el.id.replace('remote-audio-', '') : el.id;
+          remoteStreams.set(key, stream);
         }
       });
 
@@ -73,6 +88,8 @@ export class AudioRecorderService {
       this.audioSources.clear();
 
       this.recordingAudioContext = new AudioContext();
+      // Some environments start in 'suspended' until a user gesture; resume defensively.
+      await this.recordingAudioContext.resume().catch(() => {});
       this.mixedDestination = this.recordingAudioContext.createMediaStreamDestination();
 
       const localAudioTracks = localStream.getAudioTracks();
@@ -227,52 +244,54 @@ export class AudioRecorderService {
       }
     } catch (error: any) {
       console.error('Failed to save recording:', error);
+      this.transcriptionSubject.next({
+        status: 'error',
+        error: error?.message || 'Failed to process recording'
+      });
       return { success: false, canceled: false, error: error.message };
     }
   }
 
   private async sendToTranscriptionService(wavBlob: Blob, fileName: string): Promise<void> {
     try {
-      const baseUrl = (environment.aiApiBaseUrl || '').replace(/\/$/, '');
-      const transcriptionUrl = `${baseUrl}:8002/transcribe`;
+      this.transcriptionSubject.next({ status: 'loading', filename: fileName });
 
+      // Electron: call from main process to avoid CORS
       if (this.isElectron && window.oisMeet?.transcribeAudioFile) {
-        const arrayBuffer = await wavBlob.arrayBuffer();
-        const result = await window.oisMeet.transcribeAudioFile(arrayBuffer, fileName, transcriptionUrl);
-
-        if (!result?.success) {
-          console.error('Transcription (Electron IPC) failed:', result);
-          this.transcriptionSubject.next({ status: 'error', error: result?.error || 'Transcription failed' });
-          return;
-        }
-
-        console.log('Transcription response (Electron IPC):', result.data);
-        this.transcriptionSubject.next(result.data);
+        const buffer = await wavBlob.arrayBuffer();
+        const data = await window.oisMeet.transcribeAudioFile(buffer, fileName);
+        console.log('Transcription response (electron):', data);
+        this.transcriptionSubject.next(data as TranscriptionResponse);
         return;
       }
 
-      // Browser fallback (will require the API to allow CORS, or a dev proxy)
       const formData = new FormData();
       formData.append('file', wavBlob, fileName);
 
-      const response = await fetch(transcriptionUrl, {
+      const response = await fetch('http://20.64.87.203:8002/transcribe', {
         method: 'POST',
         body: formData
       });
 
       if (!response.ok) {
         console.error('Transcription request failed with status:', response.status, response.statusText);
-        this.transcriptionSubject.next({ status: 'error', error: `Transcription request failed: ${response.status} ${response.statusText}` });
+        this.transcriptionSubject.next({
+          status: 'error',
+          filename: fileName,
+          error: `Transcription request failed (${response.status} ${response.statusText})`
+        });
         return;
       }
 
-      const contentType = response.headers.get('content-type') || '';
-      const data = contentType.includes('application/json') ? await response.json() : await response.text();
+      const data = await response.json();
       console.log('Transcription response:', data);
-      this.transcriptionSubject.next(data);
+
+      this.transcriptionSubject.next(data as TranscriptionResponse);
     } catch (error) {
       console.error('Error calling transcription service:', error);
-      this.transcriptionSubject.next({ status: 'error', error: error && (error as any).message ? (error as any).message : String(error) });
+
+      const message = error instanceof Error ? error.message : 'Error calling transcription service';
+      this.transcriptionSubject.next({ status: 'error', filename: fileName, error: message });
     }
   }
 

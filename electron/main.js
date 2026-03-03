@@ -79,49 +79,54 @@ ipcMain.handle('get-recordings-path', () => {
   return recordingsPath;
 });
 
-// IPC Handler for Transcription (bypasses renderer CORS)
-ipcMain.handle('transcribe-audio-file', async (_event, { buffer, fileName }) => {
+// IPC Handler for Transcription (avoid CORS by calling from main process)
+ipcMain.handle('transcribe-audio-file', async (event, { buffer, fileName }) => {
   try {
     const transcriptionUrl = 'http://20.64.87.203:8002/transcribe';
-    const safeFileName = fileName || `meeting-audio-${Date.now()}.wav`;
 
-    const fetchFn = globalThis.fetch;
-    const FormDataCtor = globalThis.FormData;
-    const BlobCtor = globalThis.Blob;
+    // buffer arrives as an ArrayBuffer from the renderer
+    const uint8Array = new Uint8Array(buffer);
 
-    if (!fetchFn || !FormDataCtor || !BlobCtor) {
-      throw new Error('Transcription requires global fetch/FormData/Blob (Electron 29+/Node 18+)');
-    }
+    // Build a minimal multipart/form-data request body (no extra deps)
+    const safeFileName = fileName || 'meeting-recording.wav';
+    const boundary = `----oismeet-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+    const header =
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="file"; filename="${safeFileName}"\r\n` +
+      `Content-Type: audio/wav\r\n\r\n`;
+    const footer = `\r\n--${boundary}--\r\n`;
 
-    // `buffer` is expected to be an ArrayBuffer from the renderer.
-    const uint8Array = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : new Uint8Array(buffer);
-    const blob = new BlobCtor([uint8Array], { type: 'audio/wav' });
+    const body = Buffer.concat([
+      Buffer.from(header, 'utf8'),
+      Buffer.from(uint8Array),
+      Buffer.from(footer, 'utf8')
+    ]);
 
-    const form = new FormDataCtor();
-    form.append('file', blob, safeFileName);
-
-    const response = await fetchFn(transcriptionUrl, {
+    const response = await fetch(transcriptionUrl, {
       method: 'POST',
-      body: form
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`
+      },
+      body
     });
 
-    const contentType = response.headers.get('content-type') || '';
-    const payload = contentType.includes('application/json')
-      ? await response.json()
-      : await response.text();
-
     if (!response.ok) {
+      const text = await response.text().catch(() => '');
       return {
-        success: false,
-        status: response.status,
-        statusText: response.statusText,
-        error: typeof payload === 'string' ? payload : JSON.stringify(payload)
+        filename: fileName,
+        status: 'error',
+        error: `Transcription request failed (${response.status} ${response.statusText})${text ? `: ${text}` : ''}`
       };
     }
 
-    return { success: true, status: response.status, data: payload };
+    const data = await response.json();
+    return data;
   } catch (error) {
-    console.error('Error transcribing audio file:', error);
-    return { success: false, error: error && error.message ? error.message : String(error) };
+    console.error('Error calling transcription service (main):', error);
+    return {
+      filename: fileName,
+      status: 'error',
+      error: error && error.message ? error.message : 'Error calling transcription service'
+    };
   }
 });

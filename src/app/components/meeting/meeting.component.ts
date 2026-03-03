@@ -6,14 +6,14 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Clipboard } from '@angular/cdk/clipboard';
 import * as bootstrap from 'bootstrap';
 import SimplePeer from 'simple-peer';
-import { Subscription } from 'rxjs';
+import { Subject, takeUntil } from 'rxjs';
 
 // Services
 import { SessionService } from '../../core/services/session.service';
 import { MeetingService } from '../../core/services/meeting.service';
 import { SignalRService, MeetingParticipant } from '../../core/services/signalr.service';
 import { StorageService } from '../../core/services/storage.service';
-import { AudioRecorderService } from '../../core/services/audio-recorder.service';
+import { AudioRecorderService, TranscriptionResponse, TranscriptionSegment } from '../../core/services/audio-recorder.service';
 
 @Component({
   selector: 'app-meeting',
@@ -60,14 +60,14 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   chatMessages: ChatMessage[] = [];
   newMessage: string = '';
 
-  // Chat sidebar tabs
-  activeChatTab: 'chat' | 'transcription' = 'chat';
+  // Chat Sidebar Tabs
+  activeSidebarTab: 'chat' | 'transcription' = 'chat';
 
   // Transcription
-  transcriptionResponse: TranscriptionResponse | null = null;
+  transcriptionSegments: TranscriptionSegment[] = [];
+  transcriptionLoading: boolean = false;
   transcriptionError: string | null = null;
-  isTranscriptionGenerating: boolean = false;
-  private transcriptionSub?: Subscription;
+  transcriptionFileName: string | null = null;
 
   // Grid Layout
   gridLayout: 'grid' | 'speaker' = 'grid';
@@ -81,6 +81,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private connectionId: string | null = null;
 
   private processedMessageIds: Set<string> = new Set();
+
+  private destroy$ = new Subject<void>();
 
   constructor(
     private route: ActivatedRoute,
@@ -96,26 +98,46 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     this.userFullName = this.sessionService.getFullName() || 'User';
     this.oisMeetUserId = this.sessionService.getOISMeetUserId() || '';
     // this.oisMeetUserId = this.storageService.getItem('oisMeetUserId') || this.oisMeetUserId;
+
+    this.audioRecorderService.transcription$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((data: TranscriptionResponse) => {
+        // Ensure UI updates even if callback occurs outside Angular zone
+        this.ngZone.run(() => {
+          if (data?.filename) {
+            this.transcriptionFileName = data.filename;
+          }
+
+          if (data?.status === 'loading') {
+            this.transcriptionLoading = true;
+            this.transcriptionError = null;
+            return;
+          }
+
+          if (data?.status === 'error') {
+            this.transcriptionLoading = false;
+            this.transcriptionError = data.error || 'Failed to generate transcription';
+            return;
+          }
+
+          // Treat anything with a result array as a completed transcription.
+          if (Array.isArray(data?.result)) {
+            this.transcriptionLoading = false;
+            this.transcriptionError = null;
+            this.transcriptionSegments = data.result;
+            return;
+          }
+
+          // If server returns an unexpected object, just stop loader.
+          if (this.transcriptionLoading) {
+            this.transcriptionLoading = false;
+          }
+        });
+      });
   }
 
   async ngOnInit() {
     console.log('🎥 MeetingComponent initialized');
-
-    this.transcriptionSub = this.audioRecorderService.transcription$.subscribe((data: any) => {
-      this.ngZone.run(() => {
-        // API returns: { filename, status, result: [{ start, end, text, speaker }] }
-        this.isTranscriptionGenerating = false;
-
-        if (data?.status === 'error' || data?.error) {
-          this.transcriptionError = data?.error || 'Transcription failed';
-          this.transcriptionResponse = null;
-          return;
-        }
-
-        this.transcriptionError = null;
-        this.transcriptionResponse = data as TranscriptionResponse;
-      });
-    });
 
     this.meetingId = this.route.snapshot.paramMap.get('meetingId') || '';
     this.isHost = this.route.snapshot.queryParamMap.get('host') === 'true';
@@ -130,6 +152,13 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     if (camParam === null) {
       this.isVideoOff = true;
     }
+
+    console.log('Meeting params:', {
+      meetingId: this.meetingId,
+      isHost: this.isHost,
+      isMuted: this.isMuted,
+      isVideoOff: this.isVideoOff
+    });
     if (!this.meetingId) {
       this.snackBar.open('Invalid meeting ID', 'Close', { duration: 3000 });
       this.router.navigate(['/chat']);
@@ -215,10 +244,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy() {
     console.log('Destroying meeting component');
+    this.destroy$.next();
+    this.destroy$.complete();
+
     this.stopTimer();
     this.tooltips.forEach(t => t.dispose());
-
-    this.transcriptionSub?.unsubscribe();
 
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(track => track.stop());
@@ -773,6 +803,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     // Track remote audio streams for recording
     this.remoteAudioStreams.set(connectionId, stream);
 
+    // If a recording is already in progress, dynamically add this stream to the mixer
+    this.audioRecorderService.addRemoteStream(connectionId, stream);
+
     this.ngZone.run(() => {
       // For now we focus on AUDIO only: create (or reuse) a hidden <audio> element per connection.
       let audioElement = document.getElementById(`remote-audio-${connectionId}`) as HTMLAudioElement | null;
@@ -803,6 +836,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Remove from tracked remote streams
     this.remoteAudioStreams.delete(connectionId);
+
+    // If recording, remove this stream from the mixer
+    this.audioRecorderService.removeRemoteStream(connectionId);
 
     const videoElement = this.remoteVideoElements.get(connectionId);
     if (videoElement) {
@@ -970,6 +1006,14 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     this.refreshTooltips();
   }
 
+  setSidebarTab(tab: 'chat' | 'transcription'): void {
+    this.activeSidebarTab = tab;
+
+    if (tab === 'chat') {
+      this.scrollChatToBottom();
+    }
+  }
+
   private async startMeetingRecording() {
     if (!this.mediaStream) {
       this.snackBar.open('No audio stream available', 'Close', { duration: 3000 });
@@ -987,7 +1031,15 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log(`🎙️ Starting recording with local audio: ${hasLocalAudio}, remote streams: ${this.remoteAudioStreams.size}`);
 
-    const started = await this.audioRecorderService.startRecording(this.mediaStream, this.remoteAudioStreams);
+    const started = await this.audioRecorderService.startRecordingFromMeeting(this.mediaStream);
+
+    // Fallback: also add any already-tracked remote streams (covers edge cases where
+    // DOM audio elements aren't found yet even though streams are present).
+    if (started && this.remoteAudioStreams.size > 0) {
+      this.remoteAudioStreams.forEach((stream, id) => {
+        this.audioRecorderService.addRemoteStream(id, stream);
+      });
+    }
 
     if (started) {
       this.isRecording = true;
@@ -999,20 +1051,18 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private async stopMeetingRecording() {
+    // Requirement: after stopping recording, open the sidebar and select Transcription tab
+    this.showChat = true;
+    this.activeSidebarTab = 'transcription';
+    this.transcriptionLoading = true;
+    this.transcriptionError = null;
+    this.transcriptionSegments = [];
+
     const audioBlob = await this.audioRecorderService.stopRecording();
 
     if (audioBlob) {
       this.isRecording = false;
       this.snackBar.open('Recording stopped. Saving...', 'Close', { duration: 2000 });
-
-      // Show a transcription generating indicator until the API responds
-      this.isTranscriptionGenerating = true;
-      this.transcriptionError = null;
-      this.transcriptionResponse = null;
-
-      // Auto-open sidebar and switch to Transcription tab
-      this.showChat = true;
-      this.activeChatTab = 'transcription';
 
       const result = await this.audioRecorderService.saveRecordingAsWav(audioBlob, this.meetingId);
 
@@ -1028,7 +1078,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     } else {
       this.isRecording = false;
-      this.isTranscriptionGenerating = false;
+      this.transcriptionLoading = false;
       this.snackBar.open('No recording data available', 'Close', { duration: 3000 });
     }
   }
@@ -1228,17 +1278,4 @@ interface ChatMessage {
   message: string;
   timestamp: Date;
   isMe: boolean;
-}
-
-interface TranscriptionSegment {
-  start: number;
-  end: number;
-  text: string;
-  speaker: string;
-}
-
-interface TranscriptionResponse {
-  filename?: string;
-  status?: string;
-  result?: TranscriptionSegment[];
 }

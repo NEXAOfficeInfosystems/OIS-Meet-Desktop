@@ -272,43 +272,70 @@
 
   <!-- Chat Sidebar -->
   <div class="chat-sidebar" *ngIf="showChat && !isLoading">
-    <div class="sidebar-header" style="padding: 0 10px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px;">
-        <ul class="nav nav-underline" style="flex: 1;">
-          <li class="nav-item">
-            <button type="button" class="nav-link" [class.active]="activeChatTab === 'chat'"
-                    (click)="activeChatTab = 'chat'">
-              Chat
-            </button>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link" [class.active]="activeChatTab === 'transcription'"
-                    (click)="activeChatTab = 'transcription'">
-              Transcription
-            </button>
-          </li>
-        </ul>
+    <div class="sidebar-header" style="display: flex; align-items: center; gap: 8px;">
+      <ul class="nav nav-underline" style="flex: 1; margin-bottom: 0;">
+        <li class="nav-item">
+          <button type="button" class="nav-link" [class.active]="activeSidebarTab === 'chat'" (click)="setSidebarTab('chat')">
+            Chat
+          </button>
+        </li>
+        <li class="nav-item">
+          <button type="button" class="nav-link" [class.active]="activeSidebarTab === 'transcription'" (click)="setSidebarTab('transcription')">
+            Transcription
+          </button>
+        </li>
+      </ul>
 
-        <button class="btn-close" (click)="showChat = false"></button>
-      </div>
+      <button class="btn-close" (click)="showChat = false"></button>
     </div>
 
-    <!-- Chat tab -->
-    <div class="chat-messages" #chatMessagesContainer *ngIf="activeChatTab === 'chat'">
-      <div class="message" *ngFor="let msg of chatMessages" [class.my-message]="msg.isMe">
-        <div class="message-sender">{{ msg.sender }}</div>
-        <div class="message-content">{{ msg.message }}</div>
-        <div class="message-time">{{ msg.timestamp | date:'shortTime' }}</div>
-      </div>
+    <div class="chat-messages" #chatMessagesContainer>
+      <ng-container *ngIf="activeSidebarTab === 'chat'">
+        <div class="message" *ngFor="let msg of chatMessages" [class.my-message]="msg.isMe">
+          <div class="message-sender">{{ msg.sender }}</div>
+          <div class="message-content">{{ msg.message }}</div>
+          <div class="message-time">{{ msg.timestamp | date:'shortTime' }}</div>
+        </div>
 
-      <!-- Empty State -->
-      <div class="no-messages" *ngIf="chatMessages.length === 0" style="text-align: center; color: #666; padding: 32px;">
-        <i class="bi bi-chat-dots" style="font-size: 48px; margin-bottom: 8px; display: block;"></i>
-        <span>No messages yet</span>
-      </div>
+        <!-- Empty State -->
+        <div class="no-messages" *ngIf="chatMessages.length === 0" style="text-align: center; color: #666; padding: 32px;">
+          <i class="bi bi-chat-dots" style="font-size: 48px; margin-bottom: 8px; display: block;"></i>
+          <span>No messages yet</span>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="activeSidebarTab === 'transcription'">
+        <!-- Loader while transcription is generated -->
+        <div class="no-messages" *ngIf="transcriptionLoading" style="text-align: center; color: #666; padding: 32px;">
+          <div class="spinner-border text-primary" role="status" style="width: 2rem; height: 2rem; margin-bottom: 12px;"></div>
+          <div>Generating transcription...</div>
+        </div>
+
+        <!-- Error state -->
+        <div class="no-messages" *ngIf="!transcriptionLoading && transcriptionError" style="text-align: center; color: #666; padding: 32px;">
+          <i class="bi bi-exclamation-triangle" style="font-size: 40px; margin-bottom: 8px; display: block;"></i>
+          <div>{{ transcriptionError }}</div>
+        </div>
+
+        <!-- Result list -->
+        <div *ngFor="let seg of transcriptionSegments" style="padding: 12px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+          <div style="display: flex; gap: 12px; color: #9aa0a6; font-size: 12px; margin-bottom: 6px;">
+            <span>{{ seg.start | number:'1.0-3' }}</span>
+            <span>{{ seg.speaker || 'Speaker' }}</span>
+          </div>
+          <div style="white-space: pre-wrap;">{{ seg.text }}</div>
+        </div>
+
+        <!-- Empty state (when not loading) -->
+        <div class="no-messages" *ngIf="!transcriptionLoading && !transcriptionError && transcriptionSegments.length === 0"
+             style="text-align: center; color: #666; padding: 32px;">
+          <i class="bi bi-mic" style="font-size: 48px; margin-bottom: 8px; display: block;"></i>
+          <span>No transcription yet</span>
+        </div>
+      </ng-container>
     </div>
 
-    <div class="chat-input" *ngIf="activeChatTab === 'chat'">
+    <div class="chat-input" *ngIf="activeSidebarTab === 'chat'">
       <div class="input-group">
         <input type="text" class="form-control" placeholder="Send a message to everyone"
                [(ngModel)]="newMessage" (keydown.enter)="sendMessage()"
@@ -321,38 +348,6 @@
       <small class="text-muted" style="display: block; margin-top: 4px;" *ngIf="meetingDetails?.settings?.allowChat === false">
         Chat is disabled by host
       </small>
-    </div>
-
-    <!-- Transcription tab -->
-    <div class="chat-messages" *ngIf="activeChatTab === 'transcription'" style="padding: 0 10px;">
-      <div style="font-weight: 600;">Transcription Preview</div>
-      <div style="color: #999;">Meeting Id - {{ meetingId }}</div>
-
-      <div *ngIf="isTranscriptionGenerating" style="text-align: center; color: #666; padding: 24px 0;">
-        <div class="spinner-border spinner-border-sm text-primary" role="status">
-          <span class="visually-hidden">Loading...</span>
-        </div>
-        <div style="margin-top: 8px;">Generating transcription...</div>
-      </div>
-
-      <div class="no-messages" *ngIf="!isTranscriptionGenerating && transcriptionError"
-           style="text-align: center; color: #666; padding: 24px 0;">
-        <i class="bi bi-exclamation-triangle" style="font-size: 32px; margin-bottom: 8px; display: block;"></i>
-        <span>{{ transcriptionError }}</span>
-      </div>
-
-      <div class="no-messages" *ngIf="!isTranscriptionGenerating && !transcriptionError && (!transcriptionResponse?.result || transcriptionResponse?.result?.length === 0)"
-           style="text-align: center; color: #666; padding: 32px;">
-        <i class="bi bi-file-text" style="font-size: 48px; margin-bottom: 8px; display: block;"></i>
-        <span>No transcription yet</span>
-      </div>
-
-      <div class="message" *ngFor="let seg of transcriptionResponse?.result">
-        <div class="message-sender">
-          {{ seg.start | number:'1.3-3' }} &nbsp;&nbsp; {{ seg.speaker }}
-        </div>
-        <div class="message-content">{{ seg.text }}</div>
-      </div>
     </div>
   </div>
 </div>
