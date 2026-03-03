@@ -6,6 +6,7 @@ declare global {
       isElectron: boolean;
       saveAudioFile: (buffer: ArrayBuffer, defaultFileName: string) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>;
       getRecordingsPath: () => Promise<string>;
+      transcribeAudioFile?: (buffer: ArrayBuffer, fileName: string) => Promise<{ success: boolean; status?: number; statusText?: string; data?: any; canceled?: boolean; error?: string }>;
     };
   }
 }
@@ -227,6 +228,20 @@ export class AudioRecorderService {
 
   private async sendToTranscriptionService(wavBlob: Blob, fileName: string): Promise<void> {
     try {
+      if (this.isElectron && window.oisMeet?.transcribeAudioFile) {
+        const arrayBuffer = await wavBlob.arrayBuffer();
+        const result = await window.oisMeet.transcribeAudioFile(arrayBuffer, fileName);
+
+        if (!result?.success) {
+          console.error('Transcription (Electron IPC) failed:', result);
+          return;
+        }
+
+        console.log('Transcription response (Electron IPC):', result.data);
+        return;
+      }
+
+      // Browser fallback (will require the API to allow CORS, or a dev proxy)
       const formData = new FormData();
       formData.append('file', wavBlob, fileName);
 
@@ -240,7 +255,8 @@ export class AudioRecorderService {
         return;
       }
 
-      const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await response.json() : await response.text();
       console.log('Transcription response:', data);
     } catch (error) {
       console.error('Error calling transcription service:', error);

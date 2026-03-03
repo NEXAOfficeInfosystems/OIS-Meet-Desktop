@@ -4,9 +4,8 @@ export const environment = {
 
   // Dev environment
   apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/api',
-  ssoApiBaseUrl: 'https://www.officeinfosystems.com/OISSSOAPI/api',
-  signalRUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/hubs'
-
+  ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_Dev/api',
+  signalRUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/hubs',
   // QA environment
   // apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_QA/api',
   // ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_QA/api',

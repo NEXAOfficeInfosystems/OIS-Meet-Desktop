@@ -9,5 +9,9 @@ contextBridge.exposeInMainWorld('oisMeet', {
 
   getRecordingsPath: () => {
     return ipcRenderer.invoke('get-recordings-path');
+  },
+
+  transcribeAudioFile: (buffer, fileName) => {
+    return ipcRenderer.invoke('transcribe-audio-file', { buffer, fileName });
   }
 });
