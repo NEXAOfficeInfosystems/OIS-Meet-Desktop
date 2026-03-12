@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 export interface TranscriptionSegment {
   start: number;
@@ -21,7 +22,7 @@ declare global {
       isElectron: boolean;
       saveAudioFile: (buffer: ArrayBuffer, defaultFileName: string) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>;
       getRecordingsPath: () => Promise<string>;
-      transcribeAudioFile?: (buffer: ArrayBuffer, fileName: string) => Promise<TranscriptionResponse>;
+      transcribeAudioFile?: (buffer: ArrayBuffer, fileName: string, aiApiBaseUrl?: string) => Promise<TranscriptionResponse>;
     };
   }
 }
@@ -256,10 +257,14 @@ export class AudioRecorderService {
     try {
       this.transcriptionSubject.next({ status: 'loading', filename: fileName });
 
+      const aiApiBaseUrl = (environment.aiApiBaseUrl || '').toString().trim().replace(/\/+$/, '');
+      const transcribeUrl = `${aiApiBaseUrl}/transcribe`;
+
       // Electron: call from main process to avoid CORS
       if (this.isElectron && window.oisMeet?.transcribeAudioFile) {
         const buffer = await wavBlob.arrayBuffer();
-        const data = await window.oisMeet.transcribeAudioFile(buffer, fileName);
+        const data = await window.oisMeet.transcribeAudioFile(buffer, fileName, aiApiBaseUrl);
+        console.log('AI Base URL used for transcription Service:', aiApiBaseUrl);
         console.log('Transcription response (electron):', data);
         this.transcriptionSubject.next(data as TranscriptionResponse);
         return;
@@ -268,7 +273,7 @@ export class AudioRecorderService {
       const formData = new FormData();
       formData.append('file', wavBlob, fileName);
 
-      const response = await fetch('http://20.64.87.203:8002/transcribe', {
+      const response = await fetch(transcribeUrl, {
         method: 'POST',
         body: formData
       });

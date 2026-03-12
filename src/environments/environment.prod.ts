@@ -1,12 +1,13 @@
 export const environment = {
   production: true,
   secretkey: 'ce6834aa-049f-46a8-806c-fb36cdf22d84',
+  // aiApiBaseUrl: 'http://20.64.87.203',
+  aiApiBaseUrl: 'https://ai.nexaois.com:4433',
 
   // Dev environment
   apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/api',
   ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_Dev/api',
   signalRUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/hubs',
-  aiApiBaseUrl: 'http://20.64.87.203',
 
   // QA environment
   // apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_QA/api',

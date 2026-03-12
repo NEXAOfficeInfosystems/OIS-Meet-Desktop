@@ -1,8 +1,21 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-
+// TEMP SSL BYPASS
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 let mainWindow;
+
+function normalizeHttpBaseUrl(value, fallback) {
+  const candidate = (typeof value === 'string' ? value : '').trim();
+  const selected = candidate || fallback;
+  const trimmed = selected.trim().replace(/\/+$/, '');
+
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return fallback.replace(/\/+$/, '');
+  }
+
+  return trimmed;
+}
 
 function createMainWindow() {
   const iconPath = path.join(__dirname, 'assets', 'icon.ico');
@@ -80,10 +93,14 @@ ipcMain.handle('get-recordings-path', () => {
 });
 
 // IPC Handler for Transcription (avoid CORS by calling from main process)
-ipcMain.handle('transcribe-audio-file', async (event, { buffer, fileName }) => {
+ipcMain.handle('transcribe-audio-file', async (event, { buffer, fileName, aiApiBaseUrl }) => {
   try {
-    const transcriptionUrl = 'http://20.64.87.203:8002/transcribe';
-
+    const normalizedAiApiBaseUrl = normalizeHttpBaseUrl(
+      aiApiBaseUrl,
+      process.env.AI_API_BASE_URL || 'https://ai.nexaois.com:4433'
+    );
+    const transcriptionUrl = `${normalizedAiApiBaseUrl}/transcribe`;
+console.log('AI Base URL used for transcription Main.js:', transcriptionUrl);
     // buffer arrives as an ArrayBuffer from the renderer
     const uint8Array = new Uint8Array(buffer);
 
