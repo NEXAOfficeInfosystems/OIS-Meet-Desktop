@@ -5,6 +5,24 @@ const fs = require('fs');
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 let mainWindow;
 
+function safeFileName(value, fallback) {
+  const candidate = (typeof value === 'string' ? value : '').trim();
+  const selected = candidate || fallback;
+  // Replace characters invalid on Windows and also trim trailing dots/spaces.
+  return selected
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+    .replace(/[.\s]+$/g, '')
+    .slice(0, 180) || fallback;
+}
+
+function formatDateDdMmYyyy(date) {
+  const d = date instanceof Date ? date : new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(d.getFullYear());
+  return `${dd}-${mm}-${yyyy}`;
+}
+
 function normalizeHttpBaseUrl(value, fallback) {
   const candidate = (typeof value === 'string' ? value : '').trim();
   const selected = candidate || fallback;
@@ -90,6 +108,111 @@ ipcMain.handle('get-recordings-path', () => {
     fs.mkdirSync(recordingsPath, { recursive: true });
   }
   return recordingsPath;
+});
+
+// IPC Handler for saving transcript text file (auto-save to recordings folder)
+ipcMain.handle('save-transcript-text-file', async (event, { content, defaultFileName }) => {
+  try {
+    const recordingsPath = path.join(app.getPath('documents'), 'OIS-Meet-Recordings');
+    if (!fs.existsSync(recordingsPath)) {
+      fs.mkdirSync(recordingsPath, { recursive: true });
+    }
+
+    const fileName = safeFileName(defaultFileName, `meeting-transcript-${Date.now()}.txt`);
+    const filePath = path.join(recordingsPath, fileName);
+
+    const text = typeof content === 'string' ? content : '';
+    fs.writeFileSync(filePath, text, { encoding: 'utf8' });
+
+    return { success: true, filePath };
+  } catch (error) {
+    console.error('Error saving transcript text file:', error);
+    return { success: false, error: error && error.message ? error.message : 'Failed to save transcript file' };
+  }
+});
+
+// IPC Handler for Generate MoM (avoid CORS by calling from main process)
+ipcMain.handle('generate-mom', async (event, { meetingId, date, momTemplateName, transcriptFilePath, aiApiBaseUrl }) => {
+  try {
+    const normalizedAiApiBaseUrl = normalizeHttpBaseUrl(
+      aiApiBaseUrl,
+      process.env.AI_API_BASE_URL || 'https://ai.nexaois.com:4433'
+    );
+    const generateMomUrl = `${normalizedAiApiBaseUrl}/generate-mom`;
+
+    const resolvedTranscriptPath = typeof transcriptFilePath === 'string' ? transcriptFilePath : '';
+    if (!resolvedTranscriptPath || !fs.existsSync(resolvedTranscriptPath)) {
+      return {
+        status: 'error',
+        error: 'Transcript file not found'
+      };
+    }
+
+    const transcriptBuffer = fs.readFileSync(resolvedTranscriptPath);
+    const transcriptUploadName = safeFileName(path.basename(resolvedTranscriptPath), 'meeting-transcription.txt');
+
+    const boundary = `----oismeet-mom-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+    const meetingIdValue = typeof meetingId === 'string' ? meetingId : '';
+    const dateValue = typeof date === 'string' && date.trim() ? date.trim() : formatDateDdMmYyyy(new Date());
+    const momTemplateValue = typeof momTemplateName === 'string' && momTemplateName.trim() ? momTemplateName.trim() : 'investor';
+
+    const parts = [];
+    const addField = (name, value) => {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="${name}"\r\n\r\n` +
+        `${value}\r\n`,
+        'utf8'
+      ));
+    };
+
+    addField('meeting_id', meetingIdValue);
+    addField('date', dateValue);
+    addField('mom_template_name', momTemplateValue);
+
+    parts.push(Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="transcript_file"; filename="${transcriptUploadName}"\r\n` +
+      `Content-Type: text/plain\r\n\r\n`,
+      'utf8'
+    ));
+    parts.push(Buffer.from(transcriptBuffer));
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'));
+
+    const body = Buffer.concat(parts);
+
+    const response = await fetch(generateMomUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`
+      },
+      body
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    const payload = contentType.includes('application/json')
+      ? await response.json().catch(() => null)
+      : await response.text().catch(() => '');
+
+    if (!response.ok) {
+      return {
+        status: 'error',
+        error: `Generate MoM request failed (${response.status} ${response.statusText})`,
+        details: payload
+      };
+    }
+
+    return {
+      status: 'success',
+      result: payload
+    };
+  } catch (error) {
+    console.error('Error calling generate-mom service (main):', error);
+    return {
+      status: 'error',
+      error: error && error.message ? error.message : 'Error calling generate-mom service'
+    };
+  }
 });
 
 // IPC Handler for Transcription (avoid CORS by calling from main process)

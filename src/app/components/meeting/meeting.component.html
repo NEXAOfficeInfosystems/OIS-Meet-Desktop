@@ -305,6 +305,15 @@
       </ng-container>
 
       <ng-container *ngIf="activeSidebarTab === 'transcription'">
+        <div style="display: flex; justify-content: flex-end; padding: 10px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+          <button type="button" class="btn btn-sm btn-primary"
+                  (click)="downloadMomPdf()"
+                  [disabled]="!hasMomPdf() || momPdfGenerating">
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" *ngIf="momPdfGenerating" style="margin-right: 8px;"></span>
+            Download MoM (PDF)
+          </button>
+        </div>
+
         <!-- Loader while transcription is generated -->
         <div class="no-messages" *ngIf="transcriptionLoading" style="text-align: center; color: #666; padding: 32px;">
           <div class="spinner-border text-primary" role="status" style="width: 2rem; height: 2rem; margin-bottom: 12px;"></div>

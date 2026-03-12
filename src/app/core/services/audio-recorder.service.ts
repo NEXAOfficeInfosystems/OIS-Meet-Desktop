@@ -23,6 +23,14 @@ declare global {
       saveAudioFile: (buffer: ArrayBuffer, defaultFileName: string) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>;
       getRecordingsPath: () => Promise<string>;
       transcribeAudioFile?: (buffer: ArrayBuffer, fileName: string, aiApiBaseUrl?: string) => Promise<TranscriptionResponse>;
+      saveTranscriptTextFile?: (content: string, defaultFileName: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+      generateMom?: (payload: {
+        meetingId: string;
+        date: string;
+        momTemplateName: string;
+        transcriptFilePath: string;
+        aiApiBaseUrl?: string;
+      }) => Promise<{ status: string; result?: any; error?: string; details?: any }>;
     };
   }
 }

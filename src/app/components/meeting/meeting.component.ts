@@ -8,12 +8,16 @@ import * as bootstrap from 'bootstrap';
 import SimplePeer from 'simple-peer';
 import { Subject, takeUntil } from 'rxjs';
 
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
 // Services
 import { SessionService } from '../../core/services/session.service';
 import { MeetingService } from '../../core/services/meeting.service';
 import { SignalRService, MeetingParticipant } from '../../core/services/signalr.service';
 import { StorageService } from '../../core/services/storage.service';
 import { AudioRecorderService, TranscriptionResponse, TranscriptionSegment } from '../../core/services/audio-recorder.service';
+import { MomGeneratorService } from '../../core/services/mom-generator.service';
 
 @Component({
   selector: 'app-meeting',
@@ -69,6 +73,10 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   transcriptionError: string | null = null;
   transcriptionFileName: string | null = null;
 
+  // MoM
+  momApiResponse: any = null;
+  momPdfGenerating: boolean = false;
+
   // Grid Layout
   gridLayout: 'grid' | 'speaker' = 'grid';
 
@@ -81,6 +89,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private connectionId: string | null = null;
 
   private processedMessageIds: Set<string> = new Set();
+  private processedTranscriptionFiles: Set<string> = new Set();
 
   private destroy$ = new Subject<void>();
 
@@ -93,7 +102,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     private meetingService: MeetingService,
     private signalRService: SignalRService,
     private ngZone: NgZone,
-    private audioRecorderService: AudioRecorderService
+    private audioRecorderService: AudioRecorderService,
+    private momGeneratorService: MomGeneratorService
   ) {
     this.userFullName = this.sessionService.getFullName() || 'User';
     this.oisMeetUserId = this.sessionService.getOISMeetUserId() || '';
@@ -125,6 +135,31 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             this.transcriptionLoading = false;
             this.transcriptionError = null;
             this.transcriptionSegments = data.result;
+
+            // Fire-and-forget: save transcript to .txt (named by meetingId) and call generate-mom.
+            // Run once per transcription filename to avoid duplicate calls.
+            const transcriptionKey = `${this.meetingId || 'unknown'}::${data?.filename || 'no-filename'}`;
+            if (!this.processedTranscriptionFiles.has(transcriptionKey) && this.meetingId) {
+              this.processedTranscriptionFiles.add(transcriptionKey);
+
+              this.momGeneratorService
+                .generateMomFromTranscription({
+                  meetingId: this.meetingId,
+                  segments: data.result,
+                  sourceAudioFileName: data.filename,
+                  momTemplateName: 'investor'
+                  // momTemplateName: 'scrum'
+                })
+                .then((momResponse) => {
+                  this.ngZone.run(() => {
+                    this.momApiResponse = momResponse;
+                  });
+                  console.log('Generate MoM response:', momResponse);
+                })
+                .catch((err) => {
+                  console.error('Generate MoM failed:', err);
+                });
+            }
             return;
           }
 
@@ -134,6 +169,385 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         });
       });
+  }
+
+  downloadMomPdf(): void {
+    if (this.momPdfGenerating) {
+      return;
+    }
+
+    const momPayload = this.extractMomPayload(this.momApiResponse);
+    if (!momPayload) {
+      console.warn('MoM data not available yet.');
+      return;
+    }
+
+    this.momPdfGenerating = true;
+    try {
+      const meetingId = this.safeString(momPayload.meeting_id || this.meetingId || 'meeting');
+      const date = this.safeString(momPayload.date || '');
+      const title = this.safeString(momPayload.meeting_title || meetingId || 'Minutes of Meeting');
+      const location = this.safeString(momPayload.location || '');
+      const objective = this.safeString(momPayload.objective || '');
+
+      const doc = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.text('Minutes of Meeting (MoM)', 105, 14, { align: 'center' });
+
+      doc.setFontSize(12);
+      doc.text(title, 105, 22, { align: 'center' });
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text(`Meeting ID: ${meetingId}`, 14, 30);
+      if (date) {
+        doc.text(`Date: ${date}`, 150, 30);
+      }
+
+      let cursorY = 34;
+
+      autoTable(doc, {
+        startY: cursorY,
+        theme: 'grid',
+        styles: { font: 'helvetica', fontSize: 9, cellPadding: 2 },
+        headStyles: { fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: 35 },
+          1: { cellWidth: 150 }
+        },
+        body: [
+          ['Objective', objective || '-'],
+          ['Location', location || 'Virtual Meeting']
+        ]
+      });
+
+      cursorY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 6 : cursorY + 22;
+
+      const attendees: string[] = Array.isArray(momPayload.attendees) ? momPayload.attendees : [];
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Attendees', 14, cursorY);
+      cursorY += 3;
+
+      autoTable(doc, {
+        startY: cursorY,
+        theme: 'striped',
+        styles: { font: 'helvetica', fontSize: 9, cellPadding: 2 },
+        body: (attendees.length ? attendees : ['-']).map((a) => [this.safeString(a)])
+      });
+      cursorY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 8 : cursorY + 20;
+
+      // Agenda
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Agenda', 14, cursorY);
+      cursorY += 6;
+
+      const agendaItems: any[] = Array.isArray(momPayload.agenda_items) ? momPayload.agenda_items : [];
+      if (!agendaItems.length) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('-', 14, cursorY);
+        cursorY += 6;
+      } else {
+        agendaItems.forEach((agenda, index) => {
+          cursorY = this.ensurePdfSpace(doc, cursorY, 18);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.text(`${index + 1}. ${this.safeString(agenda?.item || '')}`, 14, cursorY);
+          cursorY += 5;
+
+          const discussion: string[] = Array.isArray(agenda?.discussion_summary) ? agenda.discussion_summary : [];
+          const takeaways: string[] = Array.isArray(agenda?.key_takeaways) ? agenda.key_takeaways : [];
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+
+          if (discussion.length) {
+            cursorY = this.writePdfBulletList(doc, cursorY, discussion, 'Discussion');
+          }
+          if (takeaways.length) {
+            cursorY = this.writePdfBulletList(doc, cursorY, takeaways, 'Key takeaways');
+          }
+
+          cursorY += 3;
+        });
+      }
+
+      // Decisions
+      cursorY = this.ensurePdfSpace(doc, cursorY, 18);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Decisions Made', 14, cursorY);
+      cursorY += 6;
+      const decisionsRaw: any[] = Array.isArray(momPayload.decisions_made) ? momPayload.decisions_made : [];
+      if (!decisionsRaw.length) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('-', 14, cursorY);
+        cursorY += 6;
+      } else {
+        const first = decisionsRaw[0];
+        const isObjectArray = first && typeof first === 'object' && !Array.isArray(first);
+
+        if (isObjectArray) {
+          autoTable(doc, {
+            startY: cursorY,
+            theme: 'grid',
+            styles: { font: 'helvetica', fontSize: 9, cellPadding: 2 },
+            headStyles: { fontStyle: 'bold' },
+            head: [['Decision #', 'Description', 'Decision Maker', 'Date Made']],
+            body: decisionsRaw.map((d: any, idx: number) => [
+              this.safeString(d?.decision_number || `D-${String(idx + 1).padStart(3, '0')}`),
+              this.safeString(d?.description || '-'),
+              this.safeString(d?.decision_maker || '-'),
+              this.safeString(d?.date_made || '-')
+            ]),
+            columnStyles: {
+              0: { cellWidth: 22 },
+              1: { cellWidth: 88 },
+              2: { cellWidth: 40 },
+              3: { cellWidth: 35 }
+            }
+          });
+          cursorY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 8 : cursorY + 30;
+        } else {
+          const decisions = decisionsRaw.map((v) => this.safeString(v)).map((s) => s.trim()).filter(Boolean);
+          cursorY = this.writePdfBulletList(doc, cursorY, decisions.length ? decisions : ['-']);
+        }
+      }
+
+      // Action items table
+      cursorY = this.ensurePdfSpace(doc, cursorY, 22);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Action Items', 14, cursorY);
+      cursorY += 4;
+
+      const actionItems: any[] = Array.isArray(momPayload.action_items) ? momPayload.action_items : [];
+      autoTable(doc, {
+        startY: cursorY,
+        theme: 'grid',
+        styles: { font: 'helvetica', fontSize: 9, cellPadding: 2 },
+        headStyles: { fontStyle: 'bold' },
+        head: [['#', 'Description', 'Owner', 'Due Date', 'Status']],
+        body: (actionItems.length ? actionItems : [{}]).map((ai, idx) => [
+          this.safeString(ai?.item_number ?? idx + 1),
+          this.safeString(ai?.description || ai?.item || '-'),
+          this.safeString(ai?.owner || '-'),
+          this.safeString(ai?.due_date || '-'),
+          this.safeString(ai?.status || '-')
+        ]),
+        columnStyles: {
+          0: { cellWidth: 10 },
+          1: { cellWidth: 90 },
+          2: { cellWidth: 30 },
+          3: { cellWidth: 30 },
+          4: { cellWidth: 25 }
+        }
+      });
+
+      cursorY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 8 : cursorY + 30;
+
+      // Metrics updates
+      cursorY = this.ensurePdfSpace(doc, cursorY, 18);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Metrics Updates', 14, cursorY);
+      cursorY += 6;
+      const metricsUpdates = this.normalizeStringArray(momPayload.metrics_updates);
+      if (!metricsUpdates.length) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('-', 14, cursorY);
+        cursorY += 6;
+      } else {
+        cursorY = this.writePdfBulletList(doc, cursorY, metricsUpdates);
+      }
+
+      // Next steps
+      cursorY = this.ensurePdfSpace(doc, cursorY, 18);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Next Steps', 14, cursorY);
+      cursorY += 6;
+      const nextSteps = this.normalizeStringArray(momPayload.next_steps);
+      if (!nextSteps.length) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('-', 14, cursorY);
+        cursorY += 6;
+      } else {
+        cursorY = this.writePdfBulletList(doc, cursorY, nextSteps);
+      }
+
+      // Next meeting
+      cursorY = this.ensurePdfSpace(doc, cursorY, 18);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Next Meeting', 14, cursorY);
+      cursorY += 6;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text(this.safeString(momPayload.next_meeting || '-'), 14, cursorY);
+      cursorY += 8;
+
+      // Annexes
+      cursorY = this.ensurePdfSpace(doc, cursorY, 18);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Annexes', 14, cursorY);
+      cursorY += 6;
+      const annexes = this.normalizeStringArray(momPayload.annexes);
+      if (!annexes.length) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('-', 14, cursorY);
+        cursorY += 6;
+      } else {
+        cursorY = this.writePdfBulletList(doc, cursorY, annexes);
+      }
+
+      // Approval
+      cursorY = this.ensurePdfSpace(doc, cursorY, 22);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Approval', 14, cursorY);
+      cursorY += 4;
+      const approval = momPayload.approval && typeof momPayload.approval === 'object' ? momPayload.approval : null;
+      autoTable(doc, {
+        startY: cursorY,
+        theme: 'grid',
+        styles: { font: 'helvetica', fontSize: 9, cellPadding: 2 },
+        columnStyles: {
+          0: { cellWidth: 45 },
+          1: { cellWidth: 140 }
+        },
+        body: [
+          ['Prepared By', this.safeString(approval?.prepared_by || '-')],
+          ['Prepared Date', this.safeString(approval?.prepared_date || '-')],
+          ['Reviewed By', this.safeString(approval?.reviewed_by || '-')],
+          ['Reviewed Date', this.safeString(approval?.reviewed_date || '-')]
+        ]
+      });
+      cursorY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 8 : cursorY + 26;
+
+      // Distribution list
+      cursorY = this.ensurePdfSpace(doc, cursorY, 18);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Distribution List', 14, cursorY);
+      cursorY += 6;
+      const distributionList = this.normalizeStringArray(momPayload.distribution_list);
+      if (!distributionList.length) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('-', 14, cursorY);
+        cursorY += 6;
+      } else {
+        cursorY = this.writePdfBulletList(doc, cursorY, distributionList);
+      }
+
+      // Final download
+      const fileName = `${meetingId}-mom.pdf`;
+      doc.save(fileName);
+    } catch (error) {
+      console.error('Failed to generate MoM PDF:', error);
+    } finally {
+      this.momPdfGenerating = false;
+    }
+  }
+
+  hasMomPdf(): boolean {
+    return !!this.extractMomPayload(this.momApiResponse);
+  }
+
+  private extractMomPayload(apiResponse: any): any | null {
+    // Expected shapes:
+    // 1) { status: 'success', result: { mom: {...} } }
+    // 2) { status: 'success', result: { result: { mom: {...} } } }
+    const root = apiResponse && typeof apiResponse === 'object' ? apiResponse : null;
+    const level1 = root?.result;
+
+    const candidate1 = level1?.mom;
+    if (candidate1 && typeof candidate1 === 'object') {
+      return candidate1;
+    }
+
+    const candidate2 = level1?.result?.mom;
+    if (candidate2 && typeof candidate2 === 'object') {
+      return candidate2;
+    }
+
+    return null;
+  }
+
+  private safeString(value: any): string {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    return String(value);
+  }
+
+  private ensurePdfSpace(doc: jsPDF, cursorY: number, neededMm: number): number {
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const bottomMargin = 12;
+    if (cursorY + neededMm > pageHeight - bottomMargin) {
+      doc.addPage();
+      return 14;
+    }
+    return cursorY;
+  }
+
+  private writePdfBulletList(doc: jsPDF, cursorY: number, items: string[], title?: string): number {
+    cursorY = this.ensurePdfSpace(doc, cursorY, 10);
+
+    if (title) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text(`${title}:`, 14, cursorY);
+      cursorY += 5;
+    }
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+
+    const maxWidth = 180;
+    for (const raw of items) {
+      const text = this.safeString(raw).trim();
+      if (!text) {
+        continue;
+      }
+
+      const wrapped = doc.splitTextToSize(text, maxWidth);
+      cursorY = this.ensurePdfSpace(doc, cursorY, wrapped.length * 5 + 2);
+      doc.text('•', 16, cursorY);
+      doc.text(wrapped, 20, cursorY);
+      cursorY += wrapped.length * 5 + 1;
+    }
+
+    return cursorY;
+  }
+
+  private normalizeStringArray(value: any): string[] {
+    if (!value) {
+      return [];
+    }
+    if (Array.isArray(value)) {
+      return value.map((v) => this.safeString(v)).map((s) => s.trim()).filter(Boolean);
+    }
+    // Some APIs may return a single string.
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed ? [trimmed] : [];
+    }
+    return [];
   }
 
   async ngOnInit() {

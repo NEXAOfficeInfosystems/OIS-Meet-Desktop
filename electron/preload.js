@@ -13,5 +13,13 @@ contextBridge.exposeInMainWorld('oisMeet', {
 
   transcribeAudioFile: (buffer, fileName, aiApiBaseUrl) => {
     return ipcRenderer.invoke('transcribe-audio-file', { buffer, fileName, aiApiBaseUrl });
+  },
+
+  saveTranscriptTextFile: (content, defaultFileName) => {
+    return ipcRenderer.invoke('save-transcript-text-file', { content, defaultFileName });
+  },
+
+  generateMom: ({ meetingId, date, momTemplateName, transcriptFilePath, aiApiBaseUrl }) => {
+    return ipcRenderer.invoke('generate-mom', { meetingId, date, momTemplateName, transcriptFilePath, aiApiBaseUrl });
   }
 });
