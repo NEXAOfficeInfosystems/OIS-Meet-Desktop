@@ -705,19 +705,24 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async initializeMedia() {
     try {
-      const startWithAudio = !this.isMuted; // only true if you want mic ON at join
+      // Always obtain an audio track once, then control mute via track.enabled.
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false
+      });
+      console.log('Got initial audio stream');
 
-      if (startWithAudio) {
-        // User wants mic ON at join
-        this.mediaStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-          video: false
-        });
-        console.log('Got initial audio stream with mic ON');
-      } else {
-        // Join fully muted: NO mic access yet, OS icon stays off
-        this.mediaStream = new MediaStream(); // empty stream for SimplePeer
-        console.log('Joining muted: no audio track requested yet');
+      const startWithAudio = !this.isMuted; // derived from query params
+      const audioTracks = this.mediaStream.getAudioTracks();
+      audioTracks.forEach(track => {
+        track.enabled = startWithAudio;
+      });
+
+      // Bind to local video element (muted so it does not echo).
+      if (this.localVideo) {
+        this.localVideo.nativeElement.muted = true;
+        this.localVideo.nativeElement.volume = 0;
+        this.localVideo.nativeElement.srcObject = this.mediaStream;
       }
 
       await this.signalRService.joinMeeting(
@@ -1269,43 +1274,33 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (this.mediaStream) {
       const audioTracks = this.mediaStream.getAudioTracks();
-      if (!this.isMuted) {
-        // Unmuting: enable audio track or add if missing
-        if (audioTracks.length === 0) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-              audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-            });
-            const newTrack = stream.getAudioTracks()[0];
-            // Remove all old audio tracks (should be none)
-            this.mediaStream.getAudioTracks().forEach(track => this.mediaStream!.removeTrack(track));
+
+      if (audioTracks.length === 0 && !this.isMuted) {
+        // Defensive: if we somehow lost the track, re-acquire mic once.
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+          });
+          const newTrack = stream.getAudioTracks()[0];
+          if (newTrack) {
             this.mediaStream.addTrack(newTrack);
-            // Destroy and recreate all peers with the new stream
-            this.peers.forEach(peer => peer.destroy());
-            this.peers.clear();
-            this.participants.forEach(p => {
-              if (p.connectionId && p.connectionId !== this.connectionId) {
-                this.createPeer(p.connectionId, p.name, true);
-              }
-            });
-            // Optionally update local video element if used
-            if (this.localVideo) {
-              this.localVideo.nativeElement.muted = true;
-              this.localVideo.nativeElement.volume = 0;
-              this.localVideo.nativeElement.srcObject = this.mediaStream;
-            }
-            console.log('Peers recreated with new audio track after unmuting.');
-          } catch (err) {
-            console.error('Error accessing microphone:', err);
-            this.isMuted = true;
-            this.snackBar.open('Microphone access denied', 'Close', { duration: 3000 });
           }
-        } else {
-          audioTracks.forEach(track => (track.enabled = true));
+
+          if (this.localVideo) {
+            this.localVideo.nativeElement.muted = true;
+            this.localVideo.nativeElement.volume = 0;
+            this.localVideo.nativeElement.srcObject = this.mediaStream;
+          }
+        } catch (err) {
+          console.error('Error accessing microphone:', err);
+          this.isMuted = true;
+          this.snackBar.open('Microphone access denied', 'Close', { duration: 3000 });
         }
       } else {
-        // Muting: disable audio track
-        audioTracks.forEach(track => (track.enabled = false));
+        // Normal case: just toggle the existing track(s).
+        audioTracks.forEach(track => {
+          track.enabled = !this.isMuted;
+        });
       }
     }
 
