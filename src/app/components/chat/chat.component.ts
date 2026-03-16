@@ -172,8 +172,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     const clientId = this.sessionService.getClientId() ?? '';
     const companyId = this.sessionService.getCompanyId() ?? 0;
+    const appId = this.sessionService.getMeetAppId() ?? '';
 
-    this.userService.getOisMeetUsers(clientId, companyId)
+    this.userService.getOisMeetUsers(clientId, companyId, appId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {

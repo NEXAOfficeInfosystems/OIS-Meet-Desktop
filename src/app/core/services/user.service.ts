@@ -21,24 +21,30 @@ export class UserService {
   constructor(private http: HttpClient) { }
 
   //  Sync SSO Users
-  syncSsoUsers(users: any[], clientId: string, companyId: any): Observable<ApiResponse<any>> {
+  syncSsoUsers(users: any[], clientId: string, companyId: any, appId: string): Observable<ApiResponse<any>> {
+
     const usersWithClientInfo = users.map(user => ({
       ...user,
       clientId,
       companyId
     }));
 
+    const params = new HttpParams()
+      .set('appId', appId);
+
     return this.http.post<ApiResponse<any>>(
       `${this.apiUrl}/sync-sso-users`,
-      usersWithClientInfo
+      usersWithClientInfo,
+      { params }
     );
   }
 
   // Get Users
-  getOisMeetUsers(clientId: string, companyId: any): Observable<ApiResponse<any[]>> {
+  getOisMeetUsers(clientId: string, companyId: any, appId: string): Observable<ApiResponse<any[]>> {
     const params = new HttpParams()
       .set('clientId', clientId)
-      .set('companyId', companyId.toString());
+      .set('companyId', companyId.toString())
+      .set('appId', appId);
 
     return this.http.get<ApiResponse<any[]>>(
       `${this.apiUrl}`,

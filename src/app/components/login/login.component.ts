@@ -232,9 +232,8 @@ private loadPostLoginData(token: string, userinfo: string): void {
         .pipe(
           switchMap((apps: any[]) => {
             const meetApp = apps.find(app =>
-              app.Code === 'DMS' ||
-              app.Code === 'OISVault' ||
-              app.Code === 'Vault'
+              app.Code === 'Meet' ||
+              app.Code === 'OISMeet'
             );
 
             if (!meetApp?.ApplicationId) {
@@ -279,8 +278,9 @@ private loadPostLoginData(token: string, userinfo: string): void {
         switchMap(() => {
           const clientId = this.sessionService.getClientId() ?? '';
           const companyId = this.sessionService.getCompanyId() ?? 0;
+          const appId = this.sessionService.getMeetAppId() ?? '';
 
-          return this.userService.getOisMeetUsers(clientId, companyId);
+          return this.userService.getOisMeetUsers(clientId, companyId, appId);
         }),
         tap((res: any) => {
           if (res?.success && res?.data?.length) {
@@ -336,7 +336,7 @@ private syncUsersBeforeNavigation(token: string, userinfo: string): Observable<a
         }
 
         // Pass client and company to sync method
-        return this.userService.syncSsoUsers(ssoUsers, client, companyId);
+        return this.userService.syncSsoUsers(ssoUsers, client, companyId,appId);
       }),
       tap((response) => {
         if (response) {

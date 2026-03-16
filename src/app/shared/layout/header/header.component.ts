@@ -126,7 +126,7 @@ private resyncUsersForCompany(company: any) {
   this.ssoApiService.getSSOUserList(token, userinfo, client, company.companyId.toString(), appId)
     .pipe(
       switchMap((ssoUsers: any[]) => {
-        return this.userService.syncSsoUsers(ssoUsers, client, company.companyId);
+        return this.userService.syncSsoUsers(ssoUsers, client, company.companyId, appId);
       })
     )
     .subscribe({
