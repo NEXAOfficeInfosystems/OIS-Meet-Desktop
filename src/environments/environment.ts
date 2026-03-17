@@ -14,6 +14,12 @@ export const environment = {
   ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_QA/api',
   signalRUrl: 'https://www.nexaois.com/OISMeetAPI_QA/hubs',
 
+  // LiveKit (SFU) for scalable audio/screen-share (50+ users)
+  // When enabled, media goes via LiveKit; SignalR remains for presence/chat.
+  livekitEnabled: true,
+  // Example: 'wss://your-livekit-domain:7880' or LiveKit Cloud URL.
+  livekitUrl: 'wss://ois-meet-3nnqexmr.livekit.cloud',
+
   //Live environment
   // apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_LIVE/api',
   // ssoApiBaseUrl: 'https://www.officeinfosystems.com/OISSSOAPI/api',
@@ -23,4 +29,13 @@ export const environment = {
   // apiBaseUrl: 'https://localhost:7235/api',
   // ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_Dev/api',
   // signalRUrl: 'https://localhost:7235/hubs',
+
+  // WebRTC
+  // Note: Many corporate/mobile networks require a TURN server to relay media.
+  // Add your TURN server(s) here when available.
+  webrtcTrickleIce: true,
+  webrtcIceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]
 };

@@ -11,6 +11,8 @@ import { Subject, takeUntil } from 'rxjs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+import { environment } from '../../../environments/environment';
+
 // Services
 import { SessionService } from '../../core/services/session.service';
 import { MeetingService } from '../../core/services/meeting.service';
@@ -18,6 +20,7 @@ import { SignalRService, MeetingParticipant } from '../../core/services/signalr.
 import { StorageService } from '../../core/services/storage.service';
 import { AudioRecorderService, TranscriptionResponse, TranscriptionSegment } from '../../core/services/audio-recorder.service';
 import { MomGeneratorService } from '../../core/services/mom-generator.service';
+import { LivekitService } from '../../core/services/livekit.service';
 
 @Component({
   selector: 'app-meeting',
@@ -42,10 +45,20 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   isMuted: boolean = true;
   isVideoOff: boolean = false;
   isScreenSharing: boolean = false;
+  isRemoteScreenSharing: boolean = false;
+  screenShareOwnerName: string = 'Your Screen';
   isRecording: boolean = false;
   showParticipants: boolean = false;
   showChat: boolean = false;
   isLoading: boolean = true;
+
+  private readonly livekitEnabled: boolean = !!(environment as any)?.livekitEnabled;
+  private livekitInitializing: boolean = false;
+  private livekitActive: boolean = false;
+  private livekitSubscriptionsInitialized: boolean = false;
+  private localLivekitScreenShareTrackSid: string | null = null;
+  private remoteLivekitScreenShareTrackSid: string | null = null;
+  private livekitAudioTrackSidToIdentity: Map<string, string> = new Map();
 
   private tooltips: bootstrap.Tooltip[] = [];
 
@@ -59,6 +72,10 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private peers: Map<string, any> = new Map();
   private remoteVideoElements: Map<string, HTMLVideoElement> = new Map();
   private remoteAudioStreams: Map<string, MediaStream> = new Map();
+
+  private pendingSignals: Map<string, any[]> = new Map();
+  private peerRestartAttempts: Map<string, number> = new Map();
+  private connectPeersTimeout: any;
 
   // Chat Messages
   chatMessages: ChatMessage[] = [];
@@ -93,6 +110,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private destroy$ = new Subject<void>();
 
+  private readonly maxPeerRestartAttempts = 1;
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
@@ -103,7 +122,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     private signalRService: SignalRService,
     private ngZone: NgZone,
     private audioRecorderService: AudioRecorderService,
-    private momGeneratorService: MomGeneratorService
+    private momGeneratorService: MomGeneratorService,
+    private livekitService: LivekitService
   ) {
     this.userFullName = this.sessionService.getFullName() || 'User';
     this.oisMeetUserId = this.sessionService.getOISMeetUserId() || '';
@@ -587,6 +607,15 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     // so we don't miss the initial CurrentParticipants/UserJoined events
     this.setupSignalRListeners();
 
+    // If SignalR reconnects, groups are lost; we must re-join and rebuild peers.
+    this.signalRService.reconnected$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.ngZone.run(() => {
+          this.handleSignalRReconnected();
+        });
+      });
+
     // Load meeting details
     await this.loadMeetingDetails();
 
@@ -596,7 +625,50 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     // Initialize media and join the meeting
     await this.initializeMedia();
 
+    // If LiveKit is enabled, connect to the SFU for scalable audio/screen share.
+    await this.initializeLivekit();
+
+    // After we have our own connectionId, connect to any already-known participants.
+    if (!this.livekitActive) {
+      this.scheduleConnectToKnownParticipants();
+    }
+
     this.startTimer();
+  }
+
+  private async handleSignalRReconnected(): Promise<void> {
+    if (!this.meetingId || !this.oisMeetUserId) {
+      return;
+    }
+
+    console.log('Reconnected: re-joining meeting and rebuilding peers');
+
+    // Update our connectionId and reset peer state.
+    this.connectionId = this.signalRService.getConnectionId();
+
+    if (!this.livekitActive) {
+      // Tear down existing peers and remote media elements (connectionIds may have changed).
+      const peerIds = Array.from(this.peers.keys());
+      peerIds.forEach((id) => this.cleanupPeer(id, true));
+      this.peers.clear();
+      this.pendingSignals.clear();
+    }
+
+    // Re-join the meeting group so we receive CurrentParticipants again.
+    const startWithAudio = !this.isMuted;
+    const startWithVideo = !this.isVideoOff;
+    await this.signalRService.joinMeeting(
+      this.meetingId,
+      this.oisMeetUserId,
+      this.userFullName,
+      startWithAudio,
+      startWithVideo
+    );
+
+    // The hub will send CurrentParticipants; with mesh we connect peers after we receive it.
+    if (!this.livekitActive) {
+      this.scheduleConnectToKnownParticipants();
+    }
   }
 
   // New method to load participants via REST API
@@ -681,7 +753,186 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       this.signalRService.leaveMeeting(this.meetingId, this.oisMeetUserId);
     }
 
+    // LiveKit media cleanup
+    this.livekitService.disconnect();
+
     this.signalRService.stopConnection();
+  }
+
+  private async initializeLivekit(): Promise<void> {
+    if (!this.livekitEnabled || this.livekitActive) {
+      return;
+    }
+
+    const livekitUrl = String((environment as any)?.livekitUrl ?? '').trim();
+    if (!livekitUrl) {
+      console.warn('LiveKit is enabled, but environment.livekitUrl is empty. Falling back to mesh WebRTC.');
+      return;
+    }
+
+    if (!this.meetingId || !this.oisMeetUserId) {
+      return;
+    }
+
+    // IMPORTANT: subscribe to LiveKit events BEFORE connecting.
+    // Otherwise, if a participant is already in the room, TrackSubscribed can fire during connect
+    // and we would miss it (result: LiveKit connected but no remote audio attached).
+    this.initializeLivekitSubscriptions();
+
+    try {
+      this.livekitInitializing = true;
+      const tokenResponse: any = await this.meetingService
+        .getLivekitToken(this.meetingId, this.oisMeetUserId, this.userFullName)
+        .toPromise();
+
+      const token = tokenResponse?.token || tokenResponse?.data?.token || tokenResponse?.data;
+      if (!token || typeof token !== 'string') {
+        console.error('LiveKit token response missing token', tokenResponse);
+        return;
+      }
+
+      await this.livekitService.connect(livekitUrl, token);
+
+      // Once connected, we consider LiveKit the active media path.
+      this.livekitActive = true;
+
+      // Publish microphone using our existing audio track (so UI mute toggles still work).
+      const localAudioTrack = this.mediaStream?.getAudioTracks()?.[0] ?? null;
+      if (localAudioTrack) {
+        await this.livekitService.publishMicrophoneTrack(localAudioTrack);
+      }
+
+      console.log('✅ LiveKit connected');
+    } catch (e) {
+      console.error('Failed to initialize LiveKit:', e);
+
+      // LiveKit failed; keep using mesh.
+      this.livekitActive = false;
+      // If signals arrived while we were trying LiveKit, start mesh peers now.
+      this.scheduleConnectToKnownParticipants();
+      for (const id of Array.from(this.pendingSignals.keys())) {
+        this.flushPendingSignals(id);
+      }
+    } finally {
+      this.livekitInitializing = false;
+    }
+  }
+
+  private initializeLivekitSubscriptions(): void {
+    if (this.livekitSubscriptionsInitialized) {
+      return;
+    }
+    this.livekitSubscriptionsInitialized = true;
+
+    this.livekitService.remoteAudioAdded$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((evt) => this.ngZone.run(() => this.attachLivekitRemoteAudio(evt.identity, evt.trackSid, evt.mediaStreamTrack)));
+
+    this.livekitService.remoteAudioRemoved$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((evt) => this.ngZone.run(() => this.detachLivekitRemoteAudio(evt.trackSid)));
+
+    this.livekitService.screenShareStarted$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((evt) => this.ngZone.run(() => this.attachRemoteScreenShare(evt.name, evt.trackSid, evt.mediaStreamTrack)));
+
+    this.livekitService.screenShareStopped$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((evt) => this.ngZone.run(() => this.detachRemoteScreenShare(evt.trackSid)));
+  }
+
+  private attachLivekitRemoteAudio(identity: string, trackSid: string, mediaStreamTrack: MediaStreamTrack): void {
+    if (!identity || identity === this.oisMeetUserId) {
+      return;
+    }
+
+    if (trackSid) {
+      this.livekitAudioTrackSidToIdentity.set(trackSid, identity);
+    }
+
+    const stream = new MediaStream([mediaStreamTrack]);
+    this.remoteAudioStreams.set(identity, stream);
+    this.audioRecorderService.addRemoteStream(identity, stream);
+
+    const audioId = `remote-audio-${identity}`;
+    let audioEl = document.getElementById(audioId) as HTMLAudioElement | null;
+    if (!audioEl) {
+      audioEl = document.createElement('audio');
+      audioEl.id = audioId;
+      audioEl.autoplay = true;
+      audioEl.controls = false;
+      audioEl.setAttribute('playsinline', 'true');
+      audioEl.setAttribute('webkit-playsinline', 'true');
+      audioEl.style.display = 'none';
+      document.body.appendChild(audioEl);
+    }
+
+    audioEl.srcObject = stream;
+    audioEl.muted = false;
+    audioEl.volume = 1.0;
+
+    audioEl.onloadedmetadata = () => {
+      audioEl?.play().catch((err) => {
+        console.warn('LiveKit remote audio play() failed:', err);
+      });
+    };
+
+    audioEl.play().catch((err) => {
+      console.warn('LiveKit remote audio play() failed (immediate):', err);
+    });
+  }
+
+  private detachLivekitRemoteAudio(trackSid: string): void {
+    const identity = this.livekitAudioTrackSidToIdentity.get(trackSid);
+    if (!identity) {
+      return;
+    }
+
+    this.livekitAudioTrackSidToIdentity.delete(trackSid);
+
+    this.remoteAudioStreams.delete(identity);
+    this.audioRecorderService.removeRemoteStream(identity);
+
+    const audioEl = document.getElementById(`remote-audio-${identity}`) as HTMLAudioElement | null;
+    if (audioEl) {
+      try {
+        audioEl.pause();
+      } catch {
+        // ignore
+      }
+      audioEl.srcObject = null;
+      audioEl.remove();
+    }
+  }
+
+  private attachRemoteScreenShare(ownerName: string, trackSid: string, mediaStreamTrack: MediaStreamTrack): void {
+    // If we are locally sharing, prefer showing our own preview.
+    if (this.isScreenSharing) {
+      return;
+    }
+
+    this.isRemoteScreenSharing = true;
+    this.screenShareOwnerName = ownerName || 'Screen';
+    this.remoteLivekitScreenShareTrackSid = trackSid;
+
+    const stream = new MediaStream([mediaStreamTrack]);
+    if (this.screenShareVideo) {
+      this.screenShareVideo.nativeElement.srcObject = stream;
+    }
+  }
+
+  private detachRemoteScreenShare(trackSid: string): void {
+    if (!this.remoteLivekitScreenShareTrackSid || this.remoteLivekitScreenShareTrackSid !== trackSid) {
+      return;
+    }
+
+    this.remoteLivekitScreenShareTrackSid = null;
+    this.isRemoteScreenSharing = false;
+    this.screenShareOwnerName = 'Your Screen';
+
+    if (this.screenShareVideo) {
+      this.screenShareVideo.nativeElement.srcObject = null;
+    }
   }
 
   private async loadMeetingDetails() {
@@ -788,6 +1039,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
         // Force change detection
         this.participants = [...this.participants];
+
+        if (!this.livekitActive && !this.livekitInitializing) {
+          // Ensure we establish peers for any participants we should initiate with.
+          this.scheduleConnectToKnownParticipants();
+        }
       });
     });
 
@@ -814,12 +1070,18 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             'Muted:', !participant.isAudioEnabled,
             'VideoOff:', !participant.isVideoEnabled);
 
-          // Create peer for this new participant
-          if (participant.connectionId !== this.connectionId && this.mediaStream) {
-            console.log('Creating peer for new participant:', participant.userName);
-            setTimeout(() => {
-              this.createPeer(participant.connectionId, participant.userName, true);
-            }, 1000);
+          if (!this.livekitActive && !this.livekitInitializing) {
+            // Create peer for this new participant
+            if (participant.connectionId !== this.connectionId && this.mediaStream) {
+              const initiator = this.shouldInitiatePeer(participant.connectionId);
+              console.log('Peer initiation decision for new participant:', participant.userName, { initiator });
+
+              if (initiator) {
+                setTimeout(() => {
+                  this.createPeer(participant.connectionId, participant.userName, true);
+                }, 600);
+              }
+            }
           }
 
           this.snackBar.open(`${participant.userName} joined`, 'Close', {
@@ -854,7 +1116,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           });
         }
         this.removeParticipant(connectionId);
-        this.removePeer(connectionId);
+        if (!this.livekitActive) {
+          this.removePeer(connectionId);
+        }
       });
     });
 
@@ -862,7 +1126,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log('🔌 Participant disconnected:', connectionId);
       this.ngZone.run(() => {
         this.removeParticipant(connectionId);
-        this.removePeer(connectionId);
+        if (!this.livekitActive) {
+          this.removePeer(connectionId);
+        }
       });
     });
 
@@ -1036,6 +1302,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private createPeer(targetConnectionId: string, targetName: string, initiator: boolean) {
+    if (this.livekitActive || (this.livekitEnabled && this.livekitInitializing)) {
+      return;
+    }
     if (this.peers.has(targetConnectionId)) {
       console.log('Peer already exists for:', targetName);
       return;
@@ -1055,25 +1324,41 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log(`Creating ${initiator ? 'initiator' : 'receiver'} peer for:`, targetName);
 
     try {
+      const iceServers = (environment as any)?.webrtcIceServers ?? [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ];
+      const trickle = (environment as any)?.webrtcTrickleIce ?? true;
+
       const peer = new SimplePeer({
         initiator: initiator,
-        trickle: false,
+        trickle,
         stream: this.mediaStream,
         config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
+          iceServers
         }
       });
 
       peer.on('signal', (signal: any) => {
-        console.log('Peer signal generated for:', targetName);
-        if (initiator) {
-          this.signalRService.sendOffer(this.meetingId, targetConnectionId, signal);
-        } else {
-          this.signalRService.sendAnswer(this.meetingId, targetConnectionId, signal);
+        // With trickle enabled, `signal` can be offer/answer OR ICE candidate.
+        if (!signal) {
+          return;
         }
+
+        if (signal.type === 'offer') {
+          console.log('Peer offer generated for:', targetName);
+          this.signalRService.sendOffer(this.meetingId, targetConnectionId, signal);
+          return;
+        }
+
+        if (signal.type === 'answer') {
+          console.log('Peer answer generated for:', targetName);
+          this.signalRService.sendAnswer(this.meetingId, targetConnectionId, signal);
+          return;
+        }
+
+        // Candidate or other signal data
+        this.signalRService.sendIceCandidate(this.meetingId, targetConnectionId, signal);
       });
 
       peer.on('stream', (stream: MediaStream) => {
@@ -1083,6 +1368,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
       peer.on('error', (err: Error) => {
         console.error('Peer error for', targetName, ':', err);
+
+        // If ICE fails, clean up and try a single restart for initiators.
+        const message = (err as any)?.message ? String((err as any).message) : '';
+        const isConnectionFailed = message.toLowerCase().includes('connection failed');
+
+        this.cleanupPeer(targetConnectionId, false);
+
+        if (initiator && isConnectionFailed) {
+          this.schedulePeerRestart(targetConnectionId, targetName);
+        }
       });
 
       peer.on('connect', () => {
@@ -1091,11 +1386,14 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
       peer.on('close', () => {
         console.log('Peer closed for:', targetName);
-        this.removeRemoteVideo(targetConnectionId);
+        this.cleanupPeer(targetConnectionId, false);
       });
 
       this.peers.set(targetConnectionId, peer);
       console.log('Peer created and stored for:', targetName);
+
+      // Apply any queued offer/answer/candidates that arrived early.
+      this.flushPendingSignals(targetConnectionId);
 
     } catch (error) {
       console.error('Error creating peer:', error);
@@ -1103,7 +1401,15 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private handleOffer(fromConnectionId: string, offer: any) {
+    // If LiveKit is active (or we're attempting it), keep signals queued so we can fall back to mesh if needed.
+    if (this.livekitActive || (this.livekitEnabled && this.livekitInitializing)) {
+      this.queueSignal(fromConnectionId, offer);
+      return;
+    }
     console.log('Handling offer from:', fromConnectionId);
+
+    // Queue offer in case peer creation is delayed.
+    this.queueSignal(fromConnectionId, offer);
 
     // Check if we already have this participant
     let participant = this.participants.find(p => p.connectionId === fromConnectionId);
@@ -1116,15 +1422,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         this.createPeer(fromConnectionId, participant.name, false);
       }
 
-      setTimeout(() => {
-        const peer = this.peers.get(fromConnectionId);
-        if (peer && !peer.destroyed) {
-          console.log('Signaling offer to peer');
-          peer.signal(offer);
-        } else {
-          console.warn('Cannot signal offer: peer is destroyed for', fromConnectionId);
-        }
-      }, 500);
+      // Offer will be flushed from the queue once peer exists.
+      setTimeout(() => this.flushPendingSignals(fromConnectionId), 50);
 
     } else {
       console.log('Participant not found yet, checking participants list:',
@@ -1147,15 +1446,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             this.createPeer(fromConnectionId, participant.name, false);
           }
 
-          setTimeout(() => {
-            const peer = this.peers.get(fromConnectionId);
-            if (peer && !peer.destroyed) {
-              console.log('Signaling offer after participant found');
-              peer.signal(offer);
-            } else {
-              console.warn('Cannot signal offer: peer is destroyed for', fromConnectionId);
-            }
-          }, 500);
+          setTimeout(() => this.flushPendingSignals(fromConnectionId), 50);
 
         } else if (attempts >= maxAttempts) {
           clearInterval(checkInterval);
@@ -1166,48 +1457,38 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             this.createPeer(fromConnectionId, `User-${fromConnectionId.substring(0, 5)}`, false);
           }
 
-          setTimeout(() => {
-            const peer = this.peers.get(fromConnectionId);
-            if (peer && !peer.destroyed) {
-              console.log('Signaling offer with fallback peer');
-              peer.signal(offer);
-            } else {
-              console.warn('Cannot signal offer: peer is destroyed for', fromConnectionId);
-            }
-          }, 500);
+          setTimeout(() => this.flushPendingSignals(fromConnectionId), 50);
         }
       }, 200);
     }
   }
 
   private handleAnswer(fromConnectionId: string, answer: any) {
-    console.log('Handling answer from:', fromConnectionId);
-    const peer = this.peers.get(fromConnectionId);
-    if (peer && !peer.destroyed) {
-      console.log('Signaling answer to peer');
-      peer.signal(answer);
-    } else {
-      console.warn('Cannot signal answer: peer is destroyed for', fromConnectionId);
+    if (this.livekitActive || (this.livekitEnabled && this.livekitInitializing)) {
+      this.queueSignal(fromConnectionId, answer);
+      return;
     }
+    console.log('Handling answer from:', fromConnectionId);
+    this.queueSignal(fromConnectionId, answer);
+    this.flushPendingSignals(fromConnectionId);
   }
 
   private handleIceCandidate(fromConnectionId: string, candidate: any) {
-    console.log('Handling ICE candidate from:', fromConnectionId);
-    const peer = this.peers.get(fromConnectionId);
-    if (peer && !peer.destroyed) {
-      peer.signal(candidate);
-    } else {
-      console.warn('Cannot signal ICE: peer is destroyed for', fromConnectionId);
+    if (this.livekitActive || (this.livekitEnabled && this.livekitInitializing)) {
+      this.queueSignal(fromConnectionId, candidate);
+      return;
     }
+    console.log('Handling ICE candidate from:', fromConnectionId);
+    this.queueSignal(fromConnectionId, candidate);
+    this.flushPendingSignals(fromConnectionId);
   }
 
   private removePeer(connectionId: string) {
-    console.log('Removing peer:', connectionId);
-    const peer = this.peers.get(connectionId);
-    if (peer) {
-      peer.destroy();
-      this.peers.delete(connectionId);
+    if (this.livekitActive) {
+      return;
     }
+    console.log('Removing peer:', connectionId);
+    this.cleanupPeer(connectionId, true);
   }
 
   private addRemoteVideo(connectionId: string, stream: MediaStream, userName: string) {
@@ -1234,6 +1515,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         audioElement.id = `remote-audio-${connectionId}`;
         audioElement.autoplay = true;
         audioElement.controls = false;
+        audioElement.setAttribute('playsinline', 'true');
+        audioElement.setAttribute('webkit-playsinline', 'true');
         audioElement.style.display = 'none';
         document.body.appendChild(audioElement);
         console.log('Remote audio element created for:', userName);
@@ -1242,6 +1525,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       audioElement.srcObject = stream;
       audioElement.muted = false;
       audioElement.volume = 1.0;
+      audioElement.onloadedmetadata = () => {
+        audioElement?.play().catch(err => {
+          console.warn('Error playing remote audio stream:', err);
+        });
+      };
       audioElement.play().catch(err => {
         console.warn('Error playing remote audio stream:', err);
       });
@@ -1266,6 +1554,143 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       } catch { }
       this.remoteVideoElements.delete(connectionId);
     }
+
+    // Remove any remote <audio> element created for this connection.
+    const audioElement = document.getElementById(`remote-audio-${connectionId}`) as HTMLAudioElement | null;
+    if (audioElement) {
+      try {
+        audioElement.pause();
+        (audioElement as any).srcObject = null;
+      } catch { }
+      audioElement.remove();
+    }
+  }
+
+  private cleanupPeer(connectionId: string, destroy: boolean): void {
+    const peer = this.peers.get(connectionId);
+    if (peer) {
+      try {
+        if (destroy && !peer.destroyed) {
+          peer.destroy();
+        }
+      } catch (e) {
+        console.warn('Error destroying peer:', e);
+      }
+      this.peers.delete(connectionId);
+    }
+
+    this.pendingSignals.delete(connectionId);
+    this.peerRestartAttempts.delete(connectionId);
+    this.removeRemoteVideo(connectionId);
+  }
+
+  private queueSignal(connectionId: string, signal: any): void {
+    if (!connectionId) {
+      return;
+    }
+    const queue = this.pendingSignals.get(connectionId) ?? [];
+    queue.push(signal);
+    // prevent unbounded growth
+    if (queue.length > 25) {
+      queue.splice(0, queue.length - 25);
+    }
+    this.pendingSignals.set(connectionId, queue);
+  }
+
+  private flushPendingSignals(connectionId: string): void {
+    const peer = this.peers.get(connectionId);
+    if (!peer || peer.destroyed) {
+      return;
+    }
+
+    const queue = this.pendingSignals.get(connectionId);
+    if (!queue || queue.length === 0) {
+      return;
+    }
+
+    // We'll attempt to apply all queued signals; if one fails, re-queue remaining.
+    this.pendingSignals.delete(connectionId);
+
+    while (queue.length > 0) {
+      const sig = queue.shift();
+      try {
+        peer.signal(sig);
+      } catch (e) {
+        console.warn('Failed to apply queued signal; will retry later:', e);
+        // Put remaining signals back
+        const remaining = [sig, ...queue];
+        this.pendingSignals.set(connectionId, remaining);
+        break;
+      }
+    }
+  }
+
+  private shouldInitiatePeer(targetConnectionId: string): boolean {
+    // Deterministic initiator selection avoids glare (both sides sending offers).
+    if (!this.connectionId || !targetConnectionId) {
+      return false;
+    }
+    return String(this.connectionId) < String(targetConnectionId);
+  }
+
+  private scheduleConnectToKnownParticipants(): void {
+    if (this.livekitActive || (this.livekitEnabled && this.livekitInitializing)) {
+      return;
+    }
+    if (this.connectPeersTimeout) {
+      clearTimeout(this.connectPeersTimeout);
+    }
+
+    this.connectPeersTimeout = setTimeout(() => {
+      this.connectPeersTimeout = null;
+      this.connectToKnownParticipants();
+    }, 300);
+  }
+
+  private connectToKnownParticipants(): void {
+    if (this.livekitActive || (this.livekitEnabled && this.livekitInitializing)) {
+      return;
+    }
+    if (!this.mediaStream || !this.connectionId) {
+      return;
+    }
+
+    for (const participant of this.participants) {
+      if (!participant?.connectionId) {
+        continue;
+      }
+      if (participant.connectionId === this.connectionId) {
+        continue;
+      }
+      if (this.peers.has(participant.connectionId)) {
+        continue;
+      }
+
+      if (this.shouldInitiatePeer(participant.connectionId)) {
+        this.createPeer(participant.connectionId, participant.name, true);
+      }
+    }
+  }
+
+  private schedulePeerRestart(connectionId: string, targetName: string): void {
+    const attempts = this.peerRestartAttempts.get(connectionId) ?? 0;
+    if (attempts >= this.maxPeerRestartAttempts) {
+      return;
+    }
+    this.peerRestartAttempts.set(connectionId, attempts + 1);
+
+    // Only restart if participant still exists.
+    const participant = this.participants.find(p => p.connectionId === connectionId);
+    if (!participant) {
+      return;
+    }
+
+    setTimeout(() => {
+      if (!this.peers.has(connectionId) && this.mediaStream) {
+        console.log('Retrying peer connection for:', targetName);
+        this.createPeer(connectionId, targetName, true);
+      }
+    }, 1500);
   }
 
   async toggleMute() {
@@ -1344,6 +1769,40 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async toggleScreenShare() {
+    if (this.livekitActive) {
+      if (!this.isScreenSharing) {
+        try {
+          console.log('Starting screen share (LiveKit)');
+          this.screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: false
+          });
+
+          const screenTrack = this.screenStream.getVideoTracks()[0];
+          this.localLivekitScreenShareTrackSid = await this.livekitService.publishScreenShareTrack(screenTrack);
+
+          this.isScreenSharing = true;
+          this.screenShareOwnerName = 'Your Screen';
+          if (this.screenShareVideo) {
+            this.screenShareVideo.nativeElement.srcObject = this.screenStream;
+          }
+
+          await this.signalRService.startScreenShare(this.meetingId);
+
+          screenTrack.onended = () => {
+            console.log('Screen share ended by user');
+            this.stopScreenSharing();
+          };
+        } catch (error) {
+          console.error('Error sharing screen (LiveKit):', error);
+        }
+      } else {
+        await this.stopScreenSharing();
+      }
+      this.refreshTooltips();
+      return;
+    }
+
     if (!this.isScreenSharing) {
       try {
         console.log('Starting screen share');
@@ -1381,6 +1840,28 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async stopScreenSharing() {
     console.log('Stopping screen share');
+
+    if (this.livekitActive) {
+      this.isScreenSharing = false;
+
+      const trackSid = this.localLivekitScreenShareTrackSid;
+      this.localLivekitScreenShareTrackSid = null;
+      await this.signalRService.stopScreenShare(this.meetingId);
+
+      if (trackSid) {
+        await this.livekitService.unpublishTrack(trackSid);
+      }
+
+      if (this.screenStream) {
+        this.screenStream.getTracks().forEach(track => track.stop());
+        this.screenStream = null;
+      }
+      if (this.screenShareVideo) {
+        this.screenShareVideo.nativeElement.srcObject = null;
+      }
+      return;
+    }
+
     this.isScreenSharing = false;
     await this.signalRService.stopScreenShare(this.meetingId);
 

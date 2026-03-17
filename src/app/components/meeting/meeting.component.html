@@ -16,11 +16,11 @@
     <div class="video-container" [class.speaker-mode]="gridLayout === 'speaker'">
 
       <!-- Screen Share View (if active) -->
-      <div class="screen-share-container" *ngIf="isScreenSharing">
+      <div class="screen-share-container" *ngIf="isScreenSharing || isRemoteScreenSharing">
         <video #screenShareVideo autoplay playsinline [muted]="true"></video>
         <div class="screen-share-label">
           <i class="bi bi-display"></i>
-          <span>Your Screen</span>
+          <span>{{ screenShareOwnerName }}</span>
         </div>
       </div>
 
@@ -168,8 +168,8 @@
           <i class="bi" [ngClass]="isVideoOff ? 'bi-camera-video-off-fill' : 'bi-camera-video-fill'"></i>
         </button>
 
-        <!-- Screen Share - Hidden -->
-        <button *ngIf="false" class="control-btn" [class.active]="isScreenSharing" (click)="toggleScreenShare()"
+        <!-- Screen Share -->
+        <button class="control-btn" [class.active]="isScreenSharing" (click)="toggleScreenShare()"
           data-bs-toggle="tooltip" [attr.data-bs-title]="isScreenSharing ? 'Stop Sharing' : 'Share Screen'">
           <i class="bi bi-display"></i>
         </button>

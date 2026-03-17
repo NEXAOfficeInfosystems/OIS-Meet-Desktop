@@ -76,12 +76,18 @@ export class MeetingService {
     return this.http.get(`${this.apiUrl}/${meetingId}/participants`);
   }
 
+  getLivekitToken(meetingId: string, userId: string, userName: string): Observable<any> {
+    const encodedUserId = encodeURIComponent(userId);
+    const encodedUserName = encodeURIComponent(userName);
+    return this.http.get(`${this.apiUrl}/${encodeURIComponent(meetingId)}/livekit-token?userId=${encodedUserId}&userName=${encodedUserName}`);
+  }
+
   endMeeting(meetingId: string, userId: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/${meetingId}/end`, { userId: userId });
+    return this.http.post(`${this.apiUrl}/${encodeURIComponent(meetingId)}/end?userId=${encodeURIComponent(userId)}`, null);
   }
 
   leaveMeeting(meetingId: string, userId: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/${meetingId}/leave`, { userId: userId });
+    return this.http.post(`${this.apiUrl}/${encodeURIComponent(meetingId)}/leave?userId=${encodeURIComponent(userId)}`, null);
   }
 
   getUserActiveMeetings(userId: string): Observable<any> {

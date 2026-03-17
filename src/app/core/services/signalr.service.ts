@@ -19,6 +19,9 @@ export interface MeetingParticipant {
 export class SignalRService {
   private hubConnection!: signalR.HubConnection;
 private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconnected';
+
+  private reconnectedSubject = new Subject<void>();
+  public reconnected$ = this.reconnectedSubject.asObservable();
   // Chat Subjects
   private messageReceivedSubject = new Subject<any>();
   private userTypingSubject = new Subject<{ userId: string; isTyping: boolean }>();
@@ -126,6 +129,7 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
     this.hubConnection.onreconnected(() => {
       console.log('🔄 SignalR Reconnected');
       this.connectionState = 'connected';
+      this.ngZone.run(() => this.reconnectedSubject.next());
     });
 
     this.hubConnection.onreconnecting(() => {
