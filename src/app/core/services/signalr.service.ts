@@ -3,6 +3,8 @@ import * as signalR from '@microsoft/signalr';
 import { environment } from '../../../environments/environment';
 import { Subject } from 'rxjs';
 import { SessionService } from './session.service';
+import { TranscriptionResponse } from './audio-recorder.service';
+import { GenerateMomResponse } from './mom-generator.service';
 
 export interface MeetingParticipant {
   connectionId: string;
@@ -11,6 +13,22 @@ export interface MeetingParticipant {
   isAudioEnabled: boolean;
   isVideoEnabled: boolean;
   isScreenSharing: boolean;
+}
+
+export interface TranscriptionBroadcast {
+  meetingId: string;
+  fromUserId: string;
+  fromUserName: string;
+  timestampUtc: string;
+  transcription: TranscriptionResponse;
+}
+
+export interface MomBroadcast {
+  meetingId: string;
+  fromUserId: string;
+  fromUserName: string;
+  timestampUtc: string;
+  mom: GenerateMomResponse;
 }
 
 @Injectable({
@@ -46,6 +64,9 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
   private meetingMessageReceivedSubject = new Subject<any>();
   private meetingEndedSubject = new Subject<{ endedBy: string; timestamp: Date }>();
 
+  private transcriptionAvailableSubject = new Subject<TranscriptionBroadcast>();
+  private momAvailableSubject = new Subject<MomBroadcast>();
+
   // Chat Observables
   public messageReceived$ = this.messageReceivedSubject.asObservable();
   public userTyping$ = this.userTypingSubject.asObservable();
@@ -69,6 +90,9 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
   public screenShareStopped$ = this.screenShareStoppedSubject.asObservable();
   public meetingMessageReceived$ = this.meetingMessageReceivedSubject.asObservable();
   public meetingEnded$ = this.meetingEndedSubject.asObservable();
+
+  public transcriptionAvailable$ = this.transcriptionAvailableSubject.asObservable();
+  public momAvailable$ = this.momAvailableSubject.asObservable();
 
   public userId: string = '';
   public userName: string = '';
@@ -252,6 +276,14 @@ this.hubConnection.on('UserJoined', (data: any) => {
     console.log('🏁 Meeting ended');
     this.ngZone.run(() => this.meetingEndedSubject.next(data));
   });
+
+  this.hubConnection.on('TranscriptionAvailable', (data: any) => {
+    this.ngZone.run(() => this.transcriptionAvailableSubject.next(data as TranscriptionBroadcast));
+  });
+
+  this.hubConnection.on('MomAvailable', (data: any) => {
+    this.ngZone.run(() => this.momAvailableSubject.next(data as MomBroadcast));
+  });
   }
 
   // Chat Methods
@@ -343,6 +375,26 @@ public async joinMeeting(meetingId: string, userId: string, userName: string, is
 
 public async sendMeetingMessage(meetingId: string, message: string, messageId?: string): Promise<void> {
   await this.hubConnection?.invoke('SendChatMessage', meetingId, message, messageId);
+}
+
+public async publishTranscription(meetingId: string, transcription: TranscriptionResponse): Promise<void> {
+  if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+    try {
+      await this.hubConnection.invoke('PublishTranscription', meetingId, transcription);
+    } catch (err) {
+      console.error('Error publishing transcription:', err);
+    }
+  }
+}
+
+public async publishMom(meetingId: string, mom: GenerateMomResponse): Promise<void> {
+  if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+    try {
+      await this.hubConnection.invoke('PublishMom', meetingId, mom);
+    } catch (err) {
+      console.error('Error publishing MoM:', err);
+    }
+  }
 }
 
   public getConnectionId(): string | null {
