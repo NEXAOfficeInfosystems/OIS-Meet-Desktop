@@ -598,8 +598,10 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     const camParam = this.route.snapshot.queryParamMap.get('cam');
 
     // Set initial media states
-    this.isMuted = micParam === 'false';
-    this.isVideoOff = camParam === 'false';
+    // Default to muted/video-off when params are missing.
+    // meet-now dialog passes booleans -> query params 'true'/'false'.
+    this.isMuted = micParam !== 'true';
+    this.isVideoOff = camParam !== 'true';
     if (camParam === null) {
       this.isVideoOff = true;
     }
@@ -816,7 +818,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       // Publish microphone using our existing audio track (so UI mute toggles still work).
       const localAudioTrack = this.mediaStream?.getAudioTracks()?.[0] ?? null;
       if (localAudioTrack) {
-        await this.livekitService.publishMicrophoneTrack(localAudioTrack);
+        // IMPORTANT: enforce initial mute state for LiveKit.
+        await this.livekitService.setMicrophoneMuted(this.isMuted, localAudioTrack);
       }
 
       console.log('✅ LiveKit connected');
@@ -1777,6 +1780,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         audioTracks.forEach(track => {
           track.enabled = !this.isMuted;
         });
+      }
+    }
+
+    // LiveKit: use mute/unmute (not unpublish) to avoid stopping the underlying mic track.
+    if (this.livekitActive) {
+      try {
+        const localAudioTrack = this.mediaStream?.getAudioTracks()?.[0] ?? null;
+        await this.livekitService.setMicrophoneMuted(this.isMuted, localAudioTrack);
+      } catch (e) {
+        console.error('LiveKit mic mute/unmute failed:', e);
       }
     }
 

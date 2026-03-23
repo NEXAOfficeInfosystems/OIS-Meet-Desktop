@@ -188,8 +188,8 @@
           <span class="badge" *ngIf="chatMessages.length > 0">{{ chatMessages.length }}</span>
         </button>
 
-        <!-- Record -->
-        <button class="control-btn" [class.active]="isRecording" [class.recording]="isRecording"
+        <!-- Record (Host only) -->
+        <button *ngIf="isHost" class="control-btn" [class.active]="isRecording" [class.recording]="isRecording"
           (click)="toggleRecording()" data-bs-toggle="tooltip"
           [attr.data-bs-title]="isRecording ? 'Stop Recording' : 'Start Recording'">
           <i class="bi bi-record-circle-fill"></i>

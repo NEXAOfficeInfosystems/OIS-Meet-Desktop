@@ -106,6 +106,55 @@ export class LivekitService {
     });
   }
 
+  /**
+   * Mute/unmute microphone in a way that won't stop the underlying MediaStreamTrack.
+   *
+   * Why: unpublishing a mic track may stop/end the original track in some SDK versions,
+   * which breaks subsequent unmute attempts.
+   */
+  public async setMicrophoneMuted(muted: boolean, localTrack: MediaStreamTrack | null): Promise<void> {
+    const room = this.room;
+    if (!room) {
+      return;
+    }
+
+    const pubs = Array.from(room.localParticipant.audioTrackPublications.values()) as any[];
+    const micPub = pubs.find((p) => p?.source === Track.Source.Microphone) ?? null;
+
+    // If we are unmuting and nothing is published yet, publish once.
+    if (!micPub) {
+      if (!muted && localTrack) {
+        await this.publishMicrophoneTrack(localTrack);
+      }
+      return;
+    }
+
+    try {
+      if (muted) {
+        // Prefer publication API if available
+        if (typeof micPub.mute === 'function') {
+          await micPub.mute();
+          return;
+        }
+        if (micPub.track && typeof micPub.track.mute === 'function') {
+          await micPub.track.mute();
+          return;
+        }
+      } else {
+        if (typeof micPub.unmute === 'function') {
+          await micPub.unmute();
+          return;
+        }
+        if (micPub.track && typeof micPub.track.unmute === 'function') {
+          await micPub.track.unmute();
+          return;
+        }
+      }
+    } catch {
+      // ignore; caller logs
+    }
+  }
+
   public async unpublishMicrophoneTracks(): Promise<void> {
     const room = this.room;
     if (!room) {

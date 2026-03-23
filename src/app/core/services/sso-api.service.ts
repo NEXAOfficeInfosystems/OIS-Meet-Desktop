@@ -94,7 +94,7 @@ export class SsoApiService {
 
   getMeetUrl(token: string, userinfo: string, applicationId: string | number): Observable<MeetUrlResponse> {
     const url = `${this.ssoApiUrl}/Common/generate-app-access-url`;
-    const params = new HttpParams().set('appId', applicationId.toString());
+    const params = new HttpParams().set('appId', applicationId.toString()).set('currentToken', token);
     return this.http.get<MeetUrlResponse>(url, {
       headers: this.createAuthHeaders(token, userinfo),
       params,
