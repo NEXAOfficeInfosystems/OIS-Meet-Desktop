@@ -21,6 +21,7 @@ import { StorageService } from '../../core/services/storage.service';
 import { AudioRecorderService, TranscriptionResponse, TranscriptionSegment } from '../../core/services/audio-recorder.service';
 import { MomGeneratorService } from '../../core/services/mom-generator.service';
 import { LivekitService } from '../../core/services/livekit.service';
+import { LiveTranscriptionService, LiveTranscriptionSegment, LiveTranscriptionStatus } from '../../core/services/live-transcription.service';
 
 @Component({
   selector: 'app-meeting',
@@ -100,6 +101,14 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private mediaStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
 
+  // ── Live Transcription ────────────────────────────────────────────
+    isLiveTranscriptionOn: boolean = false;
+    liveTranscriptionStatus: LiveTranscriptionStatus = 'idle';
+    liveTranscriptionSegments: LiveTranscriptionSegment[] = [];
+    liveTranscriptionError: string | null = null;
+    showLiveTranscriptionPanel: boolean = false;
+  // ───────────────────────────────────────────────────────────────────────
+
   // User Info
   userFullName: string;
   oisMeetUserId: string = '';
@@ -123,7 +132,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     private ngZone: NgZone,
     private audioRecorderService: AudioRecorderService,
     private momGeneratorService: MomGeneratorService,
-    private livekitService: LivekitService
+    private livekitService: LivekitService,
+    private liveTranscriptionService: LiveTranscriptionService,
   ) {
     this.userFullName = this.sessionService.getFullName() || 'User';
     this.oisMeetUserId = this.sessionService.getOISMeetUserId() || '';
@@ -206,6 +216,40 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         });
       });
+
+    // ── Live Transcription subscriptions (NEW) ──────────────────────────────
+    this.liveTranscriptionService.segments$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((segments) => {
+        this.ngZone.run(() => {
+          this.liveTranscriptionSegments = segments;
+          // Auto-scroll is handled by the template's (cdkScrollable) or a simple
+          // setTimeout in the method below.
+          this.scrollLiveTranscriptionToBottom();
+        });
+      });
+
+    this.liveTranscriptionService.status$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((status) => {
+        this.ngZone.run(() => {
+          this.liveTranscriptionStatus = status;
+          if (status === 'error') {
+            this.liveTranscriptionError = 'Connection to transcription server lost. Retrying…';
+          } else if (status === 'connected') {
+            this.liveTranscriptionError = null;
+          }
+        });
+      });
+
+    this.liveTranscriptionService.error$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((msg) => {
+        this.ngZone.run(() => {
+          this.liveTranscriptionError = msg;
+        });
+      });
+    // ────────────────────────────────────────────────────────────────────────
   }
 
   downloadMomPdf(): void {
@@ -774,7 +818,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // LiveKit media cleanup
     this.livekitService.disconnect();
-
+    // ── Live Transcription teardown  ──────────────────────────────────
+    this.liveTranscriptionService.stop();
     this.signalRService.stopConnection();
   }
 
@@ -2210,6 +2255,53 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       hash = str.charCodeAt(i) + ((hash << 5) - hash);
     }
     return colors[Math.abs(hash) % colors.length];
+  }
+
+  trackLiveSegment(_index: number, seg: LiveTranscriptionSegment): string {
+    return seg.id;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  //  LIVE TRANSCRIPTION METHODS
+  // ════════════════════════════════════════════════════════════════════════════
+  async toggleLiveTranscription(): Promise<void> {
+    if (this.isLiveTranscriptionOn) {
+      // ── Turn OFF ──
+      this.isLiveTranscriptionOn = false;
+      this.liveTranscriptionService.stop();
+      this.liveTranscriptionError = null;
+    } else {
+      // ── Turn ON ──
+      if (!this.mediaStream) {
+        this.snackBar.open('Microphone not available for live transcription', 'Close', { duration: 3000 });
+        return;
+      }
+      // const aiBase: string = ((environment as any).aiApiBaseUrl || 'http://192.168.1.47:8001')
+      const aiBase: string = ('http://192.168.1.47:8001')
+        .toString()
+        .trim()
+        .replace(/\/+$/, '');
+      const wsUrl = aiBase.replace(/^http/, 'ws') + '/ws/transcribe';
+
+      this.isLiveTranscriptionOn = true;
+      this.showLiveTranscriptionPanel = true;
+      this.liveTranscriptionError = null;
+
+      await this.liveTranscriptionService.start(this.mediaStream, wsUrl);
+    }
+  }
+
+  clearLiveTranscription(): void {
+    this.liveTranscriptionService.clearSegments();
+  }
+
+  private scrollLiveTranscriptionToBottom(): void {
+    setTimeout(() => {
+      const el = document.getElementById('live-transcription-scroll');
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+    }, 60);
   }
 }
 

@@ -194,6 +194,16 @@
           [attr.data-bs-title]="isRecording ? 'Stop Recording' : 'Start Recording'">
           <i class="bi bi-record-circle-fill"></i>
         </button>
+
+        <!-- Live Transcription Toggle -->
+          <button class="control-btn live-transcript-btn" [class.active]="isLiveTranscriptionOn"
+            [class.transcript-connecting]="liveTranscriptionStatus === 'connecting'" (click)="toggleLiveTranscription()"
+            data-bs-toggle="tooltip"
+            [attr.data-bs-title]="isLiveTranscriptionOn ? 'Stop Live Transcription' : 'Start Live Transcription'">
+            <!-- Pulse ring shown while active -->
+            <span class="live-dot" *ngIf="isLiveTranscriptionOn"></span>
+            <i class="bi bi-chat-square-text-fill"></i>
+          </button>
       </div>
 
       <div class="controls-right">
@@ -357,6 +367,88 @@
       <small class="text-muted" style="display: block; margin-top: 4px;" *ngIf="meetingDetails?.settings?.allowChat === false">
         Chat is disabled by host
       </small>
+    </div>
+  </div>
+
+  <!-- Live Transcription Panel -->
+  <div class="live-transcription-panel" *ngIf="showLiveTranscriptionPanel && !isLoading"
+    [class.panel-visible]="showLiveTranscriptionPanel">
+  
+    <!-- Panel Header -->
+    <div class="lt-header">
+      <div class="lt-header-left">
+        <!-- Status indicator dot -->
+        <span class="lt-status-dot" [class.lt-dot-connecting]="liveTranscriptionStatus === 'connecting'"
+          [class.lt-dot-connected]="liveTranscriptionStatus === 'connected'"
+          [class.lt-dot-error]="liveTranscriptionStatus === 'error'"
+          [class.lt-dot-idle]="liveTranscriptionStatus === 'idle' || liveTranscriptionStatus === 'stopped'">
+        </span>
+        <span class="lt-title">Live Transcription</span>
+        <span class="lt-status-label">
+          <ng-container [ngSwitch]="liveTranscriptionStatus">
+            <span *ngSwitchCase="'connecting'">Connecting…</span>
+            <span *ngSwitchCase="'connected'">Live</span>
+            <span *ngSwitchCase="'error'">Reconnecting…</span>
+            <span *ngSwitchCase="'stopped'">Stopped</span>
+            <span *ngSwitchDefault>Idle</span>
+          </ng-container>
+        </span>
+      </div>
+  
+      <div class="lt-header-actions">
+        <!-- Clear -->
+        <button class="lt-action-btn" (click)="clearLiveTranscription()" title="Clear transcription"
+          [disabled]="liveTranscriptionSegments.length === 0">
+          <i class="bi bi-trash3"></i>
+        </button>
+        <!-- Toggle mic off/on keeps live transcription alive; this just hides panel -->
+        <button class="lt-action-btn" (click)="showLiveTranscriptionPanel = false" title="Minimise panel">
+          <i class="bi bi-dash-lg"></i>
+        </button>
+        <!-- Stop & close -->
+        <button class="lt-action-btn lt-close-btn" (click)="toggleLiveTranscription(); showLiveTranscriptionPanel = false"
+          title="Stop and close">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    </div>
+  
+    <!-- Error banner -->
+    <div class="lt-error-banner" *ngIf="liveTranscriptionError">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      {{ liveTranscriptionError }}
+    </div>
+  
+    <!-- Segments scroll area -->
+    <div class="lt-body" id="live-transcription-scroll">
+  
+      <!-- Empty / waiting state -->
+      <div class="lt-empty" *ngIf="liveTranscriptionSegments.length === 0 && !liveTranscriptionError">
+        <div class="lt-empty-icon">
+          <i class="bi bi-mic-fill"></i>
+          <span class="lt-wave"></span>
+          <span class="lt-wave lt-wave-2"></span>
+          <span class="lt-wave lt-wave-3"></span>
+        </div>
+        <p>
+          <ng-container *ngIf="liveTranscriptionStatus === 'connected'">
+            Listening… start speaking
+          </ng-container>
+          <ng-container *ngIf="liveTranscriptionStatus === 'connecting'">
+            Connecting to transcription server…
+          </ng-container>
+          <ng-container *ngIf="liveTranscriptionStatus === 'error'">
+            Could not reach the server. Retrying…
+          </ng-container>
+        </p>
+      </div>
+  
+      <!-- Transcription segments -->
+      <div class="lt-segment" *ngFor="let seg of liveTranscriptionSegments; trackBy: trackLiveSegment">
+        <span class="lt-seg-time">{{ seg.start | number:'1.0-1' }}s</span>
+        <span class="lt-seg-text">{{ seg.text }}</span>
+      </div>
+  
     </div>
   </div>
 </div>
