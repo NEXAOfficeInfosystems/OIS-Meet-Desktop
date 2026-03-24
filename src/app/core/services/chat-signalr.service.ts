@@ -176,10 +176,11 @@ export class ChatSignalrService {
     if (state === signalR.HubConnectionState.Connected) {
       // Connected - send immediately
       try {
+        console.log('📤 Sending message:', message);  // DEBUG: Log sending
         await this.hubConnection.invoke("SendMessage", message);
-        console.log('Message sent successfully');
+        console.log('✅ Message sent successfully');
       } catch (err) {
-        console.error('Error sending message:', err);
+        console.error('❌ Error sending message:', err);
         throw err;
       }
     } else if (state === signalR.HubConnectionState.Reconnecting) {
@@ -296,6 +297,7 @@ export class ChatSignalrService {
 
   joinConversation(conversationId: string): void {
     if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+      console.log('🔗 Joining conversation:', conversationId);  // DEBUG: Log joining
       this.hubConnection.invoke("JoinConversation", conversationId)
         .catch(err => console.error('Error joining conversation:', err));
     } else {
