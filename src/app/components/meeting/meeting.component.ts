@@ -2378,10 +2378,10 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private async startOwnLiveTranscription(isHost: boolean): Promise<void> {
     if (!this.mediaStream) return;
 
-    // const aiBase: string = ((environment as any).aiApiBaseUrl || 'http://192.168.1.47:8001')
-    //   .toString().trim().replace(/\/+$/, '');
-    const aiBase: string = ('http://192.168.1.47:8001')
+    const aiBase: string = ((environment as any).aiApiBaseUrl || 'http://192.168.1.47:8001')
       .toString().trim().replace(/\/+$/, '');
+    // const aiBase: string = ('http://192.168.1.47:8001')
+    //   .toString().trim().replace(/\/+$/, '');
     const wsUrl = aiBase.replace(/^http/, 'ws') + '/ws/transcribe';
 
     const bridge: ISignalRBridge = {
