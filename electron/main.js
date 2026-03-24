@@ -1,9 +1,15 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 // TEMP SSL BYPASS
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 let mainWindow;
+
+// Ensure Windows toast notifications show the product identity instead of Electron defaults.
+app.setName('OIS Meet');
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.ois.meet.desktop');
+}
 
 function safeFileName(value, fallback) {
   const candidate = (typeof value === 'string' ? value : '').trim();
@@ -74,6 +80,29 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+ipcMain.handle('show-native-notification', async (event, { title, body }) => {
+  try {
+    if (!Notification.isSupported()) {
+      return { success: false, error: 'Notifications are not supported on this system' };
+    }
+
+    const iconPath = path.join(__dirname, 'assets', 'icon.ico');
+    const notification = new Notification({
+      title: typeof title === 'string' && title.trim() ? title.trim() : 'OIS Meet',
+      body: typeof body === 'string' ? body : '',
+      icon: fs.existsSync(iconPath) ? iconPath : undefined,
+      appID: 'com.ois.meet.desktop',
+      silent: false
+    });
+
+    notification.show();
+    return { success: true };
+  } catch (error) {
+    console.error('Error showing native notification:', error);
+    return { success: false, error: error && error.message ? error.message : 'Failed to show notification' };
+  }
 });
 
 // IPC Handlers for Audio Recording

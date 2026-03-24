@@ -21,5 +21,9 @@ contextBridge.exposeInMainWorld('oisMeet', {
 
   generateMom: ({ meetingId, date, momTemplateName, transcriptFilePath, aiApiBaseUrl }) => {
     return ipcRenderer.invoke('generate-mom', { meetingId, date, momTemplateName, transcriptFilePath, aiApiBaseUrl });
+  },
+
+  showNotification: ({ title, body }) => {
+    return ipcRenderer.invoke('show-native-notification', { title, body });
   }
 });

@@ -301,6 +301,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const isFromMe           = message.senderId?.toString() === this.currentUserId?.toString();
     const isActiveConversation =
       this.selectedConversation?.id?.toString() === conversationId;
+    const isAppBackgrounded = this.isAppBackgrounded();
+    const shouldNotifyReceiver = !isFromMe && (!isActiveConversation || isAppBackgrounded);
 
     // ── Deduplication: skip if we already displayed this message id ────────
     // This handles BOTH the receiver (who might somehow get duplicates) AND
@@ -315,14 +317,17 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     if (isActiveConversation) {
       this.messages  = [...this.messages, message];
       this.shouldScroll = true;
-      setTimeout(() => this.markMessageAsRead(msgId), 500);
+      // Only auto-read when the active chat is actually visible to the user.
+      if (!isAppBackgrounded) {
+        setTimeout(() => this.markMessageAsRead(msgId), 500);
+      }
     }
 
     // ── Update sidebar preview (for both sender and receiver) ─────────────
     this.updateUserListPreview(conversationId, message);
 
     // ── Unread count + notifications (receiver only, inactive conversation) ─
-    if (!isFromMe && !isActiveConversation) {
+    if (shouldNotifyReceiver) {
       console.log('🔔 Triggering notification: not from me and not active conversation');  // DEBUG: Log notification trigger
       this.incrementUnreadForConversation(conversationId);
 
@@ -340,6 +345,12 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }
 
     this.cdr.detectChanges();
+  }
+
+  private isAppBackgrounded(): boolean {
+    const isHidden = document.visibilityState !== 'visible';
+    const hasFocus = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
+    return isHidden || !hasFocus;
   }
 
   // ── Sidebar preview update ─────────────────────────────────────────────────
@@ -435,9 +446,16 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   private showBrowserNotification(title: string, body: string): void {
+    if (document.visibilityState === 'visible' && document.hasFocus()) return;
+
+    const electronApi = (window as any).oisMeet;
+    if (electronApi?.isElectron && typeof electronApi.showNotification === 'function') {
+      electronApi.showNotification({ title, body }).catch(() => {});
+      return;
+    }
+
     if (!('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
-    if (document.visibilityState === 'visible') return;
     try {
       const n = new Notification(title, { body, icon: 'assets/login/ois-meet-logo.svg' });
       n.onclick = () => { window.focus(); n.close(); };
@@ -537,10 +555,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.currentPage  = 1;
     this.hasMoreMessages = true;
     this.displayedMessageIds.clear();
-
-    if (this.selectedConversation) {
-      this.chatSignalrService.leaveConversation(this.selectedConversation.id);
-    }
 
     // Reset unread count
     if (user.unreadCount > 0) {
@@ -744,7 +758,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // ═════════════════════════════════════════════════════════════════════════
 
   selectConversation(conversation: any): void {
-    if (this.selectedConversation) this.chatSignalrService.leaveConversation(this.selectedConversation.id);
     this.selectedConversation = conversation;
     if (this.chatSignalrService.isConnected()) this.chatSignalrService.joinConversation(conversation.id);
   }
