@@ -12,7 +12,6 @@
 
   <!-- MIC / CAM -->
   <div class="d-flex justify-content-center gap-3 mb-3">
-
     <button class="icon-btn" [class.active]="micOn" (click)="toggleMic()">
       <i class="bi" [ngClass]="micOn ? 'bi-mic-fill' : 'bi-mic-mute-fill'"></i>
     </button>
@@ -27,24 +26,62 @@
     {{ mode === 'meet-now' ? 'Meeting ID' : 'Enter Meeting ID' }}
   </label>
 
-  <div class="input-group mb-3">
-    <input #meetInput type="text" class="form-control" [readonly]="mode === 'meet-now'"
+  <div class="input-group mb-1">
+    <input
+      #meetInput
+      type="text"
+      class="form-control"
+      [readonly]="mode === 'meet-now'"
       [value]="mode === 'meet-now' ? meetingId : ''"
-      [placeholder]="mode === 'join-meeting' ? 'Enter meeting ID' : ''" />
+      [placeholder]="mode === 'join-meeting' ? 'Enter meeting ID'
+                   : isCreating ? 'Creating…' : ''" />
 
-    <button *ngIf="mode === 'meet-now'" class="btn btn-outline-secondary copy-btn" type="button"
-      (click)="copyMeetingId(meetInput)" style="border-color: #dee2e6;">
-      <i class="bi bi-clipboard"></i>
+    <!-- Copy button (meet-now only) -->
+    <button
+      *ngIf="mode === 'meet-now'"
+      class="btn btn-outline-secondary copy-btn"
+      type="button"
+      [disabled]="isCreating || !meetingId"
+      (click)="copyMeetingId(meetInput)"
+      style="border-color: #dee2e6;"
+      title="Copy meeting ID">
+      <i class="bi" [ngClass]="isCreating ? 'bi-hourglass-split spin-icon' : 'bi-clipboard'"></i>
     </button>
   </div>
 
+  <!-- Share in Chat button (meet-now only) -->
+  <div class="mb-3" *ngIf="mode === 'meet-now'">
+    <button
+      class="btn btn-sm btn-outline-primary w-100 share-chat-btn"
+      type="button"
+      [disabled]="isCreating || !meetingId"
+      (click)="shareToChat()"
+      title="Paste meeting ID into the active chat conversation">
+      <i class="bi bi-chat-dots me-1"></i>
+      Share Meeting ID in Chat
+    </button>
+  </div>
+
+  <!-- Validation error (join mode) -->
+  <div *ngIf="meetingError" class="alert alert-danger py-1 px-2 mb-2 small">
+    {{ meetingError }}
+  </div>
+
   <!-- ACTION -->
-  <button class="btn btn-primary w-100" [disabled]="mode === 'join-meeting' && !meetInput.value" (click)="mode === 'meet-now'
-            ? startMeeting()
-            : joinMeeting(meetInput.value)">
-    <i class="bi me-2" [ngClass]="mode === 'meet-now'
-         ? 'bi-camera-video'
-         : 'bi-box-arrow-in-right'"></i>
+  <button
+    class="btn btn-primary w-100"
+    [disabled]="(mode === 'join-meeting' && !meetInput.value) || isCreating"
+    (click)="mode === 'meet-now'
+               ? startMeeting()
+               : validateAndJoin(meetInput.value)">
+
+    <span *ngIf="isValidating || isCreating"
+          class="spinner-border spinner-border-sm me-2"
+          role="status" aria-hidden="true"></span>
+
+    <i *ngIf="!isValidating && !isCreating"
+       class="bi me-2"
+       [ngClass]="mode === 'meet-now' ? 'bi-camera-video' : 'bi-box-arrow-in-right'"></i>
 
     {{ mode === 'meet-now' ? 'Start Meeting' : 'Join Meeting' }}
   </button>

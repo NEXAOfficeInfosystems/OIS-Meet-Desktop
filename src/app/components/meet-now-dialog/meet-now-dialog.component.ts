@@ -13,11 +13,13 @@ import { MeetingService } from '../../core/services/meeting.service';
 })
 export class MeetNowDialogComponent implements OnInit {
   mode: 'meet-now' | 'join-meeting' = 'meet-now';
-  meetingId = '';
-  micOn = false; // Default mic OFF
-  camOn = false; // Default camera OFF (as requested)
+  meetingId   = '';
+  micOn       = false;
+  camOn       = false;
   isValidating = false;
   meetingError = '';
+
+  isCreating  = false;
 
   constructor(
     public dialogRef: MatDialogRef<MeetNowDialogComponent>,
@@ -31,14 +33,28 @@ export class MeetNowDialogComponent implements OnInit {
     this.mode = data.mode;
   }
 
-  ngOnInit() {
+  ngOnInit(): void {
     if (this.mode === 'meet-now') {
-      this.createNewMeeting();
+      this.initMeeting();
     }
   }
 
-  createNewMeeting() {
-    const userId = this.sessionService.getOISMeetUserId();
+  // ── Meeting creation (with cache) ──────────────────────────────────────────
+
+  private initMeeting(): void {
+    // ① Reuse the pending meeting if one already exists
+    const pending = this.meetingService.getPendingMeeting();
+    if (pending?.meetingId) {
+      this.meetingId = pending.meetingId;
+      return;
+    }
+
+    // ② Nothing cached → create a new one
+    this.createNewMeeting();
+  }
+
+  createNewMeeting(): void {
+    const userId   = this.sessionService.getOISMeetUserId();
     const userName = this.sessionService.getFullName() || 'User';
 
     if (!userId) {
@@ -46,47 +62,63 @@ export class MeetNowDialogComponent implements OnInit {
       return;
     }
 
+    this.isCreating  = true;
+    this.meetingId   = '';
+
     const request = {
-      topic: 'My Meeting',
-      hostId: userId,
-      hostName: userName,
+      topic:       'My Meeting',
+      hostId:      userId,
+      hostName:    userName,
       expiryHours: 24,
       settings: {
-        muteOnEntry: false,
-        allowChat: true,
+        muteOnEntry:      false,
+        allowChat:        true,
         allowScreenShare: true,
-        maxParticipants: 50,
-        waitingRoom: false
+        maxParticipants:  50,
+        waitingRoom:      false
       }
     };
 
     this.meetingService.createMeeting(request).subscribe({
       next: (response: any) => {
+        this.isCreating = false;
         if (response.success) {
           this.meetingId = response.data.meetingId;
-          this.snackBar.open('Meeting created successfully!', 'Close', {
-            duration: 2000
-          });
         }
       },
-      error: (error) => {
-        console.error('Error creating meeting:', error);
-        this.snackBar.open('Failed to create meeting', 'Close', {
-          duration: 3000
-        });
+      error: () => {
+        this.isCreating = false;
+        this.snackBar.open('Failed to create meeting', 'Close', { duration: 3000 });
       }
     });
   }
 
-  toggleMic() {
-    this.micOn = !this.micOn;
+  // ── Share meeting ID into active chat ──────────────────────────────────────
+  shareToChat(): void {
+    if (!this.meetingId) return;
+    const shareText = `Join my meeting! Meeting ID: ${this.meetingId}`;
+    this.clipboard.copy(shareText);
+    window.dispatchEvent(
+      new CustomEvent('ois-share-meeting-id', {
+        detail: { meetingId: this.meetingId, text: shareText }
+      })
+    );
+
+    this.snackBar.open(
+      'Meeting ID copied & ready to paste in chat!',
+      'Close',
+      { duration: 3000, verticalPosition: 'bottom' }
+    );
   }
 
-  toggleCam() {
-    this.camOn = !this.camOn;
-  }
+  // ── Mic / Cam ──────────────────────────────────────────────────────────────
 
-  copyMeetingId(input: HTMLInputElement) {
+  toggleMic(): void { this.micOn = !this.micOn; }
+  toggleCam(): void { this.camOn = !this.camOn; }
+
+  // ── Clipboard copy ─────────────────────────────────────────────────────────
+
+  copyMeetingId(input: HTMLInputElement): void {
     this.clipboard.copy(input.value);
     this.snackBar.open('Meeting ID copied!', 'Close', {
       duration: 2000,
@@ -95,7 +127,9 @@ export class MeetNowDialogComponent implements OnInit {
     });
   }
 
-  validateAndJoin(meetingId: string) {
+  // ── Join flow ──────────────────────────────────────────────────────────────
+
+  validateAndJoin(meetingId: string): void {
     if (!meetingId.trim()) {
       this.meetingError = 'Please enter a meeting ID';
       return;
@@ -107,23 +141,21 @@ export class MeetNowDialogComponent implements OnInit {
     this.meetingService.validateMeeting(meetingId.trim()).subscribe({
       next: (response: any) => {
         this.isValidating = false;
-
         if (response.success) {
           this.joinMeeting(meetingId.trim());
         } else {
           this.meetingError = response.message || 'Invalid meeting ID';
         }
       },
-      error: (error) => {
+      error: () => {
         this.isValidating = false;
         this.meetingError = 'Error validating meeting';
-        console.error('Validation error:', error);
       }
     });
   }
 
-  joinMeeting(meetingId: string) {
-    const userId = this.sessionService.getOISMeetUserId();
+  joinMeeting(meetingId: string): void {
+    const userId   = this.sessionService.getOISMeetUserId();
     const userName = this.sessionService.getFullName() || 'User';
 
     if (!userId) {
@@ -131,47 +163,37 @@ export class MeetNowDialogComponent implements OnInit {
       return;
     }
 
-    const request = {
-      meetingId: meetingId,
-      userId: userId,
-      userName: userName
-    };
-
-    this.meetingService.joinMeeting(request).subscribe({
+    this.meetingService.joinMeeting({ meetingId, userId, userName }).subscribe({
       next: (response: any) => {
         if (response.success) {
           this.dialogRef.close();
-
-          // Pass micOn and camOn states to meeting component
           this.router.navigate(['/meeting', meetingId], {
             queryParams: {
-              host: 'false',
+              host:  'false',
               topic: response.data.topic || 'Joined Meeting',
-              mic: this.micOn,  // Pass mic state
-              cam: this.camOn   // Pass cam state (will be false)
+              mic:   this.micOn,
+              cam:   this.camOn
             }
           });
         }
       },
-      error: (error) => {
-        console.error('Error joining meeting:', error);
-        this.snackBar.open('Failed to join meeting', 'Close', {
-          duration: 3000
-        });
+      error: () => {
+        this.snackBar.open('Failed to join meeting', 'Close', { duration: 3000 });
       }
     });
   }
 
-  startMeeting() {
-    this.dialogRef.close();
+  // ── Start flow ─────────────────────────────────────────────────────────────
 
-    // Pass micOn and camOn states to meeting component
+  startMeeting(): void {
+    this.meetingService.clearPendingMeeting();
+    this.dialogRef.close();
     this.router.navigate(['/meeting', this.meetingId], {
       queryParams: {
-        host: 'true',
+        host:  'true',
         topic: 'My Meeting',
-        mic: this.micOn,  // Pass mic state
-        cam: this.camOn   // Pass cam state (will be false)
+        mic:   this.micOn,
+        cam:   this.camOn
       }
     });
   }

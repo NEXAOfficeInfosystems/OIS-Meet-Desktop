@@ -19,7 +19,6 @@
   color: #fff;
 }
 
-
 .icon-btn i {
   font-size: 18px;
 }
@@ -37,16 +36,46 @@
 .close-btn:hover {
   color: #000;
 }
+
 .copy-btn {
   border-left: none;
   background: transparent;
   color: #6c757d;
 }
 
-.copy-btn:hover {
+.copy-btn:hover:not(:disabled) {
   color: #0d6efd;
 }
+
 .input-group .form-control:focus {
   box-shadow: none;
 }
 
+/* ── Share in Chat button ─────────────────────────────────────────────────── */
+.share-chat-btn {
+  font-size: 13px;
+  border-style: dashed;
+  transition: background 0.18s, border-color 0.18s;
+
+  &:hover:not(:disabled) {
+    background: #e8f0fe;
+    border-color: #0d6efd;
+    border-style: solid;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+/* ── Hourglass spin while creating meeting ────────────────────────────────── */
+.spin-icon {
+  display: inline-block;
+  animation: spin-it 1.2s linear infinite;
+}
+
+@keyframes spin-it {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

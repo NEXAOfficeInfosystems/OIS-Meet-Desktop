@@ -66,6 +66,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // Cleanup
   private destroy$ = new Subject<void>();
  private connectionStateSubscription: Subscription;
+  private shareMeetingIdHandler: ((e: Event) => void) | null = null;
   constructor(
     private sessionService: SessionService,
     private commonService: CommonService,
@@ -116,6 +117,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         console.log('✅ Sync completed for company:', company);
         this.handleSyncComplete();
       });
+
+    this.shareMeetingIdHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.meetingId) {
+        this.handleShareMeetingId(detail.meetingId, detail.text);
+      }
+    };
+     window.addEventListener('ois-share-meeting-id', this.shareMeetingIdHandler);
   }
 
   ngAfterViewChecked() {
@@ -141,6 +150,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }
     if (this.syncSubscription) {
       this.syncSubscription.unsubscribe();
+    }
+    if (this.shareMeetingIdHandler) {
+      window.removeEventListener('ois-share-meeting-id', this.shareMeetingIdHandler);
+      this.shareMeetingIdHandler = null;
     }
   }
 
@@ -788,5 +801,27 @@ private handleNewMessage(message: any): void {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
 
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  private handleShareMeetingId(meetingId: string, text: string): void {
+    if (!this.selectedConversation || !this.currentUserId) {
+      console.log('[Chat] No conversation open; meeting ID is on clipboard:', meetingId);
+      return;
+    }
+
+    // const request: SendMessageRequest = {
+    //   conversationId: this.selectedConversation.id,
+    //   messageType:    'Text',
+    //   content:        text || `Join my meeting! Meeting ID: ${meetingId}`,
+    //   senderId:       this.currentUserId
+    // };
+
+    // this.chatSignalrService.sendMessage(request)
+    //   .then(() => {
+    //     console.log('[Chat] Meeting ID shared successfully in conversation.');
+    //   })
+    //   .catch((err: any) => {
+    //     console.error('[Chat] Failed to share meeting ID in chat:', err);
+    //   });
   }
 }
