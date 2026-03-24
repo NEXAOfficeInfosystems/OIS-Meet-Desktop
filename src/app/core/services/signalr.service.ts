@@ -67,6 +67,17 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
   private transcriptionAvailableSubject = new Subject<TranscriptionBroadcast>();
   private momAvailableSubject = new Subject<MomBroadcast>();
 
+  // Live Transcription broadcast support
+  private liveTranscriptionStartedSubject = new Subject<{ meetingId: string; fromUserId: string; fromUserName: string;}>();
+  private liveTranscriptionStoppedSubject = new Subject<{ meetingId: string; fromUserId: string }>();
+  private liveTranscriptionSegmentSubject = new Subject<{
+    meetingId: string;
+    fromUserId: string;
+    segments: Array<{
+      start: number; end: number; text: string; language?: string; speakerName: string;
+    }>;
+  }>();
+
   // Chat Observables
   public messageReceived$ = this.messageReceivedSubject.asObservable();
   public userTyping$ = this.userTypingSubject.asObservable();
@@ -93,6 +104,10 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
 
   public transcriptionAvailable$ = this.transcriptionAvailableSubject.asObservable();
   public momAvailable$ = this.momAvailableSubject.asObservable();
+
+  public liveTranscriptionStarted$ = this.liveTranscriptionStartedSubject.asObservable();
+  public liveTranscriptionStopped$ = this.liveTranscriptionStoppedSubject.asObservable();
+  public liveTranscriptionSegment$ = this.liveTranscriptionSegmentSubject.asObservable();
 
   public userId: string = '';
   public userName: string = '';
@@ -284,6 +299,18 @@ this.hubConnection.on('UserJoined', (data: any) => {
   this.hubConnection.on('MomAvailable', (data: any) => {
     this.ngZone.run(() => this.momAvailableSubject.next(data as MomBroadcast));
   });
+
+  this.hubConnection.on('LiveTranscriptionStarted', (data: any) => {
+    this.ngZone.run(() => this.liveTranscriptionStartedSubject.next(data));
+  });
+
+  this.hubConnection.on('LiveTranscriptionStopped', (data: any) => {
+    this.ngZone.run(() => this.liveTranscriptionStoppedSubject.next(data));
+  });
+
+  this.hubConnection.on('LiveTranscriptionSegments', (data: any) => {
+    this.ngZone.run(() => this.liveTranscriptionSegmentSubject.next(data));
+  });
   }
 
   // Chat Methods
@@ -406,6 +433,41 @@ public async publishMom(meetingId: string, mom: GenerateMomResponse): Promise<vo
       this.hubConnection.stop()
         .then(() => console.log('SignalR Stopped'))
         .catch(err => console.error('Error stopping SignalR: ', err));
+    }
+  }
+
+  public async broadcastLiveTranscriptionSegments(
+    meetingId: string,
+    segments: Array<{
+      start: number; end: number; text: string; language?: string; speakerName: string;
+    }>
+  ): Promise<void> {
+    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+      try {
+        await this.hubConnection.invoke('BroadcastLiveTranscriptionSegments', meetingId, segments);
+      } catch (err) {
+        console.error('Error broadcasting live transcription:', err);
+      }
+    }
+  }
+
+  public async notifyLiveTranscriptionStarted(meetingId: string): Promise<void> {
+    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+      try {
+        await this.hubConnection.invoke('NotifyLiveTranscriptionStarted', meetingId);
+      } catch (err) {
+        console.error('Error notifying live transcription started:', err);
+      }
+    }
+  }
+
+  public async notifyLiveTranscriptionStopped(meetingId: string): Promise<void> {
+    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+      try {
+        await this.hubConnection.invoke('NotifyLiveTranscriptionStopped', meetingId);
+      } catch (err) {
+        console.error('Error notifying live transcription stopped:', err);
+      }
     }
   }
 }

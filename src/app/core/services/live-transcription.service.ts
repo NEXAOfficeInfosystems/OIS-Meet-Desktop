@@ -1,3 +1,43 @@
+// src/app/core/services/live-transcription.service.ts
+// ═══════════════════════════════════════════════════════════════════════════════
+// Live Transcription Service  — Distributed Mic Architecture  (v4)
+//
+// WHY THE PREVIOUS APPROACH FAILED
+// ─────────────────────────────────
+// Browsers enforce a security rule: audio playing through an <audio> or <video>
+// element CANNOT be re-captured by an AudioContext on the same page (CORS +
+// autoplay policies). So the host trying to pipe remote participants' audio into
+// the Whisper WebSocket silently received silence for those tracks.
+//
+// NEW ARCHITECTURE
+// ────────────────
+// • Every participant captures ONLY their OWN microphone locally.
+// • Every participant sends their own PCM chunks to the Whisper WebSocket.
+// • Transcription results are labelled with the sender's name and broadcast to
+//   the entire meeting via SignalR so everyone sees a unified stream.
+// • The "host" role is now just a coordinator flag (first to click Start):
+//     - Host clicks Start  → notifies all via SignalR → everyone opens WS + captures mic.
+//     - Host clicks Stop   → notifies all via SignalR → everyone closes WS.
+//     - Viewer hides panel → local only, WS stays open, mic capture continues.
+//     - Participant leaves → their WS closes, others keep running.
+//
+// PUBLIC API (used by meeting.component.ts)
+// ─────────────────────────────────────────
+//   start(micStream, wsUrl, participantName, meetingId, signalR)
+//     → opens WS, starts sending own mic, labels segments with participantName
+//   startAsViewer()
+//     → pure receiver mode (no WS), receives segments via SignalR
+//   receiveRemoteSegment(raw)
+//     → called on SignalR "LiveTranscriptionSegments" event
+//   stop()
+//     → closes WS, stops mic capture
+//   stopViewing()
+//     → clears viewer state
+//   clearSegments()
+//   segments$  / status$  / error$
+//   isActiveParticipant  → boolean (true = this client has its own WS open)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 import { Injectable, NgZone, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
 
@@ -7,139 +47,222 @@ export interface LiveTranscriptionSegment {
   end: number;
   text: string;
   language?: string;
+  speakerName: string;     // who spoke this segment
   receivedAt: Date;
+  isOwn: boolean;          // true = produced by THIS client's mic
 }
 
 export type LiveTranscriptionStatus =
   | 'idle'
   | 'connecting'
-  | 'connected'
+  | 'connected'     // this client has its own WS open and mic capturing
+  | 'viewing'       // receiving via SignalR only (viewer, no mic capture)
   | 'error'
   | 'stopped';
+
+export interface ISignalRBridge {
+  broadcastLiveTranscriptionSegments(
+    meetingId: string,
+    segments: Array<{ start: number; end: number; text: string; language?: string; speakerName: string }>
+  ): Promise<void>;
+  notifyLiveTranscriptionStarted(meetingId: string): Promise<void>;
+  notifyLiveTranscriptionStopped(meetingId: string): Promise<void>;
+}
 
 @Injectable({ providedIn: 'root' })
 export class LiveTranscriptionService implements OnDestroy {
 
-  // ── Public streams ──────────────────────────────────────────────────────────
+  // ── Public observables ──────────────────────────────────────────────────────
   private readonly segmentsSubject = new BehaviorSubject<LiveTranscriptionSegment[]>([]);
-  public readonly segments$: Observable<LiveTranscriptionSegment[]> = this.segmentsSubject.asObservable();
+  public  readonly segments$: Observable<LiveTranscriptionSegment[]> = this.segmentsSubject.asObservable();
 
   private readonly statusSubject = new BehaviorSubject<LiveTranscriptionStatus>('idle');
-  public readonly status$: Observable<LiveTranscriptionStatus> = this.statusSubject.asObservable();
+  public  readonly status$: Observable<LiveTranscriptionStatus> = this.statusSubject.asObservable();
 
   private readonly errorSubject = new Subject<string>();
-  public readonly error$: Observable<string> = this.errorSubject.asObservable();
+  public  readonly error$: Observable<string> = this.errorSubject.asObservable();
 
-  // ── Private state ───────────────────────────────────────────────────────────
-  private ws: WebSocket | null = null;
-  private audioContext: AudioContext | null = null;
-  private scriptProcessor: ScriptProcessorNode | null = null;
-  private sourceNode: MediaStreamAudioSourceNode | null = null;
-  private pingInterval: ReturnType<typeof setInterval> | null = null;
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** True when this client's own WebSocket + mic capture is running. */
+  public get isActiveParticipant(): boolean { return this._isActiveParticipant; }
+  private _isActiveParticipant = false;
 
-  private activeStream: MediaStream | null = null;
-  private activeWsUrl: string = '';
-  private activeLanguage: string = 'en';
+  /** True when this client is the one who initiated the session (clicked Start). */
+  public get isSessionHost(): boolean { return this._isSessionHost; }
+  private _isSessionHost = false;
 
-  /** Buffer of PCM float32 samples. Flushed to WS at CHUNK_INTERVAL_MS cadence. */
-  private sampleBuffer: Float32Array[] = [];
-  private flushInterval: ReturnType<typeof setInterval> | null = null;
+  // ── Private WebSocket / Audio state ────────────────────────────────────────
+  private ws:               WebSocket | null = null;
+  private audioContext:     AudioContext | null = null;
+  private scriptProcessor:  ScriptProcessorNode | null = null;
+  private micSourceNode:    MediaStreamAudioSourceNode | null = null;
 
-  // Audio settings
-  private readonly SAMPLE_RATE = 16000;        // Whisper expects 16 kHz
-  private readonly CHUNK_INTERVAL_MS = 1500;   // Send a chunk every 1.5 s
-  private readonly SCRIPT_PROCESSOR_SIZE = 4096;
+  private pingInterval:     ReturnType<typeof setInterval>  | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout>   | null = null;
+  private flushInterval:    ReturnType<typeof setInterval>  | null = null;
 
-  private segmentCounter = 0;
+  private sampleBuffer:     Float32Array[] = [];
+  private segmentCounter    = 0;
 
-  constructor(private ngZone: NgZone) { }
+  // Kept for reconnect
+  private activeWsUrl       = '';
+  private activeMeetingId   = '';
+  private activeLanguage    = 'en';
+  private activeParticipantName = '';
+  private activeMicStream:  MediaStream | null = null;
+  private signalRBridge:    ISignalRBridge | null = null;
 
-  // ── Public API ──────────────────────────────────────────────────────────────
+  // Audio constants
+  private readonly SAMPLE_RATE         = 16000;
+  private readonly CHUNK_INTERVAL_MS   = 1500;
+  private readonly SCRIPT_PROCESSOR_SZ = 4096;
+  private readonly MAX_SEGMENTS        = 500;
+  private readonly SILENCE_THRESHOLD   = 0.005;
+
+  constructor(private ngZone: NgZone) {}
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PUBLIC API
+  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Start live transcription.
-   * Safe to call when already running – it will no-op.
+   * Start capturing THIS participant's own microphone and sending to Whisper.
+   * Called on every participant (host AND viewers) when the session is active.
+   *
+   * @param micStream        The local MediaStream (mic only)
+   * @param wsUrl            e.g. "ws://192.168.1.47:8001/ws/transcribe"
+   * @param participantName  Used to label segments (e.g. "Alice")
+   * @param meetingId        Used to broadcast segments via SignalR
+   * @param signalR          Bridge for SignalR invocations
+   * @param isSessionHost    True only for the participant who clicked Start
+   * @param language         ISO-639-1 code, default "en"
    */
   public async start(
-    micStream: MediaStream,
-    wsUrl: string,
-    language = 'en'
+    micStream:        MediaStream,
+    wsUrl:            string,
+    participantName:  string,
+    meetingId:        string,
+    signalR:          ISignalRBridge,
+    isSessionHost     = false,
+    language          = 'en'
   ): Promise<void> {
-    if (this.statusSubject.value === 'connecting' || this.statusSubject.value === 'connected') {
-      return;
-    }
+    const s = this.statusSubject.value;
+    if (s === 'connecting' || s === 'connected') return;
 
-    this.activeStream = micStream;
-    this.activeWsUrl = wsUrl;
-    this.activeLanguage = language;
-
-    this.segmentsSubject.next([]);
-    this.segmentCounter = 0;
+    this._isActiveParticipant     = true;
+    this._isSessionHost           = isSessionHost;
+    this.activeWsUrl              = wsUrl;
+    this.activeMeetingId          = meetingId;
+    this.activeLanguage           = language;
+    this.activeParticipantName    = participantName;
+    this.activeMicStream          = micStream;
+    this.signalRBridge            = signalR;
 
     this.statusSubject.next('connecting');
     this.connectWebSocket();
   }
 
-  /** Stop live transcription and release all resources. */
+  /**
+   * Pure viewer mode: receive segments via SignalR, no mic capture, no WS.
+   * Called on late joiners or if a participant's WS fails completely.
+   */
+  public startAsViewer(): void {
+    this.cleanup();
+    this._isActiveParticipant = false;
+    this._isSessionHost       = false;
+    this.statusSubject.next('viewing');
+  }
+
+  /**
+   * Inject a segment received via SignalR from another participant.
+   * The segment already carries speakerName set by the sender.
+   */
+  public receiveRemoteSegment(raw: {
+    start: number; end: number; text: string; language?: string; speakerName?: string;
+  }): void {
+    if (!raw.text?.trim()) return;
+    this.ngZone.run(() => {
+      const seg: LiveTranscriptionSegment = {
+        id:          `rmt-${++this.segmentCounter}-${Date.now()}`,
+        start:       raw.start,
+        end:         raw.end,
+        text:        raw.text.trim(),
+        language:    raw.language,
+        speakerName: raw.speakerName || 'Participant',
+        receivedAt:  new Date(),
+        isOwn:       false,
+      };
+      const updated = [...this.segmentsSubject.value, seg].slice(-this.MAX_SEGMENTS);
+      this.segmentsSubject.next(updated);
+    });
+  }
+
+  /** Stop WS + mic capture. For the host this ends the session for everyone (caller handles SignalR notify). */
   public stop(): void {
     this.cleanup();
+    this._isActiveParticipant = false;
+    this._isSessionHost       = false;
     this.statusSubject.next('stopped');
   }
 
-  /** Clear displayed segments without stopping. */
+  /** Stop viewer state without affecting the running session. */
+  public stopViewing(): void {
+    this._isActiveParticipant = false;
+    this._isSessionHost       = false;
+    this.statusSubject.next('stopped');
+    this.segmentsSubject.next([]);
+    this.segmentCounter = 0;
+  }
+
+  /** Wipe displayed segments without stopping. */
   public clearSegments(): void {
     this.segmentsSubject.next([]);
     this.segmentCounter = 0;
   }
 
-  // ── WebSocket ───────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // WEBSOCKET
+  // ═══════════════════════════════════════════════════════════════════════════
 
   private connectWebSocket(): void {
-    if (this.ws) {
-      try { this.ws.close(); } catch { /* ignore */ }
-      this.ws = null;
-    }
+    if (this.ws) { try { this.ws.close(); } catch { /* ignore */ } this.ws = null; }
 
     try {
       this.ws = new WebSocket(this.activeWsUrl);
 
       this.ws.onopen = () => {
         this.ngZone.run(() => this.statusSubject.next('connected'));
-        this.startAudioCapture();
+        this.startMicCapture();
         this.startPing();
       };
 
       this.ws.onmessage = (event: MessageEvent) => {
         try {
           const msg = JSON.parse(event.data as string);
-          if (msg.type === 'transcription' && Array.isArray(msg.segments)) {
-            this.ngZone.run(() => this.handleSegments(msg.segments, msg.language));
+          if (msg.type === 'transcription' && Array.isArray(msg.segments) && msg.segments.length) {
+            this.ngZone.run(() => this.handleSegmentsFromWs(msg.segments, msg.language));
           }
-        } catch {
-          // ignore malformed frames
-        }
+        } catch { /* ignore malformed frame */ }
       };
 
       this.ws.onerror = () => {
         this.ngZone.run(() => {
           this.statusSubject.next('error');
-          this.errorSubject.next('WebSocket connection error');
+          this.errorSubject.next('WebSocket error – retrying…');
         });
+        this.stopMicCapture();
+        this.stopPing();
         this.scheduleReconnect();
       };
 
       this.ws.onclose = () => {
         this.ngZone.run(() => {
-          if (this.statusSubject.value !== 'stopped') {
-            this.statusSubject.next('error');
-          }
+          if (this.statusSubject.value !== 'stopped') this.statusSubject.next('error');
         });
-        this.stopAudioCapture();
+        this.stopMicCapture();
         this.stopPing();
       };
 
-    } catch (err) {
+    } catch {
       this.ngZone.run(() => {
         this.statusSubject.next('error');
         this.errorSubject.next('Failed to open WebSocket');
@@ -160,175 +283,159 @@ export class LiveTranscriptionService implements OnDestroy {
   }
 
   private clearReconnectTimeout(): void {
-    if (this.reconnectTimeout !== null) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
+    if (this.reconnectTimeout !== null) { clearTimeout(this.reconnectTimeout); this.reconnectTimeout = null; }
   }
 
   // ── Ping ────────────────────────────────────────────────────────────────────
-
   private startPing(): void {
     this.stopPing();
     this.pingInterval = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ type: 'ping' }));
-      }
+      if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'ping' }));
     }, 10000);
   }
-
   private stopPing(): void {
-    if (this.pingInterval !== null) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
+    if (this.pingInterval !== null) { clearInterval(this.pingInterval); this.pingInterval = null; }
   }
 
-  // ── Audio Capture ───────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MIC CAPTURE  (own mic only → 16 kHz mono PCM)
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  private startAudioCapture(): void {
-    if (!this.activeStream) return;
-
-    const audioTracks = this.activeStream.getAudioTracks();
-    if (audioTracks.length === 0) return;
+  private startMicCapture(): void {
+    if (!this.activeMicStream) return;
+    const micTracks = this.activeMicStream.getAudioTracks();
+    if (!micTracks.length) return;
 
     try {
-      // Use a resampling AudioContext so the server always receives 16 kHz
-      this.audioContext = new AudioContext({ sampleRate: this.SAMPLE_RATE });
-
-      const audioOnlyStream = new MediaStream(audioTracks);
-      this.sourceNode = this.audioContext.createMediaStreamSource(audioOnlyStream);
-
-      // ScriptProcessorNode is deprecated but remains the most compatible
-      // cross-browser approach for raw PCM access without SharedArrayBuffer.
-      this.scriptProcessor = this.audioContext.createScriptProcessor(
-        this.SCRIPT_PROCESSOR_SIZE,
-        1,   // mono input
-        1    // mono output
+      // AudioContext resampled to 16 kHz so Whisper gets the right sample rate
+      this.audioContext    = new AudioContext({ sampleRate: this.SAMPLE_RATE });
+      this.micSourceNode   = this.audioContext.createMediaStreamSource(
+        new MediaStream(micTracks)
       );
 
+      // ScriptProcessorNode: collect raw PCM frames
+      // (deprecated but universally supported without SharedArrayBuffer)
+      this.scriptProcessor = this.audioContext.createScriptProcessor(
+        this.SCRIPT_PROCESSOR_SZ, 1, 1
+      );
       this.scriptProcessor.onaudioprocess = (e: AudioProcessingEvent) => {
         if (this.ws?.readyState !== WebSocket.OPEN) return;
-
-        // Clone the samples so the buffer isn't re-used underneath us
-        const inputData = e.inputBuffer.getChannelData(0);
-        this.sampleBuffer.push(new Float32Array(inputData));
+        // Clone samples — the underlying buffer is reused after the event
+        this.sampleBuffer.push(new Float32Array(e.inputBuffer.getChannelData(0)));
       };
 
-      this.sourceNode.connect(this.scriptProcessor);
-      // Must connect to destination; otherwise Chrome stops firing the callback
+      this.micSourceNode.connect(this.scriptProcessor);
+      // Must connect to destination; otherwise Chrome suppresses the callback
       this.scriptProcessor.connect(this.audioContext.destination);
 
-      // Start periodic flush
+      // Flush samples to WS on a fixed cadence
       this.flushInterval = setInterval(() => this.flushBuffer(), this.CHUNK_INTERVAL_MS);
 
     } catch (err) {
-      console.error('[LiveTranscription] Audio capture failed:', err);
+      console.error('[LiveTranscription] Mic capture failed:', err);
       this.ngZone.run(() => {
-        this.errorSubject.next('Audio capture setup failed');
+        this.errorSubject.next('Microphone capture failed');
         this.statusSubject.next('error');
       });
     }
   }
 
-  private stopAudioCapture(): void {
-    if (this.flushInterval !== null) {
-      clearInterval(this.flushInterval);
-      this.flushInterval = null;
-    }
+  private stopMicCapture(): void {
+    if (this.flushInterval !== null) { clearInterval(this.flushInterval); this.flushInterval = null; }
     this.sampleBuffer = [];
-
     try { this.scriptProcessor?.disconnect(); } catch { /* ignore */ }
-    try { this.sourceNode?.disconnect(); } catch { /* ignore */ }
-    try { this.audioContext?.close(); } catch { /* ignore */ }
-
+    try { this.micSourceNode?.disconnect();   } catch { /* ignore */ }
+    try { this.audioContext?.close();         } catch { /* ignore */ }
     this.scriptProcessor = null;
-    this.sourceNode = null;
-    this.audioContext = null;
+    this.micSourceNode   = null;
+    this.audioContext    = null;
   }
 
-  /** Concatenate buffered PCM frames and send to the WS server. */
+  /** Merge buffered PCM frames into one chunk and send to Whisper. */
   private flushBuffer(): void {
-    if (!this.sampleBuffer.length || this.ws?.readyState !== WebSocket.OPEN) {
-      return;
-    }
+    if (!this.sampleBuffer.length || this.ws?.readyState !== WebSocket.OPEN) return;
 
-    const totalLen = this.sampleBuffer.reduce((acc, f) => acc + f.length, 0);
-    const merged = new Float32Array(totalLen);
+    const totalLen = this.sampleBuffer.reduce((a, f) => a + f.length, 0);
+    const merged   = new Float32Array(totalLen);
     let offset = 0;
-    for (const frame of this.sampleBuffer) {
-      merged.set(frame, offset);
-      offset += frame.length;
-    }
+    for (const frame of this.sampleBuffer) { merged.set(frame, offset); offset += frame.length; }
     this.sampleBuffer = [];
 
-    // Skip near-silent chunks to avoid sending noise to Whisper
-    const rms = this.computeRMS(merged);
-    if (rms < 0.005) return;
+    // Skip near-silent chunks (background noise / muted mic)
+    if (this.computeRMS(merged) < this.SILENCE_THRESHOLD) return;
 
-    const payload = {
-      type: 'audio_data',
-      data: Array.from(merged),
-      language: this.activeLanguage,
-    };
     try {
-      this.ws!.send(JSON.stringify(payload));
-    } catch {
-      // WS closed between the check and send – ignore
-    }
+      this.ws!.send(JSON.stringify({
+        type:     'audio_data',
+        data:     Array.from(merged),
+        language: this.activeLanguage,
+      }));
+    } catch { /* WS closed between check and send */ }
   }
 
-  /** Root-mean-square of a Float32 audio frame. */
-  private computeRMS(samples: Float32Array): number {
+  private computeRMS(s: Float32Array): number {
     let sum = 0;
-    for (let i = 0; i < samples.length; i++) {
-      sum += samples[i] * samples[i];
-    }
-    return Math.sqrt(sum / samples.length);
+    for (let i = 0; i < s.length; i++) sum += s[i] * s[i];
+    return Math.sqrt(sum / s.length);
   }
 
-  // ── Segment Handling ────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SEGMENT HANDLING
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  private handleSegments(
-    rawSegments: { start: number; end: number; text: string }[],
+  private handleSegmentsFromWs(
+    raw: { start: number; end: number; text: string }[],
     language?: string
   ): void {
-    const now = new Date();
-    const newSegs: LiveTranscriptionSegment[] = rawSegments
+    const now    = new Date();
+    const newSegs: LiveTranscriptionSegment[] = raw
       .filter((s) => s.text?.trim())
       .map((s) => ({
-        id: `lt-${++this.segmentCounter}-${Date.now()}`,
-        start: s.start,
-        end: s.end,
-        text: s.text.trim(),
-        language: language ?? this.activeLanguage,
-        receivedAt: now,
+        id:          `lt-${++this.segmentCounter}-${Date.now()}`,
+        start:       s.start,
+        end:         s.end,
+        text:        s.text.trim(),
+        language:    language ?? this.activeLanguage,
+        speakerName: this.activeParticipantName,
+        receivedAt:  now,
+        isOwn:       true,
       }));
 
-    if (newSegs.length === 0) return;
+    if (!newSegs.length) return;
 
-    const current = this.segmentsSubject.value;
-    // Keep at most 200 segments to avoid memory growth in long meetings
-    const combined = [...current, ...newSegs].slice(-200);
+    // Add to own display immediately (zero latency for the speaker)
+    const combined = [...this.segmentsSubject.value, ...newSegs].slice(-this.MAX_SEGMENTS);
     this.segmentsSubject.next(combined);
+
+    // Broadcast to all other participants via SignalR
+    if (this.signalRBridge && this.activeMeetingId) {
+      this.signalRBridge
+        .broadcastLiveTranscriptionSegments(
+          this.activeMeetingId,
+          newSegs.map((s) => ({
+            start:       s.start,
+            end:         s.end,
+            text:        s.text,
+            language:    s.language,
+            speakerName: s.speakerName,
+          }))
+        )
+        .catch(() => { /* non-fatal */ });
+    }
   }
 
-  // ── Cleanup ─────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CLEANUP
+  // ═══════════════════════════════════════════════════════════════════════════
 
   private cleanup(): void {
     this.clearReconnectTimeout();
-    this.stopAudioCapture();
+    this.stopMicCapture();
     this.stopPing();
-
-    if (this.ws) {
-      try { this.ws.close(); } catch { /* ignore */ }
-      this.ws = null;
-    }
-
-    this.activeStream = null;
+    if (this.ws) { try { this.ws.close(); } catch { /* ignore */ } this.ws = null; }
+    this.activeMicStream   = null;
+    this.signalRBridge     = null;
   }
 
-  ngOnDestroy(): void {
-    this.cleanup();
-  }
+  ngOnDestroy(): void { this.cleanup(); }
 }

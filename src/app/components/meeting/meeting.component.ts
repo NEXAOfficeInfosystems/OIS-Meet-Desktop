@@ -21,7 +21,12 @@ import { StorageService } from '../../core/services/storage.service';
 import { AudioRecorderService, TranscriptionResponse, TranscriptionSegment } from '../../core/services/audio-recorder.service';
 import { MomGeneratorService } from '../../core/services/mom-generator.service';
 import { LivekitService } from '../../core/services/livekit.service';
-import { LiveTranscriptionService, LiveTranscriptionSegment, LiveTranscriptionStatus } from '../../core/services/live-transcription.service';
+import {
+  LiveTranscriptionService,
+  LiveTranscriptionSegment,
+  LiveTranscriptionStatus,
+  ISignalRBridge,
+} from '../../core/services/live-transcription.service';
 
 @Component({
   selector: 'app-meeting',
@@ -102,11 +107,12 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private screenStream: MediaStream | null = null;
 
   // ── Live Transcription ────────────────────────────────────────────
-    isLiveTranscriptionOn: boolean = false;
-    liveTranscriptionStatus: LiveTranscriptionStatus = 'idle';
-    liveTranscriptionSegments: LiveTranscriptionSegment[] = [];
-    liveTranscriptionError: string | null = null;
+    isLiveTranscriptionOn:      boolean = false;
+    liveTranscriptionIsHost:    boolean = false;
     showLiveTranscriptionPanel: boolean = false;
+    liveTranscriptionStatus:    LiveTranscriptionStatus = 'idle';
+    liveTranscriptionSegments:  LiveTranscriptionSegment[] = [];
+    liveTranscriptionError:     string | null = null;
   // ───────────────────────────────────────────────────────────────────────
 
   // User Info
@@ -217,14 +223,12 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         });
       });
 
-    // ── Live Transcription subscriptions (NEW) ──────────────────────────────
+    // ── Live Transcription subscriptions ─────────────────────────────────────
     this.liveTranscriptionService.segments$
       .pipe(takeUntil(this.destroy$))
-      .subscribe((segments) => {
+      .subscribe((segs) => {
         this.ngZone.run(() => {
-          this.liveTranscriptionSegments = segments;
-          // Auto-scroll is handled by the template's (cdkScrollable) or a simple
-          // setTimeout in the method below.
+          this.liveTranscriptionSegments = segs;
           this.scrollLiveTranscriptionToBottom();
         });
       });
@@ -235,8 +239,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         this.ngZone.run(() => {
           this.liveTranscriptionStatus = status;
           if (status === 'error') {
-            this.liveTranscriptionError = 'Connection to transcription server lost. Retrying…';
-          } else if (status === 'connected') {
+            this.liveTranscriptionError = 'Reconnecting to transcription server…';
+          } else if (status === 'connected' || status === 'viewing') {
             this.liveTranscriptionError = null;
           }
         });
@@ -244,11 +248,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.liveTranscriptionService.error$
       .pipe(takeUntil(this.destroy$))
-      .subscribe((msg) => {
-        this.ngZone.run(() => {
-          this.liveTranscriptionError = msg;
-        });
-      });
+      .subscribe((msg) => this.ngZone.run(() => { this.liveTranscriptionError = msg; }));
     // ────────────────────────────────────────────────────────────────────────
   }
 
@@ -819,7 +819,10 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     // LiveKit media cleanup
     this.livekitService.disconnect();
     // ── Live Transcription teardown  ──────────────────────────────────
-    this.liveTranscriptionService.stop();
+  if (this.liveTranscriptionIsHost && this.isLiveTranscriptionOn) {
+    this.signalRService.notifyLiveTranscriptionStopped(this.meetingId).catch(() => {});
+  }
+  this.liveTranscriptionService.stop();
     this.signalRService.stopConnection();
   }
 
@@ -1167,6 +1170,21 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             'VideoOff:', existingParticipant.isVideoOff);
         }
       });
+          // if (this.liveTranscriptionService.isHostMode) {
+
+          //   const tryAddAudio = (key: string) => {
+          //     const audioEl = document.getElementById(`remote-audio-${key}`) as HTMLAudioElement | null;
+
+          //     if (audioEl?.srcObject) {
+          //       this.liveTranscriptionService.addRemoteStream(key, audioEl.srcObject as MediaStream);
+          //     }
+          //   };
+          //   setTimeout(() => {
+          //     tryAddAudio(participant.userId);
+          //     tryAddAudio(participant.connectionId);
+          //   }, 800);
+
+          // }
     });
 
     // Handle participant leaving
@@ -1185,6 +1203,12 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           this.removePeer(connectionId);
         }
       });
+
+      // if (this.liveTranscriptionService.isHostMode) {
+      //   this.liveTranscriptionService.removeRemoteStream(connectionId);
+      //   const p = this.participants.find(x => x.connectionId === connectionId);
+      //   if (p) this.liveTranscriptionService.removeRemoteStream(p.id);
+      // }
     });
 
     this.signalRService.participantDisconnected$.subscribe(({ connectionId, userId }) => {
@@ -1346,6 +1370,65 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           this.momApiResponse = mom;
         });
       });
+
+      // ── Live Transcription SignalR events ──────────────────────────────────────
+
+  // Another participant started live transcription → become a subscriber
+    this.signalRService.liveTranscriptionStarted$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(async (evt: any) => {
+        await this.ngZone.run(async () => {
+          // Only react if WE are not the host (host already started locally)
+          if (!this.liveTranscriptionService.isSessionHost) {
+            this.isLiveTranscriptionOn = true;
+            this.liveTranscriptionIsHost = false;
+            this.showLiveTranscriptionPanel = true;
+            this.liveTranscriptionError = null;
+
+            // ── Every non-host participant starts their OWN mic capture ───────
+            await this.startOwnLiveTranscription(false);
+
+            this.snackBar.open(
+              `${evt.fromUserName || 'A participant'} started live transcription`,
+              'Close',
+              { duration: 3000, verticalPosition: 'bottom' }
+            );
+          }
+        });
+      });
+
+
+  // Host stopped → if we're a subscriber, mark as stopped
+  this.signalRService.liveTranscriptionStopped$
+    .pipe(takeUntil(this.destroy$))
+    .subscribe(() => {
+      this.ngZone.run(() => {
+        if (!this.liveTranscriptionIsHost) {
+          // Viewers: session ended → stop own capture and close panel
+          this.isLiveTranscriptionOn      = false;
+          this.showLiveTranscriptionPanel = false;
+          this.liveTranscriptionService.stop();
+          this.snackBar.open('Live transcription ended', 'Close',
+            { duration: 2500, verticalPosition: 'bottom' });
+        }
+      });
+    });
+
+  // Receive a live transcription segment broadcast by the host machine
+    this.signalRService.liveTranscriptionSegment$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((evt: any) => {
+        this.ngZone.run(() => {
+          // Every participant receives OTHER participants' segments here.
+          // Own segments are displayed locally without a round-trip.
+          if (Array.isArray(evt?.segments)) {
+            (evt.segments as any[]).forEach((seg: any) =>
+              this.liveTranscriptionService.receiveRemoteSegment(seg)
+            );
+          }
+        });
+      });
+  // ──────────────────────────────────────────────────────────────────────────
   }
 
   private addParticipant(participant: MeetingParticipant) {
@@ -2257,50 +2340,82 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     return colors[Math.abs(hash) % colors.length];
   }
 
-  trackLiveSegment(_index: number, seg: LiveTranscriptionSegment): string {
-    return seg.id;
-  }
-
   // ════════════════════════════════════════════════════════════════════════════
   //  LIVE TRANSCRIPTION METHODS
   // ════════════════════════════════════════════════════════════════════════════
   async toggleLiveTranscription(): Promise<void> {
-    if (this.isLiveTranscriptionOn) {
-      // ── Turn OFF ──
-      this.isLiveTranscriptionOn = false;
-      this.liveTranscriptionService.stop();
-      this.liveTranscriptionError = null;
-    } else {
-      // ── Turn ON ──
+
+    if (!this.isLiveTranscriptionOn) {
+      // ── No session running → start as host ───────────────────────────────
       if (!this.mediaStream) {
-        this.snackBar.open('Microphone not available for live transcription', 'Close', { duration: 3000 });
+        this.snackBar.open('Microphone not available', 'Close', { duration: 3000 });
         return;
       }
-      // const aiBase: string = ((environment as any).aiApiBaseUrl || 'http://192.168.1.47:8001')
-      const aiBase: string = ('http://192.168.1.47:8001')
-        .toString()
-        .trim()
-        .replace(/\/+$/, '');
-      const wsUrl = aiBase.replace(/^http/, 'ws') + '/ws/transcribe';
 
-      this.isLiveTranscriptionOn = true;
+      this.isLiveTranscriptionOn      = true;
+      this.liveTranscriptionIsHost    = true;
       this.showLiveTranscriptionPanel = true;
-      this.liveTranscriptionError = null;
+      this.liveTranscriptionError     = null;
 
-      await this.liveTranscriptionService.start(this.mediaStream, wsUrl);
+      // Start own mic capture first
+      await this.startOwnLiveTranscription(true);
+
+      // Notify all other participants → they will each start their own capture
+      await this.signalRService.notifyLiveTranscriptionStarted(this.meetingId);
+
+    } else if (this.liveTranscriptionIsHost) {
+      // ── HOST: stop the session for everyone ──────────────────────────────
+      this.isLiveTranscriptionOn      = false;
+      this.liveTranscriptionIsHost    = false;
+      this.showLiveTranscriptionPanel = false;
+      this.liveTranscriptionService.stop();
+      await this.signalRService.notifyLiveTranscriptionStopped(this.meetingId);
+
     }
+  }
+
+
+  private async startOwnLiveTranscription(isHost: boolean): Promise<void> {
+    if (!this.mediaStream) return;
+
+    // const aiBase: string = ((environment as any).aiApiBaseUrl || 'http://192.168.1.47:8001')
+    //   .toString().trim().replace(/\/+$/, '');
+    const aiBase: string = ('http://192.168.1.47:8001')
+      .toString().trim().replace(/\/+$/, '');
+    const wsUrl = aiBase.replace(/^http/, 'ws') + '/ws/transcribe';
+
+    const bridge: ISignalRBridge = {
+      broadcastLiveTranscriptionSegments: (mid, segs) =>
+        this.signalRService.broadcastLiveTranscriptionSegments(mid, segs),
+      notifyLiveTranscriptionStarted: (mid) =>
+        this.signalRService.notifyLiveTranscriptionStarted(mid),
+      notifyLiveTranscriptionStopped: (mid) =>
+        this.signalRService.notifyLiveTranscriptionStopped(mid),
+    };
+
+    await this.liveTranscriptionService.start(
+      this.mediaStream,   // ← own mic only (no remote streams)
+      wsUrl,
+      this.userFullName,  // speaker label for this participant's segments
+      this.meetingId,
+      bridge,
+      isHost
+    ); 
+  }
+  toggleLiveTranscriptionPanel(): void {
+    this.showLiveTranscriptionPanel = !this.showLiveTranscriptionPanel;
   }
 
   clearLiveTranscription(): void {
     this.liveTranscriptionService.clearSegments();
   }
-
+  trackLiveSegment(_index: number, seg: LiveTranscriptionSegment): string {
+    return seg.id;
+  }
   private scrollLiveTranscriptionToBottom(): void {
     setTimeout(() => {
       const el = document.getElementById('live-transcription-scroll');
-      if (el) {
-        el.scrollTop = el.scrollHeight;
-      }
+      if (el) el.scrollTop = el.scrollHeight;
     }, 60);
   }
 }

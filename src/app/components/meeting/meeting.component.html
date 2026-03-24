@@ -196,14 +196,28 @@
         </button>
 
         <!-- Live Transcription Toggle -->
-          <button class="control-btn live-transcript-btn" [class.active]="isLiveTranscriptionOn"
-            [class.transcript-connecting]="liveTranscriptionStatus === 'connecting'" (click)="toggleLiveTranscription()"
-            data-bs-toggle="tooltip"
-            [attr.data-bs-title]="isLiveTranscriptionOn ? 'Stop Live Transcription' : 'Start Live Transcription'">
-            <!-- Pulse ring shown while active -->
-            <span class="live-dot" *ngIf="isLiveTranscriptionOn"></span>
-            <i class="bi bi-chat-square-text-fill"></i>
+          <button class="control-btn live-transcript-btn" [class.active]="isLiveTranscriptionOn && liveTranscriptionIsHost"
+            [class.viewer-active]="isLiveTranscriptionOn && !liveTranscriptionIsHost"
+            [class.transcript-connecting]="liveTranscriptionStatus === 'connecting'" (click)="liveTranscriptionIsHost || !isLiveTranscriptionOn
+                       ? toggleLiveTranscription()
+                       : toggleLiveTranscriptionPanel()" data-bs-toggle="tooltip" [attr.data-bs-title]="!isLiveTranscriptionOn
+              ? 'Start Live Transcription'
+              : liveTranscriptionIsHost
+                ? 'Stop Live Transcription'
+                : (showLiveTranscriptionPanel ? 'Hide Transcription' : 'Show Transcription')">
+          
+            <span class="live-dot" *ngIf="isLiveTranscriptionOn && liveTranscriptionIsHost"></span>
+            <span class="live-dot live-dot-viewer" *ngIf="isLiveTranscriptionOn && !liveTranscriptionIsHost"></span>
+          
+            <i class="bi" [ngClass]="{
+                 'bi-chat-square-text-fill': !isLiveTranscriptionOn,
+                 'bi-stop-circle-fill':       isLiveTranscriptionOn && liveTranscriptionIsHost,
+                 'bi-eye-fill':               isLiveTranscriptionOn && !liveTranscriptionIsHost && showLiveTranscriptionPanel,
+                 'bi-eye-slash-fill':         isLiveTranscriptionOn && !liveTranscriptionIsHost && !showLiveTranscriptionPanel
+               }">
+            </i>
           </button>
+
       </div>
 
       <div class="controls-right">
@@ -371,58 +385,78 @@
   </div>
 
   <!-- Live Transcription Panel -->
-  <div class="live-transcription-panel" *ngIf="showLiveTranscriptionPanel && !isLoading"
-    [class.panel-visible]="showLiveTranscriptionPanel">
+    <div class="lt-minimised-pill"
+      *ngIf="!showLiveTranscriptionPanel && isLiveTranscriptionOn && !liveTranscriptionIsHost && !isLoading"
+      (click)="toggleLiveTranscriptionPanel()">
+      <span class="lt-pill-dot"></span>
+      Live transcription — click to view
+    </div>
+
   
-    <!-- Panel Header -->
+  <div class="live-transcription-panel" *ngIf="showLiveTranscriptionPanel && isLiveTranscriptionOn && !isLoading"
+    [class.panel-visible]="showLiveTranscriptionPanel">
+
+    <!-- ── Header ── -->
     <div class="lt-header">
       <div class="lt-header-left">
-        <!-- Status indicator dot -->
         <span class="lt-status-dot" [class.lt-dot-connecting]="liveTranscriptionStatus === 'connecting'"
-          [class.lt-dot-connected]="liveTranscriptionStatus === 'connected'"
+          [class.lt-dot-active]="liveTranscriptionStatus === 'connected'"
+          [class.lt-dot-viewing]="liveTranscriptionStatus === 'viewing'"
           [class.lt-dot-error]="liveTranscriptionStatus === 'error'"
           [class.lt-dot-idle]="liveTranscriptionStatus === 'idle' || liveTranscriptionStatus === 'stopped'">
         </span>
+
         <span class="lt-title">Live Transcription</span>
+
+        <span class="lt-badge lt-badge-host" *ngIf="liveTranscriptionIsHost">
+          <i class="bi bi-broadcast"></i> Host
+        </span>
+        <span class="lt-badge lt-badge-viewer" *ngIf="!liveTranscriptionIsHost">
+          <i class="bi bi-mic-fill"></i> Active
+        </span>
+
         <span class="lt-status-label">
           <ng-container [ngSwitch]="liveTranscriptionStatus">
             <span *ngSwitchCase="'connecting'">Connecting…</span>
             <span *ngSwitchCase="'connected'">Live</span>
+            <span *ngSwitchCase="'viewing'">Receiving</span>
             <span *ngSwitchCase="'error'">Reconnecting…</span>
-            <span *ngSwitchCase="'stopped'">Stopped</span>
-            <span *ngSwitchDefault>Idle</span>
+            <span *ngSwitchDefault></span>
           </ng-container>
         </span>
       </div>
-  
+
       <div class="lt-header-actions">
-        <!-- Clear -->
-        <button class="lt-action-btn" (click)="clearLiveTranscription()" title="Clear transcription"
+        <!-- Clear — available to everyone -->
+        <button class="lt-action-btn" (click)="clearLiveTranscription()" title="Clear"
           [disabled]="liveTranscriptionSegments.length === 0">
           <i class="bi bi-trash3"></i>
         </button>
-        <!-- Toggle mic off/on keeps live transcription alive; this just hides panel -->
-        <button class="lt-action-btn" (click)="showLiveTranscriptionPanel = false" title="Minimise panel">
-          <i class="bi bi-dash-lg"></i>
+
+        <!-- HOST: stop the session for everyone -->
+        <button class="lt-action-btn lt-stop-btn" *ngIf="liveTranscriptionIsHost" (click)="toggleLiveTranscription()"
+          title="Stop live transcription">
+          <i class="bi bi-stop-circle"></i> Stop
         </button>
-        <!-- Stop & close -->
-        <button class="lt-action-btn lt-close-btn" (click)="toggleLiveTranscription(); showLiveTranscriptionPanel = false"
-          title="Stop and close">
-          <i class="bi bi-x-lg"></i>
+
+        <!-- VIEWER: hide panel locally (own mic capture keeps running) -->
+        <button class="lt-action-btn" *ngIf="!liveTranscriptionIsHost" (click)="toggleLiveTranscriptionPanel()"
+          title="Hide panel">
+          <i class="bi bi-eye-slash"></i>
         </button>
       </div>
     </div>
-  
+
     <!-- Error banner -->
     <div class="lt-error-banner" *ngIf="liveTranscriptionError">
       <i class="bi bi-exclamation-triangle-fill"></i>
       {{ liveTranscriptionError }}
     </div>
-  
-    <!-- Segments scroll area -->
+
+    <!-- Scroll area -->
     <div class="lt-body" id="live-transcription-scroll">
-  
-      <!-- Empty / waiting state -->
+
+      <!-- Empty state -->
       <div class="lt-empty" *ngIf="liveTranscriptionSegments.length === 0 && !liveTranscriptionError">
         <div class="lt-empty-icon">
           <i class="bi bi-mic-fill"></i>
@@ -431,24 +465,40 @@
           <span class="lt-wave lt-wave-3"></span>
         </div>
         <p>
-          <ng-container *ngIf="liveTranscriptionStatus === 'connected'">
-            Listening… start speaking
+          <ng-container *ngIf="liveTranscriptionStatus === 'connected' || liveTranscriptionStatus === 'viewing'">
+            Listening — anyone can speak now
           </ng-container>
           <ng-container *ngIf="liveTranscriptionStatus === 'connecting'">
             Connecting to transcription server…
           </ng-container>
           <ng-container *ngIf="liveTranscriptionStatus === 'error'">
-            Could not reach the server. Retrying…
+            Connection lost. Retrying…
           </ng-container>
         </p>
       </div>
-  
-      <!-- Transcription segments -->
-      <div class="lt-segment" *ngFor="let seg of liveTranscriptionSegments; trackBy: trackLiveSegment">
-        <span class="lt-seg-time">{{ seg.start | number:'1.0-1' }}s</span>
-        <span class="lt-seg-text">{{ seg.text }}</span>
+
+      <!-- ── Segment rows with speaker name ── -->
+      <div class="lt-segment" [class.lt-segment-own]="seg.isOwn"
+        *ngFor="let seg of liveTranscriptionSegments; trackBy: trackLiveSegment">
+
+        <!-- Speaker avatar initial + name -->
+        <div class="lt-seg-speaker">
+          <span class="lt-speaker-avatar" [class.lt-avatar-own]="seg.isOwn">
+            {{ seg.speakerName.charAt(0).toUpperCase() }}
+          </span>
+          <span class="lt-speaker-name" [class.lt-name-own]="seg.isOwn">
+            {{ seg.isOwn ? 'You' : seg.speakerName }}
+          </span>
+        </div>
+
+        <!-- Transcription text + timestamp -->
+        <div class="lt-seg-content">
+          <span class="lt-seg-text">{{ seg.text }}</span>
+          <span class="lt-seg-time">{{ seg.start | number:'1.0-1' }}s</span>
+        </div>
       </div>
-  
+
     </div>
   </div>
+  <!-- END LIVE TRANSCRIPTION PANEL -->
 </div>
