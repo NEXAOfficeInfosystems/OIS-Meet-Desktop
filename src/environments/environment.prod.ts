@@ -1,26 +1,22 @@
 export const environment = {
   production: true,
   secretkey: 'ce6834aa-049f-46a8-806c-fb36cdf22d84',
-  // aiApiBaseUrl: 'http://20.64.87.203',
   aiApiBaseUrl: 'https://ai.nexaois.com:4433',
 
   // Dev environment
-  apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/api',
-  ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_Dev/api',
-  signalRUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/hubs',
+  // apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/api',
+  // ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_Dev/api',
+  // signalRUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/hubs',
 
   // QA environment
   // apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_QA/api',
   // ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_QA/api',
   // signalRUrl: 'https://www.nexaois.com/OISMeetAPI_QA/hubs',
 
-  livekitEnabled: true,
-  livekitUrl: 'wss://ois-meet-3nnqexmr.livekit.cloud',
-
   //Live environment
-  // apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_LIVE/api',
-  // ssoApiBaseUrl: 'https://www.officeinfosystems.com/OISSSOAPI/api',
-  // signalRUrl: 'https://www.nexaois.com/OISMeetAPI_LIVE/hubs'
+  apiBaseUrl: 'https://www.officeinfosystems.com/OISMeetAPI/api',
+  ssoApiBaseUrl: 'https://www.officeinfosystems.com/OISSSOAPI/api',
+  signalRUrl: 'https://www.officeinfosystems.com/OISMeetAPI/hubs',
 
   // local environment
   // apiBaseUrl: 'https://localhost:7235/api',
@@ -28,8 +24,8 @@ export const environment = {
   // signalRUrl: 'https://localhost:7235/hubs',
 
   // WebRTC
-  // Note: Many corporate/mobile networks require a TURN server to relay media.
-  // Add your TURN server(s) here when available.
+  livekitEnabled: true,
+  livekitUrl: 'wss://ois-meet-3nnqexmr.livekit.cloud',
   webrtcTrickleIce: true,
   webrtcIceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
