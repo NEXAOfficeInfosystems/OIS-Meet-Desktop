@@ -658,7 +658,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     });
     if (!this.meetingId) {
       this.snackBar.open('Invalid meeting ID', 'Close', { duration: 3000 });
-      this.router.navigate(['/chat']);
+      // this.router.navigate(['/chat']);
       return;
     }
 
@@ -1333,7 +1333,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log('🏁 Meeting ended by host');
       this.ngZone.run(() => {
         this.snackBar.open('Meeting ended by host', 'Close', { duration: 5000 });
-        setTimeout(() => this.router.navigate(['/chat']), 3000);
+        // setTimeout(() => this.router.navigate(['/chat']), 3000);
+        setTimeout(() => this.closeMeetingWindow(), 3000);
       });
     });
 
@@ -2194,6 +2195,15 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     this.newMessage = '';
   }
 
+  closeMeetingWindow() {
+    const electronApi = (window as any).oisMeet;
+    if (electronApi?.isElectron && typeof electronApi.closeMeetingWindow === 'function') {
+      electronApi.closeMeetingWindow({ force: true });
+    } else {
+      this.router.navigate(['/chat']);
+    }
+  }
+
   leaveMeeting() {
     console.log('Leaving meeting');
     if (confirm('Are you sure you want to leave the meeting?')) {
@@ -2201,7 +2211,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         this.meetingService.leaveMeeting(this.meetingId, this.oisMeetUserId).subscribe();
       }
       this.signalRService.leaveMeeting(this.meetingId, this.oisMeetUserId);
-      this.router.navigate(['/chat']);
+      this.closeMeetingWindow();
     }
   }
 
@@ -2211,7 +2221,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       this.meetingService.endMeeting(this.meetingId, this.oisMeetUserId).subscribe({
         next: () => {
           this.signalRService.endMeeting(this.meetingId, this.oisMeetUserId);
-          this.router.navigate(['/chat']);
+          this.closeMeetingWindow();
         }
       });
     }

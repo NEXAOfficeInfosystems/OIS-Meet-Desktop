@@ -556,3 +556,48 @@
   align-items: center;
   margin-left: 2px;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MEETING ID LINK CHIP
+// Add these rules to the BOTTOM of your existing chat.component.scss.
+// The ::ng-deep is needed because the chip HTML is injected via [innerHTML]
+// and Angular's view-encapsulation would otherwise scope it out.
+// ─────────────────────────────────────────────────────────────────────────────
+
+::ng-deep .meeting-id-link {
+  display: inline-block;
+  background: rgba(26, 115, 232, 0.12);
+  color: #1a73e8;
+  border: 1px solid rgba(26, 115, 232, 0.30);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-family: monospace;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  user-select: text;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background: rgba(26, 115, 232, 0.22);
+    border-color: rgba(26, 115, 232, 0.55);
+    text-decoration: underline;
+  }
+
+  &:active {
+    background: rgba(26, 115, 232, 0.32);
+  }
+}
+
+// Keep the chip readable inside the sender's darker bubble
+.me-bubble ::ng-deep .meeting-id-link {
+  background: rgba(255, 255, 255, 0.20);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.45);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.32);
+    border-color: rgba(255, 255, 255, 0.70);
+  }
+}

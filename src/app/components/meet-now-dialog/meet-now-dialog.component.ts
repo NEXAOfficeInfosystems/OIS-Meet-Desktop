@@ -3,29 +3,28 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
-import { SessionService } from '../../core/services/session.service';
-import { MeetingService } from '../../core/services/meeting.service';
+import { SessionService }  from '../../core/services/session.service';
+import { MeetingService }  from '../../core/services/meeting.service';
 
 @Component({
-  selector: 'app-meet-now-dialog',
+  selector:    'app-meet-now-dialog',
   templateUrl: './meet-now-dialog.component.html',
-  styleUrls: ['./meet-now-dialog.component.scss']
+  styleUrls:   ['./meet-now-dialog.component.scss']
 })
 export class MeetNowDialogComponent implements OnInit {
   mode: 'meet-now' | 'join-meeting' = 'meet-now';
-  meetingId   = '';
-  micOn       = false;
-  camOn       = false;
+  meetingId    = '';
+  micOn        = false;
+  camOn        = false;
   isValidating = false;
   meetingError = '';
-
-  isCreating  = false;
+  isCreating   = false;
 
   constructor(
-    public dialogRef: MatDialogRef<MeetNowDialogComponent>,
-    private clipboard: Clipboard,
-    private snackBar: MatSnackBar,
-    private router: Router,
+    public  dialogRef:      MatDialogRef<MeetNowDialogComponent>,
+    private clipboard:      Clipboard,
+    private snackBar:       MatSnackBar,
+    private router:         Router,
     private meetingService: MeetingService,
     private sessionService: SessionService,
     @Inject(MAT_DIALOG_DATA) public data: any
@@ -42,14 +41,11 @@ export class MeetNowDialogComponent implements OnInit {
   // ── Meeting creation (with cache) ──────────────────────────────────────────
 
   private initMeeting(): void {
-    // ① Reuse the pending meeting if one already exists
     const pending = this.meetingService.getPendingMeeting();
     if (pending?.meetingId) {
       this.meetingId = pending.meetingId;
       return;
     }
-
-    // ② Nothing cached → create a new one
     this.createNewMeeting();
   }
 
@@ -62,8 +58,8 @@ export class MeetNowDialogComponent implements OnInit {
       return;
     }
 
-    this.isCreating  = true;
-    this.meetingId   = '';
+    this.isCreating = true;
+    this.meetingId  = '';
 
     const request = {
       topic:       'My Meeting',
@@ -98,14 +94,13 @@ export class MeetNowDialogComponent implements OnInit {
     if (!this.meetingId) return;
     const shareText = `Join my meeting! Meeting ID: ${this.meetingId}`;
     this.clipboard.copy(shareText);
-    window.dispatchEvent(
-      new CustomEvent('ois-share-meeting-id', {
-        detail: { meetingId: this.meetingId, text: shareText }
-      })
-    );
-
+    // window.dispatchEvent(
+    //   new CustomEvent('ois-share-meeting-id', {
+    //     detail: { meetingId: this.meetingId, text: shareText }
+    //   })
+    // );
     this.snackBar.open(
-      'Meeting ID copied & ready to paste in chat!',
+      'Meeting ID Copied to Clipboard!',
       'Close',
       { duration: 3000, verticalPosition: 'bottom' }
     );
@@ -154,6 +149,10 @@ export class MeetNowDialogComponent implements OnInit {
     });
   }
 
+  /**
+   * CHANGED: now calls openMeetingWindow() instead of router.navigate().
+   * The meeting opens in a new Electron BrowserWindow (or browser tab).
+   */
   joinMeeting(meetingId: string): void {
     const userId   = this.sessionService.getOISMeetUserId();
     const userName = this.sessionService.getFullName() || 'User';
@@ -167,34 +166,67 @@ export class MeetNowDialogComponent implements OnInit {
       next: (response: any) => {
         if (response.success) {
           this.dialogRef.close();
-          this.router.navigate(['/meeting', meetingId], {
-            queryParams: {
-              host:  'false',
-              topic: response.data.topic || 'Joined Meeting',
-              mic:   this.micOn,
-              cam:   this.camOn
-            }
-          });
+          this.openMeetingWindow(meetingId, false, this.micOn, this.camOn);
         }
       },
-      error: () => {
-        this.snackBar.open('Failed to join meeting', 'Close', { duration: 3000 });
-      }
+      error: () =>
+        this.snackBar.open('Failed to join meeting', 'Close', { duration: 3000 })
     });
   }
 
   // ── Start flow ─────────────────────────────────────────────────────────────
 
+  /**
+   * CHANGED: auto-shares the meeting ID to the active chat, then opens
+   * the meeting in a dedicated window instead of navigating in-place.
+   */
   startMeeting(): void {
+    if (!this.meetingId) return;
     this.meetingService.clearPendingMeeting();
     this.dialogRef.close();
-    this.router.navigate(['/meeting', this.meetingId], {
-      queryParams: {
-        host:  'true',
-        topic: 'My Meeting',
-        mic:   this.micOn,
-        cam:   this.camOn
-      }
+
+    // Send meeting ID to the currently open chat conversation automatically
+    // this.shareToChat();
+
+    // Open meeting in its own window
+    this.openMeetingWindow(this.meetingId, true, this.micOn, this.camOn);
+  }
+
+  // ── Shared window opener ───────────────────────────────────────────────────
+
+  /**
+   * Opens a meeting room in a new Electron BrowserWindow via IPC,
+   * with a plain window.open() fallback for browser / dev-server use.
+   *
+   * FIX: In the installed EXE, window.location.origin is "null" (file://
+   * context), so we can no longer build a valid absolute URL.  We send
+   * a structured { routePath, queryString } payload instead and let
+   * main.js resolve it with loadFile() for production or loadURL() for dev.
+   */
+  private openMeetingWindow(
+    meetingId: string,
+    isHost:    boolean,
+    mic:       boolean,
+    cam:       boolean
+  ): void {
+    const params = new URLSearchParams({
+      host:  String(isHost),
+      topic: 'OIS Meet',
+      mic:   String(mic),
+      cam:   String(cam),
     });
+
+    const electronApi = (window as any).oisMeet;
+    if (electronApi?.isElectron && typeof electronApi.openMeetingWindow === 'function') {
+      // Send structured payload so main.js can use loadFile() in production
+      electronApi.openMeetingWindow({
+        routePath:   `/meeting/${meetingId}`,
+        queryString: params.toString(),
+      });
+    } else {
+      // Browser / dev-server fallback — window.location.origin is valid here
+      const url = `${window.location.origin}/meeting/${meetingId}?${params}`;
+      window.open(url, '_blank', 'width=1280,height=800,menubar=no,toolbar=no');
+    }
   }
 }

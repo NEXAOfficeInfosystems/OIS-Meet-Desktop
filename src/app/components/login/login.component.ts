@@ -306,7 +306,25 @@ private loadPostLoginData(token: string, userinfo: string): void {
   .subscribe({
     next: () => {
       this.showLoading = false;
-      this.router.navigateByUrl('/chat');
+        // If running inside Electron, forward auth details to main process
+        // so new meeting windows can restore authentication state.
+        try {
+          const electronApi = (window as any).oisMeet;
+          if (electronApi?.isElectron && typeof electronApi.setAuthData === 'function') {
+            const authData = {
+              token,
+              userinfo,
+              user: this.storageService.getObject('userDetails'),
+              meetAppId: this.storageService.getItem('meetAppId'),
+              oisMeetUserId: this.storageService.getItem('oisMeetUserId')
+            };
+            void electronApi.setAuthData(authData);
+          }
+        } catch (err) {
+          console.warn('Failed to set auth data in main process:', err);
+        }
+
+        this.router.navigateByUrl('/chat');
     },
     error: (err) => {
       console.error('Post-login data load failed:', err);

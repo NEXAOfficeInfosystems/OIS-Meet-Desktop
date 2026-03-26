@@ -3,6 +3,35 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('oisMeet', {
   isElectron: true,
 
+  // ── Open a meeting in its own BrowserWindow ───────────────────────────────
+  // Called by chat.component.ts and meet-now-dialog.component.ts.
+  // Accepts either:
+  //   - a structured { routePath, queryString } object  (production / file:// context)
+  //   - a full http URL string (dev-server fallback, kept for compatibility)
+  // Triggers ipcMain.on('open-meeting-window') in main.js.
+  openMeetingWindow: (payload) => {
+    ipcRenderer.send('open-meeting-window', payload);
+  },
+
+  // Allow renderer to persist auth data in main process and retrieve it
+  // (used to restore auth state in newly opened meeting windows).
+  setAuthData: (authData) => {
+    return ipcRenderer.invoke('set-auth-data', authData);
+  },
+
+  getAuthData: () => {
+    return ipcRenderer.invoke('get-auth-data');
+  },
+
+  // Close the current meeting window. Pass { force: true } to destroy
+  // (bypass main's close dialog). Use only when the renderer has already
+  // confirmed the action.
+  closeMeetingWindow: (opts) => {
+    ipcRenderer.send('close-meeting-window', opts || {});
+  },
+
+  // ── Existing handlers (unchanged) ─────────────────────────────────────────
+
   saveAudioFile: (buffer, defaultFileName) => {
     return ipcRenderer.invoke('save-audio-file', { buffer, defaultFileName });
   },
@@ -25,5 +54,17 @@ contextBridge.exposeInMainWorld('oisMeet', {
 
   showNotification: ({ title, body }) => {
     return ipcRenderer.invoke('show-native-notification', { title, body });
+  }
+});
+
+// When main process forwards cached auth for a newly created window, emit
+// a DOM CustomEvent so renderer code listening for 'electron-auth-data'
+// receives it (this mirrors the existing renderer-side listener).
+ipcRenderer.on('electron-auth-data', (event, authData) => {
+  try {
+    window.dispatchEvent(new CustomEvent('electron-auth-data', { detail: authData }));
+  } catch (err) {
+    // In case window or CustomEvent isn't available yet, swallow the error.
+    console.error('preload: failed to dispatch electron-auth-data event', err);
   }
 });

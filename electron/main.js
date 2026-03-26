@@ -2,10 +2,26 @@ const { app, BrowserWindow, ipcMain, dialog, Notification } = require('electron'
 const path = require('path');
 const fs = require('fs');
 // TEMP SSL BYPASS
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-let mainWindow;
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-// Ensure Windows toast notifications show the product identity instead of Electron defaults.
+let mainWindow;
+let storedAuthData = null;
+
+
+ipcMain.handle('set-auth-data', async (event, authData) => {
+  try {
+    storedAuthData = authData || null;
+    return { success: true };
+  } catch (err) {
+    console.error('[main] set-auth-data failed:', err);
+    return { success: false, error: err && err.message ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('get-auth-data', async () => {
+  return storedAuthData;
+});
+
 app.setName('OIS Meet');
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.ois.meet.desktop');
@@ -13,8 +29,7 @@ if (process.platform === 'win32') {
 
 function safeFileName(value, fallback) {
   const candidate = (typeof value === 'string' ? value : '').trim();
-  const selected = candidate || fallback;
-  // Replace characters invalid on Windows and also trim trailing dots/spaces.
+  const selected  = candidate || fallback;
   return selected
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
     .replace(/[.\s]+$/g, '')
@@ -22,37 +37,41 @@ function safeFileName(value, fallback) {
 }
 
 function formatDateDdMmYyyy(date) {
-  const d = date instanceof Date ? date : new Date();
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const d    = date instanceof Date ? date : new Date();
+  const dd   = String(d.getDate()).padStart(2, '0');
+  const mm   = String(d.getMonth() + 1).padStart(2, '0');
   const yyyy = String(d.getFullYear());
   return `${dd}-${mm}-${yyyy}`;
 }
 
 function normalizeHttpBaseUrl(value, fallback) {
   const candidate = (typeof value === 'string' ? value : '').trim();
-  const selected = candidate || fallback;
-  const trimmed = selected.trim().replace(/\/+$/, '');
-
-  if (!/^https?:\/\//i.test(trimmed)) {
-    return fallback.replace(/\/+$/, '');
-  }
-
+  const selected  = candidate || fallback;
+  const trimmed   = selected.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(trimmed)) return fallback.replace(/\/+$/, '');
   return trimmed;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN WINDOW
+// ─────────────────────────────────────────────────────────────────────────────
 
 function createMainWindow() {
   const iconPath = path.join(__dirname, 'assets', 'icon.ico');
 
   mainWindow = new BrowserWindow({
-    width: 1200,
+    width:  1200,
     height: 800,
     autoHideMenuBar: true,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload:          path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration:  false,
+      // ── ADDED: allows window.open() calls inside Angular to be intercepted
+      //           by the 'did-create-window' / setWindowOpenHandler API and
+      //           also ensures our IPC-based openMeetingWindow works correctly.
+      nativeWindowOpen: true,
     }
   });
 
@@ -61,7 +80,9 @@ function createMainWindow() {
   if (startUrl) {
     void mainWindow.loadURL(startUrl);
   } else {
-    const indexPath = path.join(app.getAppPath(), 'dist', 'ois-meet-desktop', 'browser', 'index.html');
+    const indexPath = path.join(
+      app.getAppPath(), 'dist', 'ois-meet-desktop', 'browser', 'index.html'
+    );
     void mainWindow.loadFile(indexPath);
   }
 
@@ -69,6 +90,10 @@ function createMainWindow() {
     mainWindow = null;
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APP LIFECYCLE
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   createMainWindow();
@@ -82,6 +107,134 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ── Open a dedicated BrowserWindow for a meeting ─────────────────────────────
+//
+// Payload shape sent from preload.js → Angular:
+//   { routePath: string, queryString: string }
+//     routePath   – e.g.  "/meeting/OIS-XXXX"
+//     queryString – e.g.  "host=false&topic=OIS+Meet&mic=false&cam=false"
+//
+// OR (legacy / dev-server):
+//   A full http(s):// URL string
+//
+// In production (loadFile) window.location.origin is "null" so Angular can
+// no longer build a proper absolute URL. We therefore accept the structured
+// payload and resolve the path ourselves using loadFile() + URLSearchParams.
+// ─────────────────────────────────────────────────────────────────────────────
+
+ipcMain.on('open-meeting-window', (event, payload) => {
+  const iconPath = path.join(__dirname, 'assets', 'icon.ico');
+
+  const meetingWindow = new BrowserWindow({
+    width:     1280,
+    height:    800,
+    minWidth:  900,
+    minHeight: 600,
+    title:     'OIS Meet — Meeting',
+    autoHideMenuBar: true,
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
+    webPreferences: {
+      preload:          path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration:  false,
+      nativeWindowOpen: true,
+    }
+  });
+
+  meetingWindow.setMenuBarVisibility(false);
+
+  // ── Determine how to load the meeting route ──────────────────────────────
+  if (payload && typeof payload === 'object' && payload.routePath) {
+    // Structured payload — used by production EXE (file:// context)
+    const { routePath, queryString } = payload;
+
+    if (process.env.ELECTRON_START_URL) {
+      // Dev server — Angular uses HashLocationStrategy, so prefix route with '/#'
+      const devBase = process.env.ELECTRON_START_URL.replace(/\/$/, '');
+      const fullUrl = queryString
+        ? `${devBase}/#${routePath}?${queryString}`
+        : `${devBase}/#${routePath}`;
+      console.log('[main] Meeting window loadURL (dev, hash):', fullUrl);
+      void meetingWindow.loadURL(fullUrl);
+    } else {
+      // Production — load Angular entry point via loadFile, then navigate
+      const indexPath = path.join(
+        app.getAppPath(), 'dist', 'ois-meet-desktop', 'browser', 'index.html'
+      );
+      const hashPath = queryString
+        ? `${routePath}?${queryString}`
+        : routePath;
+      console.log('[main] Meeting window loadFile (prod), hash:', hashPath);
+      void meetingWindow.loadFile(indexPath, { hash: hashPath });
+    }
+  } else if (typeof payload === 'string' && /^https?:\/\//i.test(payload)) {
+    // Legacy string URL — inject '#' for HashLocationStrategy if missing
+    const legacyUrl = payload.replace(/(https?:\/\/[^/#]+)(\/)/, '$1/#/');
+    console.log('[main] Meeting window loadURL (legacy):', legacyUrl);
+    void meetingWindow.loadURL(legacyUrl);
+  } else {
+    console.warn('[main] open-meeting-window: invalid payload, ignoring:', payload);
+    meetingWindow.destroy();
+    return;
+  }
+
+  // ── Warn before closing a live meeting window ────────────────────────────
+  meetingWindow.on('close', (e) => {
+    const choice = dialog.showMessageBoxSync(meetingWindow, {
+      type:      'question',
+      buttons:   ['Leave Meeting', 'Cancel'],
+      title:     'Leave Meeting?',
+      message:   'Are you sure you want to leave the meeting?',
+      defaultId: 1,
+      cancelId:  1,
+    });
+
+    if (choice === 1) {
+      e.preventDefault(); // User clicked Cancel → keep window open
+    }
+  });
+
+  meetingWindow.webContents.on('did-finish-load', () => {
+    console.log('[main] Meeting window finished loading.');
+    // Forward any cached auth data to the meeting window renderer so it
+    // can restore session/localStorage before Angular boot logic runs.
+    try {
+      if (storedAuthData) {
+        meetingWindow.webContents.send('electron-auth-data', storedAuthData);
+      }
+    } catch (err) {
+      console.error('[main] Failed to forward auth data to meeting window:', err);
+    }
+  });
+
+  meetingWindow.webContents.on('did-fail-load', (ev, code, desc) => {
+    console.error('[main] Meeting window failed to load:', code, desc);
+  });
+});
+
+// Close the meeting window from renderer without showing the "Leave Meeting" dialog.
+ipcMain.on('close-meeting-window', (event, { force } = { force: false }) => {
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+
+    if (force) {
+      // Forcefully destroy (no close events)
+      win.destroy();
+    } else {
+      // Normal close (will trigger 'close' handler which may prompt)
+      win.close();
+    }
+  } catch (err) {
+    console.error('[main] Error closing meeting window:', err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXISTING IPC HANDLERS (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+
 ipcMain.handle('show-native-notification', async (event, { title, body }) => {
   try {
     if (!Notification.isSupported()) {
@@ -90,10 +243,10 @@ ipcMain.handle('show-native-notification', async (event, { title, body }) => {
 
     const iconPath = path.join(__dirname, 'assets', 'icon.ico');
     const notification = new Notification({
-      title: typeof title === 'string' && title.trim() ? title.trim() : 'OIS Meet',
-      body: typeof body === 'string' ? body : '',
-      icon: fs.existsSync(iconPath) ? iconPath : undefined,
-      appID: 'com.ois.meet.desktop',
+      title:  typeof title === 'string' && title.trim() ? title.trim() : 'OIS Meet',
+      body:   typeof body  === 'string' ? body : '',
+      icon:   fs.existsSync(iconPath) ? iconPath : undefined,
+      appID:  'com.ois.meet.desktop',
       silent: false
     });
 
@@ -105,15 +258,14 @@ ipcMain.handle('show-native-notification', async (event, { title, body }) => {
   }
 });
 
-// IPC Handlers for Audio Recording
 ipcMain.handle('save-audio-file', async (event, { buffer, defaultFileName }) => {
   try {
     const result = await dialog.showSaveDialog(mainWindow, {
-      title: 'Save Meeting Recording',
+      title:       'Save Meeting Recording',
       defaultPath: path.join(app.getPath('documents'), defaultFileName || 'meeting-recording.wav'),
       filters: [
-        { name: 'WAV Audio', extensions: ['wav'] },
-        { name: 'All Files', extensions: ['*'] }
+        { name: 'WAV Audio',  extensions: ['wav'] },
+        { name: 'All Files',  extensions: ['*']   }
       ]
     });
 
@@ -139,7 +291,6 @@ ipcMain.handle('get-recordings-path', () => {
   return recordingsPath;
 });
 
-// IPC Handler for saving transcript text file (auto-save to recordings folder)
 ipcMain.handle('save-transcript-text-file', async (event, { content, defaultFileName }) => {
   try {
     const recordingsPath = path.join(app.getPath('documents'), 'OIS-Meet-Recordings');
@@ -160,7 +311,6 @@ ipcMain.handle('save-transcript-text-file', async (event, { content, defaultFile
   }
 });
 
-// IPC Handler for Generate MoM (avoid CORS by calling from main process)
 ipcMain.handle('generate-mom', async (event, { meetingId, date, momTemplateName, transcriptFilePath, aiApiBaseUrl }) => {
   try {
     const normalizedAiApiBaseUrl = normalizeHttpBaseUrl(
@@ -171,18 +321,15 @@ ipcMain.handle('generate-mom', async (event, { meetingId, date, momTemplateName,
 
     const resolvedTranscriptPath = typeof transcriptFilePath === 'string' ? transcriptFilePath : '';
     if (!resolvedTranscriptPath || !fs.existsSync(resolvedTranscriptPath)) {
-      return {
-        status: 'error',
-        error: 'Transcript file not found'
-      };
+      return { status: 'error', error: 'Transcript file not found' };
     }
 
-    const transcriptBuffer = fs.readFileSync(resolvedTranscriptPath);
+    const transcriptBuffer     = fs.readFileSync(resolvedTranscriptPath);
     const transcriptUploadName = safeFileName(path.basename(resolvedTranscriptPath), 'meeting-transcription.txt');
 
-    const boundary = `----oismeet-mom-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
-    const meetingIdValue = typeof meetingId === 'string' ? meetingId : '';
-    const dateValue = typeof date === 'string' && date.trim() ? date.trim() : formatDateDdMmYyyy(new Date());
+    const boundary        = `----oismeet-mom-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+    const meetingIdValue  = typeof meetingId === 'string' ? meetingId : '';
+    const dateValue       = typeof date === 'string' && date.trim() ? date.trim() : formatDateDdMmYyyy(new Date());
     const momTemplateValue = typeof momTemplateName === 'string' && momTemplateName.trim() ? momTemplateName.trim() : 'investor';
 
     const parts = [];
@@ -195,8 +342,8 @@ ipcMain.handle('generate-mom', async (event, { meetingId, date, momTemplateName,
       ));
     };
 
-    addField('meeting_id', meetingIdValue);
-    addField('date', dateValue);
+    addField('meeting_id',        meetingIdValue);
+    addField('date',              dateValue);
     addField('mom_template_name', momTemplateValue);
 
     parts.push(Buffer.from(
@@ -212,39 +359,30 @@ ipcMain.handle('generate-mom', async (event, { meetingId, date, momTemplateName,
 
     const response = await fetch(generateMomUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': `multipart/form-data; boundary=${boundary}`
-      },
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
       body
     });
 
     const contentType = response.headers.get('content-type') || '';
-    const payload = contentType.includes('application/json')
+    const payload     = contentType.includes('application/json')
       ? await response.json().catch(() => null)
       : await response.text().catch(() => '');
 
     if (!response.ok) {
       return {
         status: 'error',
-        error: `Generate MoM request failed (${response.status} ${response.statusText})`,
+        error:  `Generate MoM request failed (${response.status} ${response.statusText})`,
         details: payload
       };
     }
 
-    return {
-      status: 'success',
-      result: payload
-    };
+    return { status: 'success', result: payload };
   } catch (error) {
     console.error('Error calling generate-mom service (main):', error);
-    return {
-      status: 'error',
-      error: error && error.message ? error.message : 'Error calling generate-mom service'
-    };
+    return { status: 'error', error: error && error.message ? error.message : 'Error calling generate-mom service' };
   }
 });
 
-// IPC Handler for Transcription (avoid CORS by calling from main process)
 ipcMain.handle('transcribe-audio-file', async (event, { buffer, fileName, aiApiBaseUrl }) => {
   try {
     const normalizedAiApiBaseUrl = normalizeHttpBaseUrl(
@@ -252,16 +390,14 @@ ipcMain.handle('transcribe-audio-file', async (event, { buffer, fileName, aiApiB
       process.env.AI_API_BASE_URL || 'https://ai.nexaois.com:4433'
     );
     const transcriptionUrl = `${normalizedAiApiBaseUrl}/transcribe`;
-console.log('AI Base URL used for transcription Main.js:', transcriptionUrl);
-    // buffer arrives as an ArrayBuffer from the renderer
-    const uint8Array = new Uint8Array(buffer);
+    console.log('AI Base URL used for transcription Main.js:', transcriptionUrl);
 
-    // Build a minimal multipart/form-data request body (no extra deps)
-    const safeFileName = fileName || 'meeting-recording.wav';
-    const boundary = `----oismeet-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+    const uint8Array     = new Uint8Array(buffer);
+    const safeFile       = fileName || 'meeting-recording.wav';
+    const boundary       = `----oismeet-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
     const header =
       `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="${safeFileName}"\r\n` +
+      `Content-Disposition: form-data; name="file"; filename="${safeFile}"\r\n` +
       `Content-Type: audio/wav\r\n\r\n`;
     const footer = `\r\n--${boundary}--\r\n`;
 
@@ -273,9 +409,7 @@ console.log('AI Base URL used for transcription Main.js:', transcriptionUrl);
 
     const response = await fetch(transcriptionUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': `multipart/form-data; boundary=${boundary}`
-      },
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
       body
     });
 
@@ -283,8 +417,8 @@ console.log('AI Base URL used for transcription Main.js:', transcriptionUrl);
       const text = await response.text().catch(() => '');
       return {
         filename: fileName,
-        status: 'error',
-        error: `Transcription request failed (${response.status} ${response.statusText})${text ? `: ${text}` : ''}`
+        status:   'error',
+        error:    `Transcription request failed (${response.status} ${response.statusText})${text ? `: ${text}` : ''}`
       };
     }
 
@@ -294,8 +428,8 @@ console.log('AI Base URL used for transcription Main.js:', transcriptionUrl);
     console.error('Error calling transcription service (main):', error);
     return {
       filename: fileName,
-      status: 'error',
-      error: error && error.message ? error.message : 'Error calling transcription service'
+      status:   'error',
+      error:    error && error.message ? error.message : 'Error calling transcription service'
     };
   }
 });

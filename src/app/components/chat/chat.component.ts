@@ -6,14 +6,17 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, Subscription, takeUntil } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
+import { Router } from '@angular/router';
 import * as signalR from '@microsoft/signalr';
 
-import { SessionService } from '../../core/services/session.service';
-import { CommonService }  from '../../core/services/common.service';
-import { UserService }    from '../../core/services/user.service';
-import { StorageService } from '../../core/services/storage.service';
-import { ChatService }    from '../../core/services/chat.service';
+import { SessionService }   from '../../core/services/session.service';
+import { CommonService }    from '../../core/services/common.service';
+import { UserService }      from '../../core/services/user.service';
+import { StorageService }   from '../../core/services/storage.service';
+import { ChatService }      from '../../core/services/chat.service';
+import { MeetingService }   from '../../core/services/meeting.service';           // ← ADDED
 import { ChatSignalrService, SendMessageRequest } from '../../core/services/chat-signalr.service';
+import { MeetingLinkPipe }  from '../../shared/pipes/meeting-link.pipe';
 
 declare var bootstrap: any;
 
@@ -28,7 +31,7 @@ interface InAppToast {
 @Component({
   selector:    'app-chat',
   standalone:  true,
-  imports:     [CommonModule, FormsModule, HttpClientModule],
+  imports:     [CommonModule, FormsModule, HttpClientModule, MeetingLinkPipe],
   templateUrl: './chat.component.html',
   styleUrls:   ['./chat.component.scss']
 })
@@ -50,13 +53,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // ── UI flags ──────────────────────────────────────────────────────────────
   isLoading:        boolean = false;
   isSendingFile:    boolean = false;
-  isSendingMessage: boolean = false;   // NEW: thin spinner while hub invoke runs
+  isSendingMessage: boolean = false;
   currentPage:      number  = 1;
   hasMoreMessages:  boolean = true;
   isTyping:         boolean = false;
   totalUnreadCount: number  = 0;
   searchQuery:      string  = '';
-  isConnected:      boolean = false;  // NEW: SignalR connection status
+  isConnected:      boolean = false;
 
   // ── In-app toasts ─────────────────────────────────────────────────────────
   toasts:              InAppToast[] = [];
@@ -76,7 +79,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private shareMeetingIdHandler: ((e: Event) => void) | null = null;
 
   // ── Deduplication ─────────────────────────────────────────────────────────
-  // Tracks message IDs already displayed so SignalR echoes are not double-shown.
   private displayedMessageIds = new Set<string>();
 
   constructor(
@@ -85,8 +87,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private userService:        UserService,
     private storageService:     StorageService,
     private chatService:        ChatService,
+    private meetingService:     MeetingService,     // ← ADDED for validateMeeting
     private chatSignalrService: ChatSignalrService,
-    private cdr:                ChangeDetectorRef
+    private cdr:                ChangeDetectorRef,
+    private router:             Router,
   ) {}
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -100,21 +104,15 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       this.chatSignalrService.startConnection(this.currentUserId);
     }
 
-    // ── BUG FIX: subscribe to SignalR events HERE, unconditionally ─────────
-    // Previously this was inside loadUsersForCurrentCompany() → inside an
-    // "if (currentUser)" branch → frequently never called → receiver got nothing.
     this.setupSignalREvents();
 
-    // Reconnect flow
     this.connectionStateSubscription = this.chatSignalrService.connectionState$.subscribe(state => {
       this.isConnected = state === signalR.HubConnectionState.Connected;
       if (state === signalR.HubConnectionState.Connected) {
-        // Reload conversations on reconnect to ensure groups and users are up to date
         this.loadConversations();
       }
     });
 
-    // Company-change flow
     const pendingCompanyId = sessionStorage.getItem('selectedCompanyId');
     if (pendingCompanyId) {
       this.isCompanyChanging = true;
@@ -132,14 +130,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.handleSyncComplete());
 
-    // Share meeting-ID event from the Meet Now dialog
+    // ── Listen for meeting-share events fired by meet-now-dialog ─────────
     this.shareMeetingIdHandler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.meetingId) this.handleShareMeetingId(detail.meetingId, detail.text);
     };
     window.addEventListener('ois-share-meeting-id', this.shareMeetingIdHandler);
 
-    // Browser notification permission (silent)
     this.requestNotificationPermission();
   }
 
@@ -168,11 +165,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // ═════════════════════════════════════════════════════════════════════════
 
   private handleCompanyChange(): void {
-    this.users        = [];
+    this.users         = [];
     this.filteredUsers = [];
-    this.selectedUser = null;
-    this.messages     = [];
-    this.isLoading    = true;
+    this.selectedUser  = null;
+    this.messages      = [];
+    this.isLoading     = true;
     this.isCompanyChanging = true;
     this.displayedMessageIds.clear();
   }
@@ -207,8 +204,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
             if (currentUser) {
               this.storageService.setItem('oisMeetUserId', currentUser.id);
               this.currentUserId = currentUser.id;
-              // NOTE: setupSignalREvents() is NOT called here anymore — it's
-              // called once in ngOnInit() so it works regardless.
             }
 
             const transformed = this.transformSSOUsersToChatUsers(res.data);
@@ -292,47 +287,31 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // ═════════════════════════════════════════════════════════════════════════
 
   private handleNewMessage(message: any): void {
-    console.log('🔔 Received message:', message);  // DEBUG: Log incoming messages
-
     if (!message?.conversationId) return;
 
-    const conversationId     = message.conversationId?.toString() ?? '';
-    const msgId              = message.id?.toString()             ?? '';
-    const isFromMe           = message.senderId?.toString() === this.currentUserId?.toString();
-    const isActiveConversation =
-      this.selectedConversation?.id?.toString() === conversationId;
-    const isAppBackgrounded = this.isAppBackgrounded();
+    const conversationId       = message.conversationId?.toString() ?? '';
+    const msgId                = message.id?.toString()             ?? '';
+    const isFromMe             = message.senderId?.toString() === this.currentUserId?.toString();
+    const isActiveConversation = this.selectedConversation?.id?.toString() === conversationId;
+    const isAppBackgrounded    = this.isAppBackgrounded();
     const shouldNotifyReceiver = !isFromMe && (!isActiveConversation || isAppBackgrounded);
 
-    // ── Deduplication: skip if we already displayed this message id ────────
-    // This handles BOTH the receiver (who might somehow get duplicates) AND
-    // the sender (the SignalR echo from ChatHub.SendMessage comes back to the
-    // sender too — now we just track and skip it cleanly).
-    if (msgId && this.displayedMessageIds.has(msgId)) {
-      return;
-    }
+    if (msgId && this.displayedMessageIds.has(msgId)) return;
     if (msgId) this.displayedMessageIds.add(msgId);
 
-    // ── Append to message list if this conversation is open ───────────────
     if (isActiveConversation) {
-      this.messages  = [...this.messages, message];
+      this.messages     = [...this.messages, message];
       this.shouldScroll = true;
-      // Only auto-read when the active chat is actually visible to the user.
       if (!isAppBackgrounded) {
         setTimeout(() => this.markMessageAsRead(msgId), 500);
       }
     }
 
-    // ── Update sidebar preview (for both sender and receiver) ─────────────
     this.updateUserListPreview(conversationId, message);
 
-    // ── Unread count + notifications (receiver only, inactive conversation) ─
     if (shouldNotifyReceiver) {
-      console.log('🔔 Triggering notification: not from me and not active conversation');  // DEBUG: Log notification trigger
       this.incrementUnreadForConversation(conversationId);
-
-      const sender = this.findUserByConversationOrSender(conversationId, message.senderId?.toString());
-      console.log('👤 Found sender for notification:', sender, { conversationId, senderId: message.senderId });  // DEBUG: Log sender lookup
+      const sender      = this.findUserByConversationOrSender(conversationId, message.senderId?.toString());
       const senderName  = sender ? this.getUserDisplayName(sender) : 'New message';
       const avatarColor = sender?.avatarColor ?? '#1a73e8';
       const preview     =
@@ -341,7 +320,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
       this.showInAppToast(senderName, preview, avatarColor);
       this.showBrowserNotification(senderName, preview);
-      console.log('🔔 Showing notification for message:', message);  // DEBUG: Log notification
     }
 
     this.cdr.detectChanges();
@@ -353,18 +331,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     return isHidden || !hasFocus;
   }
 
-  // ── Sidebar preview update ─────────────────────────────────────────────────
-
   private updateUserListPreview(conversationId: string, message: any): void {
     let user = this.findUserByConversationOrSender(conversationId, message.senderId?.toString());
-    console.log('📝 Updating preview for user:', user, { conversationId, senderId: message.senderId });  // DEBUG: Log preview update
-
-    if (!user) {
-      this.loadConversations();
-      return;
-    }
-
-    // Bind conversationId if not already set (first message in a new conversation)
+    if (!user) { this.loadConversations(); return; }
     if (!user.conversationId) user.conversationId = conversationId;
 
     user.lastMessage =
@@ -378,7 +347,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   private findUserByConversationOrSender(conversationId: string, senderId?: string): any {
-    const user = (
+    return (
       this.users.find(u => u.conversationId?.toString() === conversationId) ||
       (senderId && this.users.find(u =>
         u.id?.toString()     === senderId ||
@@ -386,8 +355,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       )) ||
       null
     );
-    console.log('🔍 Finding user:', { conversationId, senderId, found: !!user, userId: user?.id });  // DEBUG: Log user lookup
-    return user;
   }
 
   private incrementUnreadForConversation(conversationId: string): void {
@@ -420,7 +387,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // ═════════════════════════════════════════════════════════════════════════
 
   showInAppToast(senderName: string, preview: string, avatarColor: string): void {
-    console.log('🍞 Creating in-app toast:', { senderName, preview });  // DEBUG: Log toast creation
     const toast: InAppToast = {
       id:           ++this.toastCounter,
       senderName,
@@ -505,7 +471,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
             }
           });
 
-          // Join all conversation groups for real-time updates
           if (this.chatSignalrService.isConnected()) {
             (res.data as any[]).forEach((conv: any) => {
               this.chatSignalrService.joinConversation(conv.id?.toString());
@@ -522,7 +487,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   loadMessages(conversationId: string): void {
     if (!conversationId) return;
     this.isLoading = true;
-    // Clear dedup set when loading a fresh conversation
     this.displayedMessageIds.clear();
 
     this.chatService.getMessages(conversationId, this.currentPage)
@@ -531,11 +495,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         next: (res) => {
           if (res.success && res.data) {
             const msgs: any[] = res.data;
-            // Seed dedup set with already-loaded message ids
             msgs.forEach(m => { if (m.id) this.displayedMessageIds.add(m.id.toString()); });
 
             if (this.currentPage === 1) {
-              this.messages  = msgs;
+              this.messages     = msgs;
               this.shouldScroll = true;
             } else {
               this.messages = [...msgs, ...this.messages];
@@ -556,7 +519,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.hasMoreMessages = true;
     this.displayedMessageIds.clear();
 
-    // Reset unread count
     if (user.unreadCount > 0) {
       user.unreadCount = 0;
       this.totalUnreadCount = this.users.reduce((s, u) => s + (u.unreadCount || 0), 0);
@@ -577,7 +539,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         .subscribe({
           next: async (res) => {
             if (res.success && res.data) {
-              user.conversationId = res.data?.toString();
+              user.conversationId   = res.data?.toString();
               this.selectedConversation = { id: user.conversationId };
               try {
                 await this.chatSignalrService.joinConversation(user.conversationId);
@@ -595,26 +557,12 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // SEND MESSAGE
   // ═════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Simplified send: NO optimistic message.
-   *
-   * Why no optimistic message?
-   *   The ChatHub broadcasts to Clients.Group which INCLUDES the sender.
-   *   So the sender will see their own message via the SignalR echo exactly
-   *   like everyone else — with the real server ID, no clock icon, no duplication.
-   *   We just need to make sure we don't suppress the sender's own echo, which
-   *   the displayedMessageIds set handles correctly (it is populated only from
-   *   loadMessages, not from locally created fakes).
-   *
-   * The input is briefly disabled (isSendingMessage = true) during the await
-   * so the user gets feedback that the send is in progress.
-   */
   async sendMessage(): Promise<void> {
     if (!this.newMessage.trim() || !this.selectedConversation || this.isSendingMessage) return;
     if (!this.currentUserId) return;
 
-    const content = this.newMessage.trim();
-    this.newMessage      = '';
+    const content         = this.newMessage.trim();
+    this.newMessage       = '';
     this.isSendingMessage = true;
 
     const request: SendMessageRequest = {
@@ -626,9 +574,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     try {
       await this.chatSignalrService.sendMessage(request);
-      // Message will appear via the SignalR echo in handleNewMessage()
     } catch (err: any) {
-      // Restore input on failure
       this.newMessage = content;
       console.error('Failed to send message:', err);
 
@@ -644,6 +590,175 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     } finally {
       this.isSendingMessage = false;
     }
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // MEETING LINK CLICK — FIX: validate then join as participant
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Event-delegation handler on each text-message bubble.
+   * Fires only when the user clicks a .meeting-id-link chip.
+   *
+   * FIX: calls validateMeeting API before opening the window so the
+   * participant is properly registered.  Shows a spinner-style snack
+   * while validating to give visual feedback.
+   */
+  onMessageClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+
+    // Walk up one level in case user clicked the <small> ▶ Join child
+    const chip = target.classList.contains('meeting-id-link')
+      ? target
+      : (target.parentElement?.classList.contains('meeting-id-link')
+          ? target.parentElement
+          : null);
+
+    if (!chip) return;
+
+    const meetingId = chip.getAttribute('data-meeting-id');
+    if (!meetingId) return;
+
+    const confirmed = confirm(
+      `Join meeting?\n\nMeeting ID: ${meetingId}\n\nClick OK to join.`
+    );
+    if (!confirmed) return;
+
+    // Validate the meeting via API then open the window as participant
+    this.validateAndJoinMeeting(meetingId);
+  }
+
+  /**
+   * FIX for Issue 2:
+   * Validates the meeting ID via API (same as the dialog does for join-meeting),
+   * calls joinMeeting so the participant is registered server-side,
+   * then opens the meeting window.
+   */
+  private validateAndJoinMeeting(meetingId: string): void {
+    const userId   = this.sessionService.getOISMeetUserId();
+    const userName = this.sessionService.getFullName() || 'User';
+
+    if (!userId) {
+      alert('User not authenticated. Please log in again.');
+      return;
+    }
+
+    // Validate first
+    this.meetingService.validateMeeting(meetingId).subscribe({
+      next: (validateRes: any) => {
+        if (!validateRes.success) {
+          alert(validateRes.message || 'Invalid or expired meeting ID.');
+          return;
+        }
+
+        // Register participant server-side
+        this.meetingService.joinMeeting({ meetingId, userId, userName }).subscribe({
+          next: (joinRes: any) => {
+            if (joinRes.success) {
+              this.openMeetingWindow(meetingId, false);
+            } else {
+              alert('Could not join meeting. Please try again.');
+            }
+          },
+          error: () => alert('Failed to join meeting. Please try again.')
+        });
+      },
+      error: () => alert('Could not validate meeting. Please try again.')
+    });
+  }
+
+  /**
+   * Opens the meeting room in a new Electron BrowserWindow (or browser tab).
+   * Used by both the chat click handler and meet-now-dialog (via selectUser flow).
+   *
+   * FIX: In the installed EXE, window.location.origin is "null" (file:// context),
+   * so we send { routePath, queryString } and let main.js resolve it with loadFile().
+   */
+  openMeetingWindow(
+    meetingId: string,
+    isHost:    boolean,
+    mic        = false,
+    cam        = false
+  ): void {
+    const params = new URLSearchParams({
+      host:  String(isHost),
+      topic: 'OIS Meet',
+      mic:   String(mic),
+      cam:   String(cam),
+    });
+
+    const electronApi = (window as any).oisMeet;
+    if (electronApi?.isElectron && typeof electronApi.openMeetingWindow === 'function') {
+      // Send structured payload so main.js can use loadFile() in production
+      electronApi.openMeetingWindow({
+        routePath:   `/meeting/${meetingId}`,
+        queryString: params.toString(),
+      });
+    } else {
+      // Browser / dev-server fallback — window.location.origin is valid here
+      const url = `${window.location.origin}/meeting/${meetingId}?${params}`;
+      window.open(url, '_blank', 'width=1280,height=800,menubar=no,toolbar=no');
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // SHARE MEETING ID — FIX: auto-select first user if none selected
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /**
+   * FIX for Issue 1:
+   * Called when the meet-now-dialog fires the 'ois-share-meeting-id' event.
+   *
+   * Priority:
+   *   1. Use the currently selected conversation (user already open in chat).
+   *   2. If no conversation is open, auto-select the FIRST user in the list,
+   *      create/get their conversation, then send the message.
+   */
+  private handleShareMeetingId(meetingId: string, text: string): void {
+    const messageText = text || `Join my meeting! Meeting ID: ${meetingId}`;
+
+    // Case 1 — a conversation is already open, send immediately
+    if (this.selectedConversation && this.currentUserId) {
+      this.sendMeetingIdMessage(messageText);
+      return;
+    }
+
+    // Case 2 — no conversation open, auto-select first user and send
+    const firstUser = this.users[0];
+    if (!firstUser) {
+      console.warn('[Chat] No users available to share meeting ID with.');
+      return;
+    }
+
+    console.log('[Chat] No conversation selected; auto-selecting first user:', this.getUserDisplayName(firstUser));
+
+    // Select the first user (opens their conversation) then send
+    this.selectUser(firstUser).then(() => {
+      // Give the conversation a moment to initialise before sending
+      setTimeout(() => {
+        if (this.selectedConversation && this.currentUserId) {
+          this.sendMeetingIdMessage(messageText);
+        }
+      }, 500);
+    });
+  }
+
+  /**
+   * Sends the meeting-ID text message into the currently selected conversation.
+   */
+  private sendMeetingIdMessage(text: string): void {
+    if (!this.selectedConversation || !this.currentUserId) return;
+
+    const request: SendMessageRequest = {
+      conversationId: this.selectedConversation.id,
+      messageType:    'Text',
+      content:        text,
+      senderId:       this.currentUserId
+    };
+
+    this.chatSignalrService.sendMessage(request)
+      .then(() => console.log('[Chat] Meeting ID shared in chat.'))
+      .catch((err: any) => console.error('[Chat] Failed to share meeting ID:', err));
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -803,9 +918,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     new bootstrap.Modal(document.getElementById('imageViewerModal')).show();
   }
 
-  startVoiceCall(): void {}
-  startVideoCall(): void {}
-  showUserInfo():   void {}
+  startVoiceCall():  void {}
+  startVideoCall():  void {}
+  showUserInfo():    void {}
   showEmojiPicker(): void {}
   loadUnreadCount(): void {}
 
@@ -830,21 +945,5 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const k = 1024, s = ['Bytes','KB','MB','GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + s[i];
-  }
-
-  private handleShareMeetingId(meetingId: string, text: string): void {
-    if (!this.selectedConversation || !this.currentUserId) {
-      console.log('[Chat] No conversation open; meeting ID is on clipboard:', meetingId);
-      return;
-    }
-    // const request: SendMessageRequest = {
-    //   conversationId: this.selectedConversation.id,
-    //   messageType: 'Text',
-    //   content: text || `Join my meeting! Meeting ID: ${meetingId}`,
-    //   senderId: this.currentUserId
-    // };
-    // this.chatSignalrService.sendMessage(request)
-    //   .then(() => console.log('[Chat] Meeting ID shared in chat.'))
-    //   .catch((err: any) => console.error('[Chat] Failed to share meeting ID:', err));
   }
 }

@@ -21,19 +21,6 @@
   <div class="users-sidebar">
     <div class="sidebar-header">
       <h5 class="mb-0">Chat </h5>
-        <!-- <small class="text-muted ms-2" [class.text-success]="isConnected" [class.text-danger]="!isConnected">
-        <i class="bi" [class.bi-wifi]="isConnected" [class.bi-wifi-off]="!isConnected"></i>
-        {{ isConnected ? 'Connected' : 'Disconnected' }}
-      </small> -->
-      <!-- <div class="position-relative">
-        <button class="btn btn-light btn-sm rounded-circle p-2 d-flex align-items-center justify-content-center">
-          <i class="bi bi-pencil"></i>
-        </button>
-        <span *ngIf="totalUnreadCount > 0"
-              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-          {{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}
-        </span>
-      </div> -->
     </div>
 
     <div class="search-box px-3 pb-3">
@@ -142,7 +129,19 @@
                [class.me-bubble]="msg.senderId?.toString() === currentUserId"
                [class.image-message]="msg.messageType === 'Image'">
 
-            <div *ngIf="msg.messageType === 'Text'">{{ msg.content }}</div>
+            <!--
+              TEXT MESSAGE
+              ─────────────────────────────────────────────────────────────────
+              CHANGED: was   <div>{{ msg.content }}</div>
+              NOW uses [innerHTML] + MeetingLinkPipe so that any OIS-XXXX
+              meeting ID in the message is rendered as a clickable chip.
+              The (click) handler uses event-delegation so it only fires when
+              the user actually clicks a .meeting-id-link span.
+            -->
+            <div *ngIf="msg.messageType === 'Text'"
+                 [innerHTML]="msg.content | meetingLink"
+                 (click)="onMessageClick($event)">
+            </div>
 
             <div *ngIf="msg.messageType === 'Image'" class="image-attachment">
               <img [src]="msg.fileUrl || msg.attachments?.[0]?.fileUrl"
@@ -168,7 +167,6 @@
 
           <div class="message-meta">
             <span class="message-time">{{ formatTime(msg.sentAt) }}</span>
-            <!-- Read receipt tick — shown for sender's messages only, no clock icon -->
             <i *ngIf="msg.senderId?.toString() === currentUserId"
                class="bi read-receipt"
                [class.bi-check]="!msg.isDelivered"
@@ -177,9 +175,6 @@
           </div>
         </div>
       </div>
-
-      <!-- <div *ngIf="!hasMoreMessages && messages.length > 0"
-           class="text-center p-2 text-muted small">No more messages</div> -->
 
       <div *ngIf="isLoading && messages.length > 0" class="text-center p-2">
         <div class="spinner-border spinner-border-sm text-primary" role="status">
@@ -210,7 +205,6 @@
                  [disabled]="isSendingMessage">
         </div>
 
-        <!-- Send button: spinner while sending, arrow icon otherwise -->
         <button class="btn btn-link send-btn"
                 [class.text-primary]="newMessage.trim() && !isSendingMessage"
                 [class.text-secondary]="!newMessage.trim() || isSendingMessage"
@@ -239,7 +233,7 @@
   </ng-template>
 </div>
 
-<!-- Image viewer modal (unchanged) -->
+<!-- Image viewer modal -->
 <div class="modal fade" id="imageViewerModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
