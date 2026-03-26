@@ -4,9 +4,9 @@ export const environment = {
   aiApiBaseUrl: 'https://ai.nexaois.com:4433',
 
   // Dev environment
-  // apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/api',
-  // ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_Dev/api',
-  // signalRUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/hubs',
+  apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/api',
+  ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_Dev/api',
+  signalRUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/hubs',
 
   // QA environment
   // apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_QA/api',
@@ -14,9 +14,9 @@ export const environment = {
   // signalRUrl: 'https://www.nexaois.com/OISMeetAPI_QA/hubs',
 
   //Live environment
-  apiBaseUrl: 'https://www.officeinfosystems.com/OISMeetAPI/api',
-  ssoApiBaseUrl: 'https://www.officeinfosystems.com/OISSSOAPI/api',
-  signalRUrl: 'https://www.officeinfosystems.com/OISMeetAPI/hubs',
+  // apiBaseUrl: 'https://www.officeinfosystems.com/OISMeetAPI/api',
+  // ssoApiBaseUrl: 'https://www.officeinfosystems.com/OISSSOAPI/api',
+  // signalRUrl: 'https://www.officeinfosystems.com/OISMeetAPI/hubs',
 
   // local environment
   // apiBaseUrl: 'https://localhost:7235/api',
