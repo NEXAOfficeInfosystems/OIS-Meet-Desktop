@@ -295,14 +295,22 @@ export class ChatSignalrService {
     }
   }
 
-  joinConversation(conversationId: string): void {
+  // joinConversation(conversationId: string): void {
+  //   if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+  //     console.log('🔗 Joining conversation:', conversationId);  // DEBUG: Log joining
+  //     this.hubConnection.invoke("JoinConversation", conversationId)
+  //       .catch(err => console.error('Error joining conversation:', err));
+  //   } else {
+  //     console.log('Cannot join conversation: Connection not ready');
+  //   }
+  // }
+
+  joinConversation(conversationId: string): Promise<void> {
     if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-      console.log('🔗 Joining conversation:', conversationId);  // DEBUG: Log joining
-      this.hubConnection.invoke("JoinConversation", conversationId)
+      return this.hubConnection.invoke("JoinConversation", conversationId)
         .catch(err => console.error('Error joining conversation:', err));
-    } else {
-      console.log('Cannot join conversation: Connection not ready');
     }
+    return Promise.resolve();
   }
 
   leaveConversation(conversationId: string): void {

@@ -334,7 +334,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private updateUserListPreview(conversationId: string, message: any): void {
     let user = this.findUserByConversationOrSender(conversationId, message.senderId?.toString());
     if (!user) { this.loadConversations(); return; }
-    if (!user.conversationId) user.conversationId = conversationId;
+    if (!user.conversationId) {
+      user.conversationId = conversationId.toString();
+    }
 
     user.lastMessage =
       message.messageType === 'Text'  ? (message.content ?? '') :
@@ -347,11 +349,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   private findUserByConversationOrSender(conversationId: string, senderId?: string): any {
+    const convId = conversationId?.toString();
+    const sender = senderId?.toString();
+
     return (
-      this.users.find(u => u.conversationId?.toString() === conversationId) ||
-      (senderId && this.users.find(u =>
-        u.id?.toString()     === senderId ||
-        u.userId?.toString() === senderId
+      this.users.find(u => u.conversationId?.toString() === convId) ||
+      (sender && this.users.find(u =>
+        u.id?.toString()     === sender ||
+        u.userId?.toString() === sender
       )) ||
       null
     );
@@ -371,15 +376,19 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
       return bt - at;
     });
-    this.users = [...this.users];
-    this.applySearch();
-  }
-
-  private applySearch(): void {
     const q = this.searchQuery?.trim().toLowerCase() ?? '';
     this.filteredUsers = q
       ? this.users.filter(u => this.getUserDisplayName(u).toLowerCase().includes(q))
       : [...this.users];
+    this.cdr.detectChanges();
+  }
+
+  private applySearch(): void {
+     this.sortUsersByLastMessage();
+    // const q = this.searchQuery?.trim().toLowerCase() ?? '';
+    // this.filteredUsers = q
+    //   ? this.users.filter(u => this.getUserDisplayName(u).toLowerCase().includes(q))
+    //   : [...this.users];
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -517,7 +526,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.messages     = [];
     this.currentPage  = 1;
     this.hasMoreMessages = true;
-    this.displayedMessageIds.clear();
+    // this.displayedMessageIds.clear();
 
     if (user.unreadCount > 0) {
       user.unreadCount = 0;
