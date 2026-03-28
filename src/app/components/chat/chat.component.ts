@@ -379,9 +379,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     user.lastMessage =
       message.messageType === 'Text'  ? (message.content ?? '') :
       message.messageType === 'Image' ? '📷 Image' : `📎 ${message.attachments?.[0]?.fileName ?? 'File'}`;
-    user.lastMessageTime = this.formatMessageTime(new Date(message.sentAt ?? Date.now()));
+    const parsedSent = this.parseDate(message.sentAt ?? Date.now()) ?? new Date();
+    user.lastMessageTime = this.formatMessageTime(parsedSent);
     user.lastMessageType = message.messageType;
-    user.lastMessageAt   = new Date(message.sentAt ?? Date.now());
+    user.lastMessageAt   = parsedSent;
 
     this.sortUsersByLastMessage();
   }
@@ -496,10 +497,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
               user.conversationId = conv.id?.toString();
               user.lastMessage = conv.lastMessage?.content || '';
               user.lastMessageTime = conv.lastMessage?.sentAt
-                ? this.formatMessageTime(new Date(conv.lastMessage.sentAt)) : '';
+                ? this.formatMessageTime(this.parseDate(conv.lastMessage.sentAt)) : '';
               user.lastMessageType = conv.lastMessage?.messageType || '';
               user.lastMessageAt = conv.lastMessage?.sentAt
-                ? new Date(conv.lastMessage.sentAt) : null;
+                ? this.parseDate(conv.lastMessage.sentAt) : null;
               user.unreadCount = conv.unreadCount || 0;   // ← from API
             } else {
               this.users.push({
@@ -511,10 +512,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
                 isOnline: other.isOnline || false,
                 lastMessage: conv.lastMessage?.content || '',
                 lastMessageTime: conv.lastMessage?.sentAt
-                  ? this.formatMessageTime(new Date(conv.lastMessage.sentAt)) : '',
+                  ? this.formatMessageTime(this.parseDate(conv.lastMessage.sentAt)) : '',
                 lastMessageType: conv.lastMessage?.messageType || '',
                 lastMessageAt: conv.lastMessage?.sentAt
-                  ? new Date(conv.lastMessage.sentAt) : null,
+                  ? this.parseDate(conv.lastMessage.sentAt) : null,
                 unreadCount: conv.unreadCount || 0,
                 conversationId: conv.id?.toString(),
                 avatarColor: this.commonService.getRandomColor()
@@ -1019,20 +1020,31 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   showEmojiPicker(): void {}
   loadUnreadCount(): void {}
 
-  formatTime(date: any): string {
-    if (!date) return '';
-    const normalized = typeof date === 'string'
-      ? date.replace(/(\.\d{3})\d+/, '$1')
-      : date;
-    const d = new Date(normalized);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // formatTime(date: any): string {
+  //   if (!date) return '';
+  //   const normalized = typeof date === 'string'
+  //     ? date.replace(/(\.\d{3})\d+/, '$1')
+  //     : date;
+  //   const d = new Date(normalized);
+  //   if (isNaN(d.getTime())) return '';
+  //   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // }
+
+  formatTime(value: any): string {
+    if (!value) return '';
+    const d = this.parseDate(value);
+    if (!d) return '';
+    return d.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
-  private formatMessageTime(date: Date): string {
+  private formatMessageTime(date: Date | string | any): string {
     const now = new Date();
-    const d   = new Date(date);
-    const dm  = Math.floor((now.getTime() - d.getTime()) / 60000);
+    const d = date instanceof Date ? date : this.parseDate(date as any);
+    if (!d) return '';
+    const dm = Math.floor((now.getTime() - d.getTime()) / 60000);
     if (dm < 1)    return 'Just now';
     if (dm < 60)   return `${dm}m ago`;
     if (dm < 1440) return `${Math.floor(dm / 60)}h ago`;
@@ -1049,9 +1061,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   private parseDate(value: any): Date | null {
     if (!value) return null;
-    const normalized = typeof value === 'string'
-      ? value.replace(/(\.\d{3})\d+/, '$1')
-      : value;
+    let normalized: any = value;
+    if (typeof value === 'string') {
+      normalized = value.replace(/(\.\d{3})\d+/, '$1');
+      if (!/[Zz]|[+\-]\d{2}:?\d{2}$/.test(normalized)) {
+        normalized = normalized + 'Z';
+      }
+    }
     const d = new Date(normalized);
     return isNaN(d.getTime()) ? null : d;
   }
