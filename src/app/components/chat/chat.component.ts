@@ -73,6 +73,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private shouldScroll:     boolean = false;
   private destroy$         = new Subject<void>();
   private isCompanyChanging = false;
+  private isSwitchingUser   = false; 
+  private conversationSwitch$ = new Subject<void>();
   private companySubscription!:         Subscription;
   private syncSubscription!:            Subscription;
   private connectionStateSubscription!: Subscription;
@@ -158,6 +160,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.chatSignalrService.stopConnection();
     this.destroy$.next();
     this.destroy$.complete();
+    this.conversationSwitch$.complete();
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -300,7 +303,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     if (msgId) this.displayedMessageIds.add(msgId);
 
     if (isActiveConversation) {
-      this.messages     = [...this.messages, message];
+      const updated     = [...this.messages, message];
+      this.messages     = this.decorateMessagesWithDates(updated);
       this.shouldScroll = true;
       if (!isAppBackgrounded) {
         setTimeout(() => this.markMessageAsRead(msgId), 500);
@@ -499,34 +503,51 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.displayedMessageIds.clear();
 
     this.chatService.getMessages(conversationId, this.currentPage)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(
+        takeUntil(this.destroy$),
+        takeUntil(this.conversationSwitch$)
+      )
       .subscribe({
         next: (res) => {
+          // ── Discard if user already switched away ──────────────────────
+          if (this.selectedConversation?.id?.toString() !== conversationId?.toString()) {
+            this.isSwitchingUser = false;
+            return;
+          }
+
           if (res.success && res.data) {
             const msgs: any[] = res.data;
             msgs.forEach(m => { if (m.id) this.displayedMessageIds.add(m.id.toString()); });
 
             if (this.currentPage === 1) {
-              this.messages     = msgs;
-              this.shouldScroll = true;
+              this.messages = this.decorateMessagesWithDates(msgs);
+              this.shouldScroll = true;       // ← scroll to BOTTOM on fresh load
             } else {
-              this.messages = [...msgs, ...this.messages];
+              const combined = [...msgs, ...this.messages];
+              this.messages = this.decorateMessagesWithDates(combined);
             }
             this.hasMoreMessages = msgs.length === 50;
             setTimeout(() => this.markVisibleMessagesAsRead(), 1000);
           }
           this.isLoading = false;
+          this.isSwitchingUser = false;       // ← safe to scroll again
         },
-        error: () => { this.isLoading = false; }
+        error: () => {
+          this.isLoading = false;
+          this.isSwitchingUser = false;       // ← clear on error too
+        }
       });
   }
 
   async selectUser(user: any): Promise<void> {
+    this.isSwitchingUser = true;
+    this.conversationSwitch$.next();
+
     this.selectedUser = user;
-    this.messages     = [];
-    this.currentPage  = 1;
+    this.messages = [];
+    this.currentPage = 1;               // ← reset BEFORE loadMessages
     this.hasMoreMessages = true;
-    // this.displayedMessageIds.clear();
+    this.isLoading = false;           // ← clear stuck loading flag
 
     if (user.unreadCount > 0) {
       user.unreadCount = 0;
@@ -540,7 +561,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       try {
         await this.chatSignalrService.joinConversation(user.conversationId);
         this.loadMessages(user.conversationId);
-      } catch (err) { console.error('Failed to join conversation:', err); }
+      } catch (err) {
+        console.error('Failed to join conversation:', err);
+        this.isSwitchingUser = false;        // ← clear flag on error too
+      }
     } else {
       this.isLoading = true;
       this.chatService.createOrGetDirectConversation(user.id)
@@ -548,16 +572,22 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         .subscribe({
           next: async (res) => {
             if (res.success && res.data) {
-              user.conversationId   = res.data?.toString();
+              user.conversationId = res.data?.toString();
               this.selectedConversation = { id: user.conversationId };
               try {
                 await this.chatSignalrService.joinConversation(user.conversationId);
                 this.loadMessages(user.conversationId);
-              } catch (err) { console.error('Failed to join conversation:', err); }
+              } catch (err) {
+                console.error('Failed to join conversation:', err);
+                this.isSwitchingUser = false;  // ← clear flag on error
+              }
             }
             this.isLoading = false;
           },
-          error: () => { this.isLoading = false; }
+          error: () => {
+            this.isLoading = false;
+            this.isSwitchingUser = false;     // ← clear flag on error
+          }
         });
     }
   }
@@ -784,8 +814,12 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // ═════════════════════════════════════════════════════════════════════════
 
   onScroll(event: any): void {
+    if (this.isSwitchingUser) return;
+
     const el = event.target;
-    if (el.scrollTop === 0 && this.hasMoreMessages && !this.isLoading) this.loadMoreMessages();
+    if (el.scrollTop === 0 && this.hasMoreMessages && !this.isLoading) {
+      this.loadMoreMessages();
+    }
   }
 
   loadMoreMessages(): void {
@@ -933,9 +967,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   showEmojiPicker(): void {}
   loadUnreadCount(): void {}
 
-  formatTime(date: Date): string {
+  formatTime(date: any): string {
     if (!date) return '';
-    return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const normalized = typeof date === 'string'
+      ? date.replace(/(\.\d{3})\d+/, '$1')
+      : date;
+    const d = new Date(normalized);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
   private formatMessageTime(date: Date): string {
@@ -954,5 +993,45 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const k = 1024, s = ['Bytes','KB','MB','GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + s[i];
+  }
+
+  private parseDate(value: any): Date | null {
+    if (!value) return null;
+    const normalized = typeof value === 'string'
+      ? value.replace(/(\.\d{3})\d+/, '$1')
+      : value;
+    const d = new Date(normalized);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  private getDateLabel(sentAt: any): string {
+    const d = this.parseDate(sentAt);
+    if (!d) return '';
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (d.toDateString() === now.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    const opts: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {})
+    };
+    return d.toLocaleDateString(undefined, opts);
+  }
+
+  private decorateMessagesWithDates(msgs: any[]): any[] {
+    return msgs.map((msg, index) => {
+      const current = this.parseDate(msg.sentAt);
+      const previous = index > 0 ? this.parseDate(msgs[index - 1].sentAt) : null;
+      const show = index === 0 ||
+        (!!current && !!previous && current.toDateString() !== previous.toDateString());
+      return {
+        ...msg,
+        showDateSeparator: show,
+        dateSeparatorLabel: show ? this.getDateLabel(msg.sentAt) : ''
+      };
+    });
   }
 }

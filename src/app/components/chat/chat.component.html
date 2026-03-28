@@ -111,12 +111,18 @@
       </div>
     </div>
 
-    <!-- Messages -->
-    <div class="chat-messages" #chatMessages (scroll)="onScroll($event)">
+<!-- Messages -->
+  <div class="chat-messages" #chatMessages (scroll)="onScroll($event)">
 
-      <div *ngFor="let msg of messages"
-           class="message"
-           [class.message-me]="msg.senderId?.toString() === currentUserId">
+    <ng-container *ngFor="let msg of messages">
+
+      <!-- Date separator — driven by data, no method calls in template -->
+      <div *ngIf="msg.showDateSeparator" class="date-separator">
+        <span class="date-separator-label">{{ msg.dateSeparatorLabel }}</span>
+      </div>
+
+      <div class="message"
+          [class.message-me]="msg.senderId?.toString() === currentUserId">
 
         <div class="message-avatar" *ngIf="msg.senderId?.toString() !== currentUserId">
           <div class="user-avatar smallest" [style.background-color]="selectedUser.avatarColor">
@@ -126,27 +132,18 @@
 
         <div class="message-content">
           <div class="bubble"
-               [class.me-bubble]="msg.senderId?.toString() === currentUserId"
-               [class.image-message]="msg.messageType === 'Image'">
+              [class.me-bubble]="msg.senderId?.toString() === currentUserId"
+              [class.image-message]="msg.messageType === 'Image'">
 
-            <!--
-              TEXT MESSAGE
-              ─────────────────────────────────────────────────────────────────
-              CHANGED: was   <div>{{ msg.content }}</div>
-              NOW uses [innerHTML] + MeetingLinkPipe so that any OIS-XXXX
-              meeting ID in the message is rendered as a clickable chip.
-              The (click) handler uses event-delegation so it only fires when
-              the user actually clicks a .meeting-id-link span.
-            -->
             <div *ngIf="msg.messageType === 'Text'"
-                 [innerHTML]="msg.content | meetingLink"
-                 (click)="onMessageClick($event)">
+                [innerHTML]="msg.content | meetingLink"
+                (click)="onMessageClick($event)">
             </div>
 
             <div *ngIf="msg.messageType === 'Image'" class="image-attachment">
               <img [src]="msg.fileUrl || msg.attachments?.[0]?.fileUrl"
-                   [alt]="msg.fileName || msg.attachments?.[0]?.fileName"
-                   class="img-fluid rounded" (click)="viewImage(msg)">
+                  [alt]="msg.fileName || msg.attachments?.[0]?.fileName"
+                  class="img-fluid rounded" (click)="viewImage(msg)">
             </div>
 
             <div *ngIf="msg.messageType === 'File'" class="file-attachment">
@@ -160,7 +157,7 @@
             </div>
 
             <div *ngIf="msg.messageType === 'System'"
-                 class="system-message text-center text-muted small">
+                class="system-message text-center text-muted small">
               {{ msg.content }}
             </div>
           </div>
@@ -168,20 +165,22 @@
           <div class="message-meta">
             <span class="message-time">{{ formatTime(msg.sentAt) }}</span>
             <i *ngIf="msg.senderId?.toString() === currentUserId"
-               class="bi read-receipt"
-               [class.bi-check]="!msg.isDelivered"
-               [class.bi-check-all]="msg.isDelivered"
-               [class.read]="msg.isRead"></i>
+              class="bi read-receipt"
+              [class.bi-check]="!msg.isDelivered"
+              [class.bi-check-all]="msg.isDelivered"
+              [class.read]="msg.isRead"></i>
           </div>
         </div>
       </div>
 
-      <div *ngIf="isLoading && messages.length > 0" class="text-center p-2">
-        <div class="spinner-border spinner-border-sm text-primary" role="status">
-          <span class="visually-hidden">Loading more...</span>
-        </div>
+    </ng-container>
+
+    <div *ngIf="isLoading && messages.length > 0" class="text-center p-2">
+      <div class="spinner-border spinner-border-sm text-primary" role="status">
+        <span class="visually-hidden">Loading more...</span>
       </div>
     </div>
+  </div>
 
     <!-- Input area -->
     <div class="chat-input-area">

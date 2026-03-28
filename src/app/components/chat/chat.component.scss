@@ -601,3 +601,30 @@
     border-color: rgba(255, 255, 255, 0.70);
   }
 }
+
+.date-separator {
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  margin:          12px 0;
+  gap:             10px;
+
+  &::before,
+  &::after {
+    content:    '';
+    flex:       1;
+    height:     1px;
+    background: #e0e0e0;
+  }
+}
+
+.date-separator-label {
+  background:    #f0f0f0;
+  color:         #757575;
+  font-size:     11px;
+  font-weight:   500;
+  padding:       3px 10px;
+  border-radius: 12px;
+  white-space:   nowrap;
+  user-select:   none;
+}
