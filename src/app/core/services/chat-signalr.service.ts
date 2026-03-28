@@ -283,7 +283,16 @@ export class ChatSignalrService {
       }
     }
   }
-
+async markAllMessagesAsRead(conversationId: string): Promise<void> {
+  if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+    try {
+      await this.hubConnection.invoke('MarkAllMessagesAsRead', conversationId);
+    } catch (err) {
+      console.error('Error marking all messages as read:', err);
+      throw err;
+    }
+  }
+}
   async deleteMessage(messageId: string): Promise<void> {
     if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
       try {
