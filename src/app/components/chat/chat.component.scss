@@ -191,14 +191,24 @@
       }
     }
 
+    .dm-info {
+      min-width: 0;
+      flex-grow: 1;
+      overflow: hidden;
+    }
+
     .dm-name {
       font-size: 0.85rem;
       color: inherit;
+      width: 100%;
+      display: block;
     }
 
     .dm-last-msg {
       font-size: 0.75rem;
       opacity: 0.8;
+      width: 100%;
+      display: block;
     }
   }
 }
