@@ -2,7 +2,7 @@
   <!-- Left Side: Brand & Drag Handle -->
   <div class="brand-section">
     <div class="drag-handle" *ngIf="isElectron"></div>
-    <a class="app-brand" routerLink="/chat" title="Go to Home">
+    <a class="app-brand" routerLink="/chat" title="Go to Home" (click)="navigateToHome()">
       <img src="assets/login/logo.png" alt="OIS Meet App Icon" class="app-logo" />
       <span class="app-title">OIS Meet</span>
     </a>

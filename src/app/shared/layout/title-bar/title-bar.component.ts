@@ -202,7 +202,9 @@ export class TitleBarComponent implements OnInit {
     body.classList.toggle('theme-dark', this.theme === 'dark');
     body.classList.toggle('theme-light', this.theme === 'light');
   }
-
+  navigateToHome() {
+    this.router.navigateByUrl('/dashboard');
+  }
   logout() {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '350px',

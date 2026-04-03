@@ -98,8 +98,14 @@
   flex: 1 1 0; // grow to fill sidebar, min-height 0 enables scroll
   min-height: 0;
 
-  &::-webkit-scrollbar { width: 6px; }
-  &::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 10px;
+  }
 }
 
 .channel-list {
@@ -568,9 +574,9 @@
 .message-editor {
   width: 100%;
   border: none;
-  padding: 1rem;
-  min-height: 100px;
-  max-height: 300px;
+  padding: 0.75rem;
+  min-height: 50px;
+  max-height: 200px;
   overflow-y: auto;
   font-size: 0.95rem;
   color: #1e293b;

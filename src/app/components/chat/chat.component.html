@@ -77,7 +77,7 @@
             [class.active]="selectedUser?.id === user.id" (click)="selectUser(user)">
             <div class="dm-avatar-wrapper position-relative">
               <div class="dm-avatar-sm" [style.background-color]="user.avatarColor || '#3b82f6'">
-                {{ (user.fullName || user.name).charAt(0).toUpperCase() }}
+                {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
               </div>
               <span class="status-indicator-sm" [class.online]="user.isOnline"></span>
             </div>
@@ -159,27 +159,29 @@
               [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
 
             <!-- Attachments (Single File) -->
-            <div class="msg-attachments mt-2" *ngIf="msg.fileUrl">
-              <div class="file-chip" (click)="downloadFile(msg.fileUrl, msg.fileName)">
-                <i [class]="msg.fileName?.endsWith('.ppt') || msg.fileName?.endsWith('.pptx') ? 'bi bi-file-earmark-ppt-fill text-danger' : 
-                           msg.fileName?.endsWith('.xlsx') || msg.fileName?.endsWith('.xls') ? 'bi bi-file-earmark-excel-fill text-success' : 
-                           msg.fileName?.endsWith('.jpg') || msg.fileName?.endsWith('.png') ? 'bi bi-file-earmark-image-fill text-info' :
+            <!-- <div class="msg-attachments mt-2" *ngIf="msg.fileUrl || msg.FileUrl">
+              <div class="file-chip" (click)="downloadFile(msg.fileUrl || msg.FileUrl, msg.fileName || msg.FileName)">
+                <i [class]="(msg.fileName || msg.FileName)?.endsWith('.ppt') || (msg.fileName || msg.FileName)?.endsWith('.pptx') ? 'bi bi-file-earmark-ppt-fill text-danger' : 
+                           (msg.fileName || msg.FileName)?.endsWith('.xlsx') || (msg.fileName || msg.FileName)?.endsWith('.xls') ? 'bi bi-file-earmark-excel-fill text-success' : 
+                           (msg.fileName || msg.FileName)?.endsWith('.jpg') || (msg.fileName || msg.FileName)?.endsWith('.png') ? 'bi bi-file-earmark-image-fill text-info' :
                            'bi bi-file-earmark-fill text-primary'" class="fs-4"></i>
                 <div class="file-info">
-                  <span class="file-name text-truncate" style="max-width: 200px;">{{ msg.fileName }}</span>
+                  <span class="file-name text-truncate" style="max-width: 200px;">{{ msg.fileName || msg.FileName }}</span>
                 </div>
                 <button class="btn-download"><i class="bi bi-download"></i></button>
               </div>
-            </div>
+            </div> -->
 
             <!-- Legacy Attachments -->
-            <div class="msg-attachments" *ngIf="msg.attachments && msg.attachments.length > 0">
-              <div class="file-chip" *ngFor="let file of msg.attachments">
+            <div class="msg-attachments" *ngIf="(msg.attachments || msg.Attachments)?.length > 0">
+              <div class="file-chip" *ngFor="let file of (msg.attachments || msg.Attachments)">
                 <i class="bi bi-file-earmark-fill text-primary fs-4"></i>
                 <div class="file-info">
-                  <span class="file-name">{{ file.fileName }}</span>
+                  <span class="file-name">{{ file.fileName || file.FileName }}</span>
                 </div>
-                <button class="btn-download"><i class="bi bi-download"></i></button>
+                <button class="btn-download"
+                  (click)="downloadFile(file.fileUrl || file.FileUrl, file.fileName || file.FileName)"><i
+                    class="bi bi-download"></i></button>
               </div>
             </div>
           </div> <!-- end msg-content -->
@@ -304,18 +306,39 @@
         <i class="bi bi-files text-muted"></i>
       </div>
       <div class="file-list-small">
-        <div class="file-item-mini d-flex align-items-center gap-2 p-2 rounded mb-1" *ngFor="let file of sharedFiles">
+        <!-- Empty state -->
+        <div *ngIf="sharedFiles.length === 0" class="text-center text-muted py-3">
+          <i class="bi bi-folder2-open d-block mb-1" style="font-size: 1.5rem; opacity: 0.4;"></i>
+          <span class="fs-xs">No files shared yet</span>
+        </div>
+        <!-- File items -->
+        <div class="file-item-mini d-flex align-items-center gap-2 p-2 rounded mb-1" *ngFor="let file of sharedFiles"
+          (click)="downloadFile(file.url, file.name)" style="cursor:pointer;">
           <div class="file-icon-bg bg-light rounded p-2">
-            <i class="bi bi-file-earmark-fill text-primary"></i>
+            <i class="bi"
+              [class.bi-file-earmark-image-fill]="file.type === 'png' || file.type === 'jpg' || file.type === 'jpeg' || file.type === 'gif'"
+              [class.bi-file-earmark-pdf-fill]="file.type === 'pdf'"
+              [class.bi-file-earmark-spreadsheet-fill]="file.type === 'xls' || file.type === 'xlsx' || file.type === 'csv'"
+              [class.bi-file-earmark-ppt-fill]="file.type === 'ppt' || file.type === 'pptx'"
+              [class.bi-file-earmark-zip-fill]="file.type === 'zip' || file.type === 'rar'"
+              [class.bi-file-earmark-fill]="!['png','jpg','jpeg','gif','pdf','xls','xlsx','csv','ppt','pptx','zip','rar'].includes(file.type || '')"
+              [class.text-danger]="file.type === 'pdf'"
+              [class.text-success]="file.type === 'xls' || file.type === 'xlsx' || file.type === 'csv'"
+              [class.text-warning]="file.type === 'ppt' || file.type === 'pptx'"
+              [class.text-info]="file.type === 'png' || file.type === 'jpg' || file.type === 'jpeg' || file.type === 'gif'"
+              [class.text-primary]="!file.type"></i>
           </div>
           <div class="file-details-mini flex-grow-1 min-w-0">
-            <div class="file-name-mini text-truncate fs-xs fw-semibold">{{ file.name }}</div>
+            <div class="file-name-mini text-truncate fs-xs fw-semibold" [title]="file.name">{{ file.name }}</div>
             <div class="file-meta-mini fs-xs opacity-50">{{ file.date }} • {{ file.owner }}</div>
           </div>
-          <button class="btn btn-sm text-secondary p-0"><i class="bi bi-three-dots"></i></button>
+          <button class="btn btn-sm text-secondary p-0" title="Download"
+            (click)="downloadFile(file.url, file.name); $event.stopPropagation()">
+            <i class="bi bi-download"></i>
+          </button>
         </div>
       </div>
-      <button class="btn btn-outline-secondary w-100 btn-sm mt-3">Browser all files</button>
+      <button class="btn btn-outline-secondary w-100 btn-sm mt-3">Browse all files</button>
     </section>
 
   </aside>

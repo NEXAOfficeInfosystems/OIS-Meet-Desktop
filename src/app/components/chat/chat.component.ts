@@ -97,11 +97,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   teams: any[] = [];
   channels: string[] = ['General']; // Default fallback channel for groups
 
-  sharedFiles = [
-    { name: 'OIS Marketing Campaign.pptx', size: '4.2 MB', type: 'ppt', date: 'Oct 24, 2026', owner: 'Ramya' },
-    { name: 'Campaign Budget.xlsx', size: '1.8 MB', type: 'xls', date: 'Oct 22, 2026', owner: 'Senthil' },
-    { name: 'Branding Guidelines.pdf', size: '12.5 MB', type: 'pdf', date: 'Oct 15, 2026', owner: 'Admin' }
-  ];
+  sharedFiles: any[] = [];
 
   activityFeed: any[] = [];
 
@@ -632,8 +628,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       const senderName = sender ? this.getUserDisplayName(sender) : 'New message';
       const avatarColor = sender?.avatarColor ?? '#1a73e8';
       const preview =
-        message.messageType === 'Text' ? (message.content ?? '').substring(0, 60) :
-          message.messageType === 'Image' ? 'ðŸ“· Image' : 'ðŸ“Ž File';
+        (message.messageType || message.MessageType) === 'Text' ? ((message.content || message.Content) ?? '').substring(0, 60) :
+          (message.messageType || message.MessageType) === 'Image' ? '📷 Image' : '📎 File Shared';
 
       this.showInAppToast(senderName, preview, avatarColor);
       this.showBrowserNotification(senderName, preview);
@@ -821,14 +817,16 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
               this.users.push({
                 id: isGroup ? conv.id?.toString() : other.userId?.toString(),
                 userId: isGroup ? null : other.userId?.toString(),
-                name: isGroup ? (conv.name || 'Marketing Team') : other.name,
-                fullName: isGroup ? (conv.name || 'Marketing Team') : other.name,
+                name: isGroup ? (conv.name || 'Marketing Team') : (other.name || other.fullName || 'User'),
+                fullName: isGroup ? (conv.name || 'Marketing Team') : (other.name || other.fullName || 'User'),
                 email: other.email || '',
                 isOnline: isGroup ? true : (other.isOnline || false),
-                lastMessage: conv.lastMessage?.content || '',
+                lastMessage: (conv.lastMessage?.messageType || conv.lastMessage?.MessageType) === 'File' ? '📎 File Shared' : 
+                             (conv.lastMessage?.messageType || conv.lastMessage?.MessageType) === 'Image' ? '📷 Image' : 
+                             (conv.lastMessage?.content || conv.lastMessage?.Content || ''),
                 lastMessageTime: conv.lastMessage?.sentAt
                   ? this.formatMessageTime(this.parseDate(conv.lastMessage.sentAt)) : '',
-                lastMessageType: conv.lastMessage?.messageType || '',
+                lastMessageType: conv.lastMessage?.messageType || conv.lastMessage?.MessageType || '',
                 lastMessageAt: conv.lastMessage?.sentAt
                   ? this.parseDate(conv.lastMessage.sentAt) : null,
                 unreadCount: conv.unreadCount || 0,
@@ -1344,15 +1342,19 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   private updateSharedFiles() {
     this.sharedFiles = this.messages
-      .filter(m => m.fileUrl)
-      .map(m => ({
-        name: m.fileName || 'Unnamed File',
-        size: 'View',
-        type: 'file',
-        date: this.formatMessageTime(m.sentAt),
-        owner: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : m.senderName,
-        url: m.fileUrl
-      }))
+      .filter(m => m.fileUrl || m.FileUrl || (m.attachments && m.attachments.length > 0) || (m.Attachments && m.Attachments.length > 0))
+      .map(m => {
+        const fileUrl = m.fileUrl || m.FileUrl || m.attachments?.[0]?.fileUrl || m.Attachments?.[0]?.fileUrl || m.attachments?.[0]?.FileUrl || m.Attachments?.[0]?.FileUrl;
+        const fileName = m.fileName || m.FileName || m.attachments?.[0]?.fileName || m.Attachments?.[0]?.fileName || m.attachments?.[0]?.FileName || m.Attachments?.[0]?.FileName || 'Unnamed File';
+        return {
+          name: fileName,
+          size: 'View',
+          type: fileName.split('.').pop()?.toLowerCase() || 'file',
+          date: this.formatMessageTime(m.sentAt || m.SentAt),
+          owner: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown'),
+          url: fileUrl
+        };
+      })
       .reverse()
       .slice(0, 10);
   }
