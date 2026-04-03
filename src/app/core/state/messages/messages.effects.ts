@@ -90,4 +90,58 @@ export class MessagesEffects {
       map((messageId: string) => MessagesActions.messageDeleted({ messageId }))
     )
   );
+
+  addReaction$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(MessagesActions.addReaction),
+      switchMap(({ messageId, emoji }) =>
+        this.chatService.addReaction(messageId, emoji).pipe(
+          map(() => MessagesActions.reactionAdded({ 
+            messageId, 
+            emoji, 
+            userId: this.chatService.getCurrentUserId(), 
+            userName: 'You' 
+          }))
+        )
+      )
+    )
+  );
+
+  removeReaction$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(MessagesActions.removeReaction),
+      switchMap(({ messageId, emoji }) =>
+        this.chatService.removeReaction(messageId, emoji).pipe(
+          map(() => MessagesActions.reactionRemoved({ 
+            messageId, 
+            emoji, 
+            userId: this.chatService.getCurrentUserId() 
+          }))
+        )
+      )
+    )
+  );
+
+  reactionAddedEvent$ = createEffect(() =>
+    this.signalr.reactionAdded$.pipe(
+      filter(Boolean),
+      map((data: any) => MessagesActions.reactionAdded({
+        messageId: data.messageId,
+        emoji: data.emoji,
+        userId: data.userId,
+        userName: data.userName
+      }))
+    )
+  );
+
+  reactionRemovedEvent$ = createEffect(() =>
+    this.signalr.reactionRemoved$.pipe(
+      filter(Boolean),
+      map((data: any) => MessagesActions.reactionRemoved({
+        messageId: data.messageId,
+        emoji: data.emoji,
+        userId: data.userId
+      }))
+    )
+  );
 }

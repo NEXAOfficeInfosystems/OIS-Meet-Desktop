@@ -14,32 +14,80 @@
   </div>
 </div>
 
-<div class="workspace-wrapper">
-  
+<div class="workspace-wrapper" [class.hWrap]="isElectron" [class.h100]="!isElectron">
+
   <!-- TEAM/CHANNEL SIDEBAR (Secondary Sidebar) -->
   <div class="secondary-sidebar">
-    <div class="sidebar-top">
+    <!-- <div class="sidebar-top">
       <h6 class="sidebar-title">Teams</h6>
       <button class="btn btn-icon-sm"><i class="bi bi-plus-lg"></i></button>
-    </div>
-    
+    </div> -->
+
     <div class="team-scroll-area">
+      <!-- TEAMS SECTION -->
       <div class="team-section" *ngFor="let team of teams">
-        <div class="team-header d-flex align-items-center gap-2" 
-             [class.active]="activeTeam === team.name"
-             (click)="selectTeam(team)">
+        <div class="team-header d-flex align-items-center gap-2"
+          [class.active]="activeTeam === team.name && !selectedUser" (click)="selectTeam(team)">
           <div class="team-icon" [style.background-color]="team.color">
             <i [class]="team.icon"></i>
           </div>
           <span class="team-name">{{ team.name }}</span>
         </div>
-        
-        <ul class="channel-list" *ngIf="activeTeam === team.name">
-          <li *ngFor="let ch of channels" 
-              class="channel-item" 
-              [class.active]="activeChannel === ch"
-              (click)="selectChannel(ch)">
+
+        <ul class="channel-list" *ngIf="activeTeam === team.name && !selectedUser">
+          <li *ngFor="let ch of channels" class="channel-item" [class.active]="activeChannel === ch"
+            (click)="selectChannel(ch)">
             <i class="bi bi-hash"></i> {{ ch }}
+          </li>
+        </ul>
+      </div>
+      <hr class="sidebar-divider mx-0 opacity-10" *ngIf="teams.length > 0">
+      <!-- DIRECT MESSAGES SECTION -->
+      <div class="dm-section">
+        <div class="dm-header px-3 py-2 d-flex justify-content-between align-items-center">
+          <span class="text-uppercase fs-xs fw-bold text-muted letter-spacing-1">Messages</span>
+          <div class="dropdown">
+            <button class="btn btn-icon-sm p-0 text-muted" type="button" data-bs-toggle="dropdown"
+              aria-expanded="false">
+              <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-1"
+              style="min-width: 140px; font-size: 0.85rem;">
+              <li>
+                <button class="dropdown-item d-flex align-items-center gap-2 py-2"
+                  [class.active]="userFilterMode === 'recent'" (click)="setUserFilterMode('recent')">
+                  <i class="bi bi-clock-history"></i> Most Recent
+                  <i class="bi bi-check ms-auto" *ngIf="userFilterMode === 'recent'"></i>
+                </button>
+              </li>
+              <li>
+                <button class="dropdown-item d-flex align-items-center gap-2 py-2"
+                  [class.active]="userFilterMode === 'unread'" (click)="setUserFilterMode('unread')">
+                  <i class="bi bi-chat-left-dots"></i> Unread Only
+                  <i class="bi bi-check ms-auto" *ngIf="userFilterMode === 'unread'"></i>
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <ul class="dm-list list-unstyled px-2">
+          <li *ngFor="let user of filteredUsers"
+            class="dm-item d-flex align-items-center gap-2 p-2 rounded cursor-pointer"
+            [class.active]="selectedUser?.id === user.id" (click)="selectUser(user)">
+            <div class="dm-avatar-wrapper position-relative">
+              <div class="dm-avatar-sm" [style.background-color]="user.avatarColor || '#3b82f6'">
+                {{ (user.fullName || user.name).charAt(0).toUpperCase() }}
+              </div>
+              <span class="status-indicator-sm" [class.online]="user.isOnline"></span>
+            </div>
+            <div class="dm-info min-w-0 flex-grow-1">
+              <div class="dm-name text-truncate" [class.fw-bold]="user.unreadCount > 0">{{ user.fullName || user.name }}
+              </div>
+              <div class="dm-last-msg text-truncate fs-xs text-muted" *ngIf="user.lastMessage">{{ user.lastMessage }}
+              </div>
+            </div>
+            <span class="badge bg-primary rounded-pill fs-xs" *ngIf="user.unreadCount > 0">{{ user.unreadCount }}</span>
           </li>
         </ul>
       </div>
@@ -48,23 +96,36 @@
 
   <!-- MAIN CONTENT AREA (Conversation Feed) -->
   <div class="main-workspace-content">
-    
+
     <!-- Workspace Header -->
     <header class="workspace-header">
       <div class="header-left">
         <div class="channel-info">
-          <h5 class="channel-title"># {{ activeChannel }}</h5>
-          <div class="channel-meta">
+          <h5 class="channel-title">
+            <span *ngIf="selectedUser; else channelTitle">
+              {{ selectedUser.fullName || selectedUser.name }}
+            </span>
+            <ng-template #channelTitle># {{ activeChannel }}</ng-template>
+          </h5>
+          <div class="channel-meta" *ngIf="!selectedUser">
             <span class="member-count"><i class="bi bi-people"></i> 24 members</span>
             <span class="divider"></span>
             <span class="channel-topic">Strategic planning for Q4 product launches</span>
+          </div>
+          <div class="channel-meta" *ngIf="selectedUser">
+            <span class="member-status">
+              <span class="status-dot" [class.online]="selectedUser.isOnline"></span>
+              {{ selectedUser.isOnline ? 'Online' : 'Away' }}
+            </span>
           </div>
         </div>
       </div>
       <div class="header-right">
         <div class="header-actions">
-          <button class="action-btn" (click)="startCall('Audio')" [disabled]="!selectedUser"><i class="bi bi-telephone"></i></button>
-          <button class="action-btn" (click)="startCall('Video')" [disabled]="!selectedUser"><i class="bi bi-camera-video"></i></button>
+          <button class="action-btn" (click)="startCall('Audio')" [disabled]="!selectedUser"><i
+              class="bi bi-telephone"></i></button>
+          <button class="action-btn" (click)="startCall('Video')" [disabled]="!selectedUser"><i
+              class="bi bi-camera-video"></i></button>
           <button class="action-btn"><i class="bi bi-info-circle"></i></button>
         </div>
       </div>
@@ -74,11 +135,13 @@
     <div class="chat-feed" #chatScrollArea>
       <div *ngIf="messages.length === 0 && !isLoading" class="empty-state text-center py-5 opacity-50">
         <i class="bi bi-chat-left-text fs-1 mb-3 d-block"></i>
-        <p>No messages in {{ activeChannel }} yet. Start the conversation!</p>
+        <p *ngIf="!selectedUser">No messages in #{{ activeChannel }} yet. Start the conversation!</p>
+        <p *ngIf="selectedUser">No messages with {{ selectedUser.fullName || selectedUser.name }} yet. Start the
+          conversation!</p>
       </div>
 
-      <div class="message-group" *ngFor="let msg of messages" 
-           [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
+      <div class="message-group" *ngFor="let msg of messages"
+        [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
         <div class="message-avatar-col" *ngIf="msg.senderId?.toString() !== currentUserId?.toString()">
           <div class="msg-avatar" [style.background-color]="getMemberAvatarColor(msg.senderName)">
             {{ msg.senderName.charAt(0).toUpperCase() }}
@@ -86,14 +149,15 @@
         </div>
         <div class="message-data-col">
           <div class="msg-header">
-            <span class="sender-name">{{ msg.senderId?.toString() === currentUserId?.toString() ? 'You' : msg.senderName }}</span>
+            <span class="sender-name">{{ msg.senderId?.toString() === currentUserId?.toString() ? 'You' : msg.senderName
+              }}</span>
             <span class="msg-time">{{ msg.sentAt | date:'shortTime' }}</span>
           </div>
           <div class="msg-content">
             <!-- Formatted HTML content or fallback plain text -->
-            <div class="mb-0" *ngIf="msg.formattedContent || msg.content" 
-                 [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
-            
+            <div class="mb-0" *ngIf="msg.formattedContent || msg.content"
+              [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
+
             <!-- Attachments (Single File) -->
             <div class="msg-attachments mt-2" *ngIf="msg.fileUrl">
               <div class="file-chip" (click)="downloadFile(msg.fileUrl, msg.fileName)">
@@ -118,6 +182,18 @@
                 <button class="btn-download"><i class="bi bi-download"></i></button>
               </div>
             </div>
+          </div> <!-- end msg-content -->
+
+          <!-- Reactions Section -->
+          <div class="msg-reactions mt-1 d-flex flex-wrap gap-1" *ngIf="msg.reactions && msg.reactions.length > 0">
+            <span *ngFor="let emoji of commonEmojis">
+              <button class="reaction-badge btn btn-sm rounded-pill" *ngIf="getReactionCount(msg, emoji) > 0"
+                [class.reacted]="hasReacted(msg, emoji)" (click)="toggleReaction(msg, emoji)"
+                [title]="getReactionUsers(msg, emoji)">
+                <span class="emoji">{{ emoji }}</span>
+                <span class="count">{{ getReactionCount(msg, emoji) }}</span>
+              </button>
+            </span>
           </div>
         </div>
       </div>
@@ -127,7 +203,7 @@
           <span class="visually-hidden">Loading messages...</span>
         </div>
       </div>
-      
+
       <div *ngIf="isUploading" class="text-center py-2 text-muted fs-small">
         <div class="spinner-border spinner-border-xs me-2" role="status"></div>
         Uploading file...
@@ -145,16 +221,24 @@
           <button class="tool-btn" (click)="formatDoc('insertOrderedList')"><i class="bi bi-list-ol"></i></button>
           <span class="v-divider"></span>
           <button class="tool-btn" (click)="formatDoc('formatBlock', 'pre')"><i class="bi bi-code-slash"></i></button>
-          <button class="tool-btn" (click)="formatDoc('createLink', 'https://')"><i class="bi bi-link-45deg"></i></button>
+          <button class="tool-btn" (click)="formatDoc('createLink', 'https://')"><i
+              class="bi bi-link-45deg"></i></button>
+          <span class="v-divider"></span>
+          <div class="emoji-picker-container" style="position: relative;">
+            <button class="tool-btn" (click)="showEmojiPicker()"><i class="bi bi-emoji-smile"></i></button>
+            <div class="emoji-picker-popover shadow border rounded-3 p-2 bg-white" *ngIf="isEmojiPickerVisible"
+              style="position: absolute; bottom: 40px; left: 0; z-index: 1000; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;">
+              <button class="btn btn-light emoji-btn p-1" *ngFor="let e of commonEmojis" (click)="addEmoji(e)">{{ e
+                }}</button>
+            </div>
+          </div>
         </div>
         <div class="message-field-wrapper">
           <!-- Rich Text ContentEditable Area -->
-          <div #messageEditor
-               class="message-editor"
-               contenteditable="true"
-               (input)="onEditorInput($event)"
-               (keydown)="onEditorKeydown($event)"
-               [attr.placeholder]="'Message # ' + activeChannel"></div>
+          <div #messageEditor class="message-editor" contenteditable="true" (input)="onEditorInput($event)"
+            (keydown)="onEditorKeydown($event)"
+            [attr.placeholder]="selectedUser ? 'Message @' + (selectedUser.fullName || selectedUser.name) : 'Message #' + activeChannel">
+          </div>
         </div>
         <div class="input-footer">
           <div class="left-actions">
@@ -164,7 +248,8 @@
             <button class="action-icon"><i class="bi bi-emoji-smile"></i></button>
             <button class="action-icon"><i class="bi bi-mention"></i></button>
           </div>
-          <button class="send-btn-primary" (click)="sendMessage()" [disabled]="isSendingMessage || (!newMessage.trim() && !isUploading)">
+          <button class="send-btn-primary" (click)="sendMessage()"
+            [disabled]="isSendingMessage || (!newMessage.trim() && !isUploading)">
             <i class="bi bi-send-fill" *ngIf="!isSendingMessage"></i>
             <div class="spinner-border spinner-border-sm" *ngIf="isSendingMessage"></div>
           </button>
@@ -175,7 +260,7 @@
 
   <!-- RIGHT PANEL (Info / Activity / Files) -->
   <aside class="workspace-right-panel">
-    
+
     <!-- User Profile Widget (Slack Style) -->
     <section class="panel-section profile-widget" *ngIf="selectedUser">
       <div class="profile-card border rounded-3 p-3 text-center mb-4">
@@ -185,9 +270,10 @@
         <h6 class="mb-1">{{ selectedUser.fullName || selectedUser.name }}</h6>
         <p class="text-muted small mb-0">{{ selectedUser.email }}</p>
         <div class="mt-2">
-            <span class="badge rounded-pill" [ngClass]="selectedUser.isOnline ? 'bg-success-soft text-success' : 'bg-secondary-soft text-muted'">
-              ● {{ selectedUser.isOnline ? 'Online' : 'Offline' }}
-            </span>
+          <span class="badge rounded-pill"
+            [ngClass]="selectedUser.isOnline ? 'bg-success-soft text-success' : 'bg-secondary-soft text-muted'">
+            ● {{ selectedUser.isOnline ? 'Online' : 'Offline' }}
+          </span>
         </div>
       </div>
     </section>
@@ -250,7 +336,8 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" (click)="downloadFile(selectedImage.fileUrl, selectedImage.fileName)">
+        <button type="button" class="btn btn-primary"
+          (click)="downloadFile(selectedImage.fileUrl, selectedImage.fileName)">
           <i class="bi bi-download me-2"></i>Download
         </button>
       </div>

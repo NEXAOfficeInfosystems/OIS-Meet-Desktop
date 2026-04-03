@@ -112,6 +112,41 @@ const reducer = createReducer(
     byConversation: { ...state.byConversation, [conversationId]: [] },
   })),
 
+  on(MessagesActions.reactionAdded, (state, { messageId, emoji, userId, userName }) => {
+    return {
+      ...state,
+      byConversation: Object.fromEntries(
+        Object.entries(state.byConversation).map(([cid, msgs]) => [
+          cid,
+          msgs.map((m: any) => {
+            if (String(m?.id ?? m?.Id) !== String(messageId)) return m;
+            const reactions = [...(m.reactions || [])];
+            if (!reactions.some((r: any) => r.userId === userId && r.emoji === emoji)) {
+              reactions.push({ userId, userName, emoji });
+            }
+            return { ...m, reactions };
+          })
+        ])
+      )
+    };
+  }),
+
+  on(MessagesActions.reactionRemoved, (state, { messageId, emoji, userId }) => {
+    return {
+      ...state,
+      byConversation: Object.fromEntries(
+        Object.entries(state.byConversation).map(([cid, msgs]) => [
+          cid,
+          msgs.map((m: any) => {
+            if (String(m?.id ?? m?.Id) !== String(messageId)) return m;
+            const reactions = (m.reactions || []).filter((r: any) => !(r.userId === userId && r.emoji === emoji));
+            return { ...m, reactions };
+          })
+        ])
+      )
+    };
+  }),
+
   on(MessagesActions.reset, () => initialState)
 );
 

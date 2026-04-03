@@ -38,7 +38,7 @@ export class ChatService {
     });
   }
 
-  private getCurrentUserId(): string {
+  public getCurrentUserId(): string {
     // Get the current user ID from your session service
     // You need to implement this method in your session service
     return this.sessionService.getOISMeetUserId() || '';
@@ -156,6 +156,30 @@ export class ChatService {
     return this.http.delete(`${this.apiUrl}/messages/${messageId}`, {
       headers: this.getHeaders(),
       params: { currentUserId }
+    });
+  }
+
+  addReaction(messageId: string, emoji: string): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    return this.http.post(`${this.apiUrl}/reactions`, {
+      currentUserId,
+      messageId,
+      emoji
+    }, {
+      headers: this.getHeaders()
+    });
+  }
+
+  removeReaction(messageId: string, emoji: string): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    const requestBody = {
+      currentUserId,
+      messageId,
+      emoji
+    };
+    return this.http.delete(`${this.apiUrl}/reactions`, {
+      headers: this.getHeaders(),
+      body: requestBody
     });
   }
 }

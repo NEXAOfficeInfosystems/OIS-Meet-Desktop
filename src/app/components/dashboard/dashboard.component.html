@@ -1,20 +1,114 @@
-<section class="dashboard">
-  <h1 class="dashboard__title">Dashboard</h1>
-  <!-- <pre class="dashboard__text" *ngIf="session as s">{{ s | json }}</pre> -->
-  <p class="dashboard__text" *ngIf="userFullName">Welcome, {{ userFullName }}!</p>
-  <p class="dashboard__text" *ngIf="applicationName">Application Name: {{ applicationName }}</p>
-  <button class="btn btn-primary" (click)="gotoLandingPage()">
-    <i class="bi bi-camera-video me-2"></i>
-    Meet Now
-  </button>
+<div class="dashboard-root">
 
-  <!-- <p class="dashboard__text" *ngIf="defaultCompany">Default Company: {{ defaultCompany }}</p>
-  <p class="dashboard__text" *ngIf="clinetId">Client ID: {{ clinetId }}</p>
-  <p class="dashboard__text" *ngIf="companyId">Company ID: {{ companyId }}</p>
-  <p class="dashboard__text" *ngIf="companyLogo">Company Logo: {{ companyLogo }}</p>
-  <p class="dashboard__text" *ngIf="applicationName">Application Name: {{ applicationName }}</p>
-  <p class="dashboard__text" *ngIf="appplicationToken">Application Token: {{ appplicationToken }}</p>
-  <p class="dashboard__text" *ngIf="ssoToken">SSO Token: {{ ssoToken }}</p> -->
+  <!-- ═══════════════════════════════════════════════ HERO -->
+  <div class="hero-banner">
 
-  <!-- <button class="dashboard__button" type="button" (click)="logout()">Logout</button> -->
-</section>
+    <!-- LEFT: text + actions -->
+    <div class="hero-left">
+      <p class="hero-greeting">Good {{ greeting }}, <strong>{{ userFullName || 'there' }}</strong> 👋</p>
+      <h1 class="hero-title">Connect &amp; Collaborate<br><span>Seamlessly with OIS Meet</span></h1>
+      <p class="hero-sub">Start instant meetings, join with a code, or schedule for later — all from one place.</p>
+      <div class="hero-actions">
+        <button class="hero-btn primary" (click)="gotoLandingPage()">
+          <i class="bi bi-camera-video-fill"></i> Meet Now
+        </button>
+        <button class="hero-btn secondary" (click)="joinMeeting()">
+          <i class="bi bi-box-arrow-in-right"></i> Join Meeting
+        </button>
+        <button class="hero-btn ghost" (click)="scheduleMeeting()">
+          <i class="bi bi-calendar-plus"></i> Schedule
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: illustration -->
+    <div class="hero-right">
+      <img src="assets/meeting-illustration.png" alt="Video Meeting Illustration" class="hero-illustration" />
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ STATS ROW -->
+  <div class="stats-row">
+    <div class="stat-card" *ngFor="let stat of stats">
+      <div class="stat-icon" [style.background]="stat.bg">
+        <i [class]="stat.icon" [style.color]="stat.color"></i>
+      </div>
+      <div class="stat-info">
+        <span class="stat-value">{{ stat.value }}</span>
+        <span class="stat-label">{{ stat.label }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ MAIN GRID -->
+  <div class="dash-grid">
+
+    <!-- Upcoming Meetings -->
+    <div class="dash-card">
+      <div class="card-header-row">
+        <h6 class="card-title"><i class="bi bi-calendar-event me-2"></i>Upcoming Meetings</h6>
+        <button class="view-all-btn">View all</button>
+      </div>
+      <div class="meeting-list">
+        <div class="meeting-item" *ngFor="let m of upcomingMeetings">
+          <div class="meeting-time-col">
+            <span class="meeting-time">{{ m.time }}</span>
+            <span class="meeting-date">{{ m.date }}</span>
+          </div>
+          <div class="meeting-info-col">
+            <span class="meeting-title">{{ m.title }}</span>
+            <span class="meeting-host">{{ m.host }}</span>
+            <div class="meeting-tags">
+              <span class="tag" [class.tag-video]="m.type === 'Video'" [class.tag-audio]="m.type === 'Audio'">
+                <i [class]="m.type === 'Video' ? 'bi bi-camera-video' : 'bi bi-telephone'"></i> {{ m.type }}
+              </span>
+              <span class="tag tag-neutral"><i class="bi bi-people"></i> {{ m.participants }}</span>
+            </div>
+          </div>
+          <button class="join-btn" (click)="gotoLandingPage()">Join</button>
+        </div>
+        <div class="empty-state-sm" *ngIf="upcomingMeetings.length === 0">
+          <i class="bi bi-calendar-x"></i><span>No upcoming meetings</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div class="right-col">
+
+      <!-- Quick Actions -->
+      <div class="dash-card">
+        <div class="card-header-row">
+          <h6 class="card-title"><i class="bi bi-grid me-2"></i>Quick Actions</h6>
+        </div>
+        <div class="quick-links-grid">
+          <button class="quick-link" *ngFor="let q of quickLinks" (click)="navigateTo(q.route)">
+            <div class="quick-link-icon" [style.background]="q.bg">
+              <i [class]="q.icon" [style.color]="q.color"></i>
+            </div>
+            <span>{{ q.label }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="dash-card">
+        <div class="card-header-row">
+          <h6 class="card-title"><i class="bi bi-activity me-2"></i>Recent Activity</h6>
+        </div>
+        <ul class="activity-list">
+          <li class="activity-item" *ngFor="let a of recentActivity">
+            <div class="activity-avatar" [style.background]="a.color">{{ a.initials }}</div>
+            <div class="activity-body">
+              <span class="activity-text" [innerHTML]="a.text"></span>
+              <span class="activity-time">{{ a.time }}</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+    </div>
+
+  </div>
+</div>

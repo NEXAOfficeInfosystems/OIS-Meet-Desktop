@@ -38,6 +38,8 @@ export class ChatSignalrService {
   private messageUpdatedSubject = new BehaviorSubject<any>(null);
   private messagesReadSubject = new BehaviorSubject<any>(null);
   private newConversationSubject = new BehaviorSubject<any>(null);
+  private reactionAddedSubject = new BehaviorSubject<any>(null);
+  private reactionRemovedSubject = new BehaviorSubject<any>(null);
   private activeUsersListSubject = new BehaviorSubject<string[]>([]);
   private connectionStateSubject = new BehaviorSubject<signalR.HubConnectionState>(
     signalR.HubConnectionState.Disconnected
@@ -57,6 +59,8 @@ export class ChatSignalrService {
   messageUpdated$ = this.messageUpdatedSubject.asObservable();
   messagesRead$ = this.messagesReadSubject.asObservable();
   newConversation$ = this.newConversationSubject.asObservable();
+  reactionAdded$ = this.reactionAddedSubject.asObservable();
+  reactionRemoved$ = this.reactionRemovedSubject.asObservable();
   activeUsersList$ = this.activeUsersListSubject.asObservable();
   connectionState$ = this.connectionStateSubject.asObservable();
 
@@ -184,6 +188,15 @@ export class ChatSignalrService {
     // Handle new conversation
     this.hubConnection.on('NewConversation', (conversation: any) => {
       this.newConversationSubject.next(conversation);
+    });
+
+    // Handle reactions
+    this.hubConnection.on('ReactionAdded', (data: any) => {
+      this.reactionAddedSubject.next(data);
+    });
+
+    this.hubConnection.on('ReactionRemoved', (data: any) => {
+      this.reactionRemovedSubject.next(data);
     });
   }
 

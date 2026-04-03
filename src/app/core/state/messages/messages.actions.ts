@@ -23,6 +23,10 @@ export const MessagesActions = createActionGroup({
     
     'Clear Conversation': props<{ conversationId: string }>(),
     'Select Conversation': props<{ conversationId: string }>(),
+    'Add Reaction': props<{ messageId: string; emoji: string }>(),
+    'Remove Reaction': props<{ messageId: string; emoji: string }>(),
+    'Reaction Added': props<{ messageId: string; emoji: string; userId: string; userName: string }>(),
+    'Reaction Removed': props<{ messageId: string; emoji: string; userId: string }>(),
     'Reset': emptyProps(),
   }
 });
