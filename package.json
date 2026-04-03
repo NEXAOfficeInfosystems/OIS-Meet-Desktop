@@ -24,13 +24,16 @@
     "@angular/platform-browser-dynamic": "^17.3.0",
     "@angular/router": "^17.3.0",
     "@microsoft/signalr": "^10.0.0",
+    "@ngrx/effects": "^17.2.0",
+    "@ngrx/entity": "^17.2.0",
+    "@ngrx/store": "^17.2.0",
+    "@ngrx/store-devtools": "^17.2.0",
     "bootstrap": "^5.3.3",
     "bootstrap-icons": "^1.11.3",
     "crypto-js": "^4.2.0",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
     "livekit-client": "^2.17.3",
-    "mediasoup-client": "^3.18.7",
     "ngx-cookie-service": "^17.0.0",
     "rxjs": "~7.8.0",
     "simple-peer": "^9.11.1",
@@ -76,7 +79,8 @@
         "nsis"
       ],
       "publisherName": "OIS Meet",
-      "icon": "electron/assets/icon.ico"
+      "icon": "electron/assets/icon.ico",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,

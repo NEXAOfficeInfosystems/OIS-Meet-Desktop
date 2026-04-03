@@ -8,6 +8,11 @@ import { JoinMeetingComponent } from './components/join-meeting/join-meeting.com
 import { ChatComponent } from './components/chat/chat.component';
 import { ComingSoonComponent } from './components/comming-soon.component';
 import { MeetingComponent } from './components/meeting/meeting.component';
+import { ActivityFeedComponent } from './components/activity-feed/activity-feed.component';
+import { NotificationsPanelComponent } from './components/notifications-panel/notifications-panel.component';
+import { CallsCenterComponent } from './components/calls-center/calls-center.component';
+import { TeamsPanelComponent } from './components/teams-panel/teams-panel.component';
+import { FilesPanelComponent } from './components/files-panel/files-panel.component';
 
 export const routes: Routes = [
 
@@ -23,6 +28,11 @@ export const routes: Routes = [
       { path: 'landing', component: LandingComponent },
       { path: 'join-meeting', component: JoinMeetingComponent },
       { path: 'chat', component: ChatComponent },
+      { path: 'activity', component: ActivityFeedComponent },
+      { path: 'notifications', component: NotificationsPanelComponent },
+      { path: 'calls', component: CallsCenterComponent },
+      { path: 'teams', component: TeamsPanelComponent },
+      { path: 'files', component: FilesPanelComponent },
       { path: 'coming-soon', component: ComingSoonComponent },
 
     ]

@@ -1,0 +1,26 @@
+<section class="collab-page">
+  <header class="page-hero">
+    <div>
+      <p class="eyebrow">Workspace</p>
+      <h1>Activity Feed</h1>
+      <p class="subtitle">Recent messages, uploads, mentions, and call events.</p>
+    </div>
+  </header>
+
+  <div class="feed-card" *ngIf="loading">Loading activity...</div>
+
+  <div class="feed-list" *ngIf="!loading">
+    <article class="feed-item" *ngFor="let item of items">
+      <div class="feed-badge">{{ item.activityType?.charAt(0)?.toUpperCase() || 'A' }}</div>
+      <div class="feed-content">
+        <div class="feed-title">{{ item.title }}</div>
+        <div class="feed-body">{{ item.body }}</div>
+        <div class="feed-time">{{ item.createdAt | date:'short' }}</div>
+      </div>
+    </article>
+
+    <div class="empty-state" *ngIf="items.length === 0">
+      Nothing to show yet.
+    </div>
+  </div>
+</section>

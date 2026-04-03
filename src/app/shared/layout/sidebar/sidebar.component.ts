@@ -8,7 +8,7 @@ import { Router } from '@angular/router';
   styleUrls: ['./sidebar.component.scss']
 })
 export class SidebarComponent {
-  public activeTab: string = 'chat';
+  public activeTab: string = 'dashboard';
   constructor(
     private router: Router
   ) {
@@ -17,10 +17,19 @@ export class SidebarComponent {
 
   public setActiveTab(tab: string): void {
     this.activeTab = tab;
-    if (tab === 'chat') {
-      this.router.navigate(['/chat']);
-    } else{
-      this.router.navigate(['/coming-soon']);
-    }
+    const routeMap: Record<string, string> = {
+      dashboard: '/dashboard',
+      activity: '/activity',
+      chat: '/chat',
+      teams: '/teams',
+      calendar: '/coming-soon',
+      calls: '/calls',
+      files: '/files',
+      notifications: '/notifications',
+      help: '/coming-soon',
+      apps: '/coming-soon'
+    };
+
+    this.router.navigate([routeMap[tab] ?? '/dashboard']);
   }
 }

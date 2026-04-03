@@ -8,6 +8,7 @@ export interface SendMessageRequest {
   conversationId: string;
   messageType: 'Text' | 'Image' | 'File' | 'System';
   content: string;
+  formattedContent?: string;
   replyToMessageId?: string;
   attachments?: AttachmentDto[];
 }
@@ -112,17 +113,17 @@ export class ChatService {
     );
   }
 
-  deleteMessage(messageId: string): Observable<any> {
-    const currentUserId = this.getCurrentUserId();
-    return this.http.delete(`${this.apiUrl}/messages/${messageId}`, {
-      headers: this.getHeaders(),
-      params: { currentUserId: currentUserId }
-    });
-  }
-
   // --- NEW WORKFLOWS PER feature/meeting-page-enhancement ---
 
-  sendMessageApi(conversationId: string, content: string, type: string = 'Text', fileUrl?: string, fileName?: string): Observable<any> {
+  sendMessageApi(
+    conversationId: string,
+    content: string,
+    type: string = 'Text',
+    fileUrl?: string,
+    fileName?: string,
+    formattedContent?: string,
+    replyToMessageId?: string
+  ): Observable<any> {
     const currentUserId = this.getCurrentUserId();
     const requestBody = {
       conversationId: conversationId,
@@ -130,11 +131,31 @@ export class ChatService {
       content: content,
       messageType: type,
       fileUrl: fileUrl,
-      fileName: fileName
+      fileName: fileName,
+      formattedContent,
+      replyToMessageId
     };
 
     return this.http.post(`${this.apiUrl}/send`, requestBody, {
       headers: this.getHeaders()
+    });
+  }
+
+  editMessage(messageId: string, content: string, formattedContent?: string): Observable<any> {
+    return this.http.put(`${this.apiUrl}/messages/${messageId}`, {
+      currentUserId: this.getCurrentUserId(),
+      content,
+      formattedContent
+    }, {
+      headers: this.getHeaders()
+    });
+  }
+
+  deleteMessage(messageId: string): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    return this.http.delete(`${this.apiUrl}/messages/${messageId}`, {
+      headers: this.getHeaders(),
+      params: { currentUserId }
     });
   }
 }

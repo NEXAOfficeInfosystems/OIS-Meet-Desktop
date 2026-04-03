@@ -1,0 +1,48 @@
+<section class="collab-page">
+  <header class="toolbar">
+    <div>
+      <p class="eyebrow">Voice</p>
+      <h1>Calls</h1>
+      <p class="subtitle">LiveKit-backed audio/video calls with SignalR invites.</p>
+    </div>
+    <button type="button" class="action-btn" (click)="startQuickCall()" [disabled]="loading || connecting">
+      {{ loading ? 'Creating...' : connecting ? 'Joining...' : 'Start Call' }}
+    </button>
+  </header>
+
+  <div class="status-row">
+    <div class="status-pill" [class.active]="livekitConnected">{{ statusText }}</div>
+    <button class="join-btn" type="button" (click)="joinInvitedCall()" [disabled]="!invitedCallId || connecting">
+      Join invited call
+    </button>
+  </div>
+
+  <div class="call-grid" *ngIf="livekitConnected">
+    <section class="call-card media-card">
+      <div class="card-label">Local preview</div>
+      <video #localVideo autoplay playsinline muted></video>
+      <div class="media-controls">
+        <button type="button" (click)="toggleMute()">{{ isMuted ? 'Unmute' : 'Mute' }}</button>
+        <button type="button" (click)="toggleCamera()">{{ cameraOn ? 'Camera off' : 'Camera on' }}</button>
+        <button type="button" (click)="toggleScreenShare()">{{ screenSharing ? 'Stop share' : 'Share screen' }}</button>
+      </div>
+    </section>
+
+    <section class="call-card info-card">
+      <div class="card-label">Current call</div>
+      <div class="call-value">{{ currentCall?.title || 'Team call' }}</div>
+      <p class="muted">Room: {{ activeCallId || invitedCallId || 'Pending' }}</p>
+      <p class="muted">Backend call status: {{ currentCall?.status || 'Active' }}</p>
+      <div class="secondary-actions">
+        <button type="button" class="danger-btn" (click)="leaveCall(activeCallId)" [disabled]="!activeCallId">Leave</button>
+        <button type="button" class="danger-btn outline" (click)="endCurrentCall()" [disabled]="!activeCallId">End for all</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="call-card empty-call" *ngIf="!livekitConnected">
+    <div class="call-value">No active call</div>
+    <p class="muted">Start a call or join an invitation to connect to LiveKit.</p>
+    <div class="invite-preview">Incoming invite: {{ invitedCallId || 'none' }}</div>
+  </div>
+</section>

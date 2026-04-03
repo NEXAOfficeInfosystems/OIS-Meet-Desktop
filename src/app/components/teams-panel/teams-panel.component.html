@@ -1,0 +1,24 @@
+<section class="collab-page">
+  <header class="page-hero">
+    <div>
+      <p class="eyebrow">Groups</p>
+      <h1>Teams & Channels</h1>
+      <p class="subtitle">Live teams and channels from the backend.</p>
+    </div>
+  </header>
+
+  <div class="feed-card" *ngIf="loading">Loading teams...</div>
+
+  <div class="team-grid" *ngIf="!loading">
+    <article class="team-card" *ngFor="let team of teams">
+      <div class="team-name">{{ team.name }}</div>
+      <div class="team-desc">{{ team.description || 'No description yet.' }}</div>
+      <div class="team-meta">{{ team.memberCount }} members</div>
+      <ul class="channel-list">
+        <li *ngFor="let channel of team.channels"># {{ channel.name }}</li>
+      </ul>
+    </article>
+
+    <div class="empty-state" *ngIf="teams.length === 0">You are not part of any team yet.</div>
+  </div>
+</section>

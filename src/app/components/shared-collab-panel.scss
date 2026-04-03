@@ -1,0 +1,147 @@
+.collab-page {
+  min-height: 100%;
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+}
+
+.toolbar,
+.page-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: .28em;
+  font-size: 11px;
+  color: var(--app-primary);
+  font-weight: 800;
+}
+
+h1 {
+  margin: 10px 0 0;
+  font-size: clamp(28px, 3vw, 38px);
+  letter-spacing: -0.05em;
+  font-weight: 900;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: var(--app-muted);
+}
+
+.action-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 11px 16px;
+  background: linear-gradient(135deg, var(--app-primary), #5e92f0);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 12px 24px rgba(24, 96, 212, 0.18);
+}
+
+.feed-card,
+.feed-item,
+.team-card,
+.notice-item {
+  background: rgba(255,255,255,.88);
+  border: 1px solid var(--app-border);
+  border-radius: 22px;
+  box-shadow: var(--app-shadow-soft);
+}
+
+.feed-list,
+.team-grid,
+.notice-list {
+  display: grid;
+  gap: 12px;
+}
+
+.feed-item,
+.team-card,
+.notice-item {
+  padding: 16px;
+}
+
+.feed-item {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.feed-badge,
+.notice-dot {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(24, 96, 212, 0.12);
+  color: var(--app-primary);
+  font-weight: 800;
+}
+
+.feed-title,
+.notice-title,
+.team-name {
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.feed-body,
+.feed-time,
+.team-desc,
+.team-meta,
+.notice-body,
+.notice-time {
+  color: var(--app-muted);
+}
+
+.team-card {
+  display: grid;
+  gap: 10px;
+}
+
+.channel-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--app-primary);
+}
+
+.team-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.notice-item {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.notice-item.unread {
+  border-color: rgba(24, 96, 212, 0.16);
+  background: linear-gradient(180deg, rgba(239,244,255,.92), rgba(255,255,255,.92));
+}
+
+.empty-state {
+  margin-top: 8px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.78);
+  border: 1px dashed rgba(24, 96, 212, 0.14);
+  color: var(--app-muted);
+  text-align: center;
+}
+
+@media (max-width: 780px) {
+  .toolbar,
+  .page-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

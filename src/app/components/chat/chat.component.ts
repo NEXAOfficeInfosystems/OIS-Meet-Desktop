@@ -19,6 +19,7 @@ import { MeetingService }   from '../../core/services/meeting.service';
 import { PresenceService }  from '../../core/services/presence.service';
 import { ChatSignalrService, SendMessageRequest } from '../../core/services/chat-signalr.service';
 import { MeetingLinkPipe }  from '../../shared/pipes/meeting-link.pipe';
+import { CollaborationService } from '../../core/services/collaboration.service';
 
 declare var bootstrap: any;
 
@@ -79,11 +80,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     { name: 'Branding Guidelines.pdf', size: '12.5 MB', type: 'pdf', date: 'Oct 15, 2026', owner: 'Admin' }
   ];
 
-  activityFeed = [
-    { user: 'Senthil Kumar', action: 'added you to Marketing Team', time: '2h ago' },
-    { user: 'Ramya', action: 'uploaded Branding Guidelines.pdf', time: '5h ago' },
-    { user: 'Rohan Patel', action: 'reacted to your message', time: '1d ago' }
-  ];
+  activityFeed: any[] = [];
 
   // â”€â”€ In-app toasts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   toasts:              InAppToast[] = [];
@@ -117,6 +114,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private meetingService:     MeetingService,     // â† ADDED for validateMeeting
     private chatSignalrService: ChatSignalrService,
     private presenceService:    PresenceService,
+    private collaborationService: CollaborationService,
     private cdr:                ChangeDetectorRef,
     private router:             Router,
   ) {
@@ -180,6 +178,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     window.addEventListener('ois-share-meeting-id', this.shareMeetingIdHandler);
 
     this.requestNotificationPermission();
+    this.loadActivityFeed();
   }
 
   ngAfterViewChecked(): void {
@@ -1209,5 +1208,20 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       }))
       .reverse()
       .slice(0, 10);
+  }
+
+  private loadActivityFeed(): void {
+    this.collaborationService.getActivity(20).subscribe({
+      next: (res) => {
+        this.activityFeed = (res.data ?? []).map((item: any) => ({
+          user: item.title,
+          action: item.body || item.activityType || 'Activity',
+          time: this.formatMessageTime(item.createdAt)
+        }));
+      },
+      error: () => {
+        this.activityFeed = [];
+      }
+    });
   }
 }

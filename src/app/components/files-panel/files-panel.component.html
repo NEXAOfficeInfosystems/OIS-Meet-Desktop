@@ -1,0 +1,21 @@
+<section class="collab-page">
+  <header class="page-hero">
+    <div>
+      <p class="eyebrow">Storage</p>
+      <h1>Shared Files</h1>
+      <p class="subtitle">Uploads are written to the API and surfaced in activity.</p>
+    </div>
+  </header>
+
+  <div class="feed-list">
+    <article class="feed-item" *ngFor="let file of files">
+      <div class="feed-badge">F</div>
+      <div class="feed-content">
+        <div class="feed-title">{{ file.title }}</div>
+        <div class="feed-body">{{ file.body }}</div>
+        <div class="feed-time">{{ file.createdAt | date:'short' }}</div>
+      </div>
+    </article>
+    <div class="empty-state" *ngIf="files.length === 0">No shared files yet.</div>
+  </div>
+</section>

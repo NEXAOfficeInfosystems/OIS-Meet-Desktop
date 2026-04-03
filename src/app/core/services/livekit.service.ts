@@ -23,6 +23,13 @@ export interface LivekitScreenShareEvent {
   mediaStreamTrack: MediaStreamTrack;
 }
 
+export interface LivekitRemoteVideoEvent {
+  identity: string;
+  name: string;
+  trackSid: string;
+  mediaStreamTrack: MediaStreamTrack;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -43,6 +50,12 @@ export class LivekitService {
 
   private readonly screenShareStoppedSubject = new Subject<{ trackSid: string }>();
   public readonly screenShareStopped$ = this.screenShareStoppedSubject.asObservable();
+
+  private readonly remoteVideoAddedSubject = new Subject<LivekitRemoteVideoEvent>();
+  public readonly remoteVideoAdded$ = this.remoteVideoAddedSubject.asObservable();
+
+  private readonly remoteVideoRemovedSubject = new Subject<{ trackSid: string }>();
+  public readonly remoteVideoRemoved$ = this.remoteVideoRemovedSubject.asObservable();
 
   public getRoom(): Room | null {
     return this.room;
@@ -103,6 +116,17 @@ export class LivekitService {
 
     await room.localParticipant.publishTrack(track, {
       source: Track.Source.Microphone,
+    });
+  }
+
+  public async publishCameraTrack(track: MediaStreamTrack): Promise<void> {
+    const room = this.room;
+    if (!room) {
+      throw new Error('LiveKit room is not connected');
+    }
+
+    await room.localParticipant.publishTrack(track, {
+      source: Track.Source.Camera,
     });
   }
 
@@ -172,6 +196,23 @@ export class LivekitService {
     }
   }
 
+  public async unpublishCameraTracks(): Promise<void> {
+    const room = this.room;
+    if (!room) {
+      return;
+    }
+
+    for (const pub of room.localParticipant.videoTrackPublications.values()) {
+      try {
+        if (pub.source === Track.Source.Camera && pub.track) {
+          room.localParticipant.unpublishTrack(pub.track);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   public async publishScreenShareTrack(track: MediaStreamTrack): Promise<string> {
     const room = this.room;
     if (!room) {
@@ -225,6 +266,16 @@ export class LivekitService {
       });
       return;
     }
+
+    if (track.kind === Track.Kind.Video && publication.source === Track.Source.Camera) {
+      this.remoteVideoAddedSubject.next({
+        identity,
+        name,
+        trackSid: publication.trackSid,
+        mediaStreamTrack: track.mediaStreamTrack,
+      });
+      return;
+    }
   }
 
   private handleTrackUnsubscribed(track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant): void {
@@ -236,6 +287,10 @@ export class LivekitService {
     if (track.kind === Track.Kind.Video && publication.source === Track.Source.ScreenShare) {
       this.screenShareStoppedSubject.next({ trackSid: publication.trackSid });
       return;
+    }
+
+    if (track.kind === Track.Kind.Video && publication.source === Track.Source.Camera) {
+      this.remoteVideoRemovedSubject.next({ trackSid: publication.trackSid });
     }
   }
 }

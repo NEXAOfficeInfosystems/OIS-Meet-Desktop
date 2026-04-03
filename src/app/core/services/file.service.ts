@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpEvent, HttpRequest } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { SessionService } from './session.service';
 
 @Injectable({
   providedIn: 'root'
@@ -9,11 +10,18 @@ import { environment } from '../../../environments/environment';
 export class FileService {
   private apiUrl = `${environment.apiBaseUrl}/Files`;
 
-  constructor(private http: HttpClient) { }
+  constructor(
+    private http: HttpClient,
+    private sessionService: SessionService
+  ) { }
 
   uploadFile(file: File): Observable<HttpEvent<any>> {
     const formData: FormData = new FormData();
     formData.append('file', file);
+    const userId = this.sessionService.getOISMeetUserId() || this.sessionService.getUserId();
+    if (userId) {
+      formData.append('userId', userId);
+    }
 
     const req = new HttpRequest('POST', `${this.apiUrl}/upload`, formData, {
       reportProgress: true,

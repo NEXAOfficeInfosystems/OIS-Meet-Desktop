@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 // TEMP SSL BYPASS
@@ -32,6 +32,7 @@ ipcMain.handle('win:isMaximized', (event) => {
 });
 
 let mainWindow;
+let appTray;
 let storedAuthData = null;
 
 
@@ -121,6 +122,53 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  mainWindow.on('close', (event) => {
+    if (!app.isQuiting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+}
+
+function createTray() {
+  const iconPath = path.join(__dirname, 'assets', 'icon.ico');
+  if (!fs.existsSync(iconPath)) {
+    return;
+  }
+
+  appTray = new Tray(iconPath);
+  appTray.setToolTip('OIS Meet');
+  appTray.setContextMenu(Menu.buildFromTemplate([
+    {
+      label: 'Show OIS Meet',
+      click: () => {
+        if (!mainWindow) {
+          createMainWindow();
+          return;
+        }
+        mainWindow.show();
+        mainWindow.restore();
+        mainWindow.focus();
+      }
+    },
+    {
+      label: 'Quit',
+      click: () => {
+        app.isQuiting = true;
+        app.quit();
+      }
+    }
+  ]));
+
+  appTray.on('double-click', () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    } else {
+      createMainWindow();
+    }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -129,6 +177,7 @@ function createMainWindow() {
 
 app.whenReady().then(() => {
   createMainWindow();
+  createTray();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
