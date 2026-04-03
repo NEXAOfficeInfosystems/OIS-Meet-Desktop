@@ -63,8 +63,8 @@
       </div>
       <div class="header-right">
         <div class="header-actions">
-          <button class="action-btn"><i class="bi bi-telephone"></i></button>
-          <button class="action-btn"><i class="bi bi-camera-video"></i></button>
+          <button class="action-btn" (click)="startCall('Audio')" [disabled]="!selectedUser"><i class="bi bi-telephone"></i></button>
+          <button class="action-btn" (click)="startCall('Video')" [disabled]="!selectedUser"><i class="bi bi-camera-video"></i></button>
           <button class="action-btn"><i class="bi bi-info-circle"></i></button>
         </div>
       </div>
@@ -90,7 +90,9 @@
             <span class="msg-time">{{ msg.sentAt | date:'shortTime' }}</span>
           </div>
           <div class="msg-content">
-            <p class="mb-0" *ngIf="msg.content">{{ msg.content }}</p>
+            <!-- Formatted HTML content or fallback plain text -->
+            <div class="mb-0" *ngIf="msg.formattedContent || msg.content" 
+                 [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
             
             <!-- Attachments (Single File) -->
             <div class="msg-attachments mt-2" *ngIf="msg.fileUrl">
@@ -136,18 +138,23 @@
     <footer class="workspace-input-area">
       <div class="input-card shadow-sm">
         <div class="toolbar">
-          <button class="tool-btn"><i class="bi bi-type-bold"></i></button>
-          <button class="tool-btn"><i class="bi bi-type-italic"></i></button>
-          <button class="tool-btn"><i class="bi bi-link-45deg"></i></button>
-          <button class="tool-btn"><i class="bi bi-list-ul"></i></button>
+          <button class="tool-btn" (click)="formatDoc('bold')"><i class="bi bi-type-bold"></i></button>
+          <button class="tool-btn" (click)="formatDoc('italic')"><i class="bi bi-type-italic"></i></button>
+          <button class="tool-btn" (click)="formatDoc('underline')"><i class="bi bi-type-underline"></i></button>
+          <button class="tool-btn" (click)="formatDoc('insertUnorderedList')"><i class="bi bi-list-ul"></i></button>
+          <button class="tool-btn" (click)="formatDoc('insertOrderedList')"><i class="bi bi-list-ol"></i></button>
           <span class="v-divider"></span>
-          <button class="tool-btn"><i class="bi bi-code-slash"></i></button>
+          <button class="tool-btn" (click)="formatDoc('formatBlock', 'pre')"><i class="bi bi-code-slash"></i></button>
+          <button class="tool-btn" (click)="formatDoc('createLink', 'https://')"><i class="bi bi-link-45deg"></i></button>
         </div>
         <div class="message-field-wrapper">
-          <textarea class="message-textarea" 
-                    [(ngModel)]="newMessage" 
-                    (keyup.enter)="sendMessage()"
-                    placeholder="Message # {{ activeChannel }}"></textarea>
+          <!-- Rich Text ContentEditable Area -->
+          <div #messageEditor
+               class="message-editor"
+               contenteditable="true"
+               (input)="onEditorInput($event)"
+               (keydown)="onEditorKeydown($event)"
+               [attr.placeholder]="'Message # ' + activeChannel"></div>
         </div>
         <div class="input-footer">
           <div class="left-actions">
@@ -243,10 +250,29 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" (click)="downloadAttachment(selectedImage)">
+        <button type="button" class="btn btn-primary" (click)="downloadFile(selectedImage.fileUrl, selectedImage.fileName)">
           <i class="bi bi-download me-2"></i>Download
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Incoming Call Overlay -->
+<div class="incoming-call-overlay" *ngIf="incomingCall">
+  <div class="call-card shadow-lg bounce">
+    <div class="call-header">
+      <div class="call-avatar" [style.background-color]="getMemberAvatarColor(incomingCall.fromUserName)">
+        {{ incomingCall.fromUserName.charAt(0).toUpperCase() }}
+      </div>
+    </div>
+    <div class="call-body">
+      <h5>{{ incomingCall.fromUserName }}</h5>
+      <p>Incoming {{ incomingCall.callType }} call...</p>
+    </div>
+    <div class="call-footer">
+      <button class="btn-reject" (click)="rejectIncomingCall()"><i class="bi bi-telephone-x-fill"></i></button>
+      <button class="btn-accept" (click)="acceptIncomingCall()"><i class="bi bi-telephone-fill"></i></button>
     </div>
   </div>
 </div>

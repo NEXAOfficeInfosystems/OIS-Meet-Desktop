@@ -26,6 +26,9 @@ import { PresenceService }  from '../../core/services/presence.service';
 import { ChatSignalrService, SendMessageRequest } from '../../core/services/chat-signalr.service';
 import { MeetingLinkPipe }  from '../../shared/pipes/meeting-link.pipe';
 import { CollaborationService } from '../../core/services/collaboration.service';
+import { SafeHtmlPipe } from '../../shared/pipes/safe-html.pipe';
+import { CallService, CallType, IncomingCall } from '../../core/services/call.service';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 declare var bootstrap: any;
 
@@ -40,7 +43,7 @@ interface InAppToast {
 @Component({
   selector:    'app-chat',
   standalone:  true,
-  imports:     [CommonModule, FormsModule, HttpClientModule, MeetingLinkPipe],
+  imports:     [CommonModule, FormsModule, HttpClientModule, MeetingLinkPipe, SafeHtmlPipe],
   templateUrl: './chat.component.html',
   styleUrls:   ['./chat.component.scss']
 })
@@ -58,9 +61,16 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   messages:    any[]  = [];
   newMessage:  string = '';
+  formattedMessage: string = '';
   replyToMessage: any = null;
   editingMessage: any = null;
   editContent: string = '';
+  
+  // Calling state
+  incomingCall: IncomingCall | null = null;
+  isCalling: boolean = false;
+  activeCallUserId: string | null = null;
+  callType: CallType = 'Audio';
 
   // â”€â”€ UI flags â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   isLoading:        boolean = false;
@@ -124,6 +134,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private chatSignalrService: ChatSignalrService,
     private presenceService:    PresenceService,
     private collaborationService: CollaborationService,
+    private callService:         CallService,
+    private sanitizer:           DomSanitizer,
     private cdr:                ChangeDetectorRef,
     private router:             Router,
     private store:              Store
@@ -198,6 +210,97 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     this.requestNotificationPermission();
     this.loadActivityFeed();
+    this.setupCallSignals();
+  }
+
+  @ViewChild('messageEditor') messageEditor!: ElementRef;
+
+  // ——————————————————————————————————————————————————————————————————————————————
+  // RICH TEXT EDITOR
+  // ——————————————————————————————————————————————————————————————————————————————
+
+  formatDoc(command: string, value?: string): void {
+    document.execCommand(command, false, value || '');
+    this.messageEditor.nativeElement.focus();
+  }
+
+  onEditorInput(event: any): void {
+    const html = event.target.innerHTML;
+    this.formattedMessage = html;
+    this.newMessage = event.target.innerText;
+  }
+
+  onEditorKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      this.sendMessage();
+    }
+  }
+
+  // ——————————————————————————————————————————————————————————————————————————————
+  // CALLING
+  // ——————————————————————————————————————————————————————————————————————————————
+
+  private setupCallSignals(): void {
+    if (!this.currentUserId) return;
+    this.callService.startConnection(this.currentUserId);
+
+    this.callService.incomingCall$.pipe(takeUntil(this.destroy$)).subscribe(call => {
+      this.incomingCall = call;
+      this.cdr.detectChanges();
+      this.playCallRingtone();
+    });
+
+    this.callService.callAccepted$.pipe(takeUntil(this.destroy$)).subscribe(data => {
+      this.isCalling = false;
+      this.openCallWindow(data.byUserId, this.callType, true);
+    });
+
+    this.callService.callRejected$.pipe(takeUntil(this.destroy$)).subscribe(data => {
+      this.isCalling = false;
+      alert(`Call rejected: ${data.reason}`);
+      this.cdr.detectChanges();
+    });
+  }
+
+  startCall(type: CallType): void {
+    if (!this.selectedUser) return;
+    this.callType = type;
+    this.isCalling = true;
+    const name = this.sessionService.getFullName() || 'User';
+    this.callService.startCall(this.selectedUser.userId, name, type);
+  }
+
+  acceptIncomingCall(): void {
+    if (!this.incomingCall) return;
+    this.callService.acceptCall(this.incomingCall.fromUserId);
+    this.openCallWindow(this.incomingCall.fromUserId, this.incomingCall.callType, false);
+    this.incomingCall = null;
+    this.stopCallRingtone();
+  }
+
+  rejectIncomingCall(): void {
+    if (!this.incomingCall) return;
+    this.callService.rejectCall(this.incomingCall.fromUserId, 'Busy');
+    this.incomingCall = null;
+    this.stopCallRingtone();
+  }
+
+  private openCallWindow(userId: string, type: CallType, isInitiator: boolean): void {
+    // Generate a secure room ID based on both users
+    const sorted = [this.currentUserId, userId].sort();
+    const roomId = `call_${sorted[0]}_${sorted[1]}`;
+    
+    // Use existing meeting logic to open a dedicated 1:1 room
+    this.openMeetingWindow(roomId, isInitiator, true, type === 'Video');
+  }
+
+  private playCallRingtone(): void {
+    // Ringtone logic
+  }
+
+  private stopCallRingtone(): void {
+    // Stop logic
   }
 
   ngAfterViewChecked(): void {
@@ -236,13 +339,19 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       messageType: msgType,
       fileUrl,
       fileName,
-      replyToMessageId: this.replyToMessage?.id
+      replyToMessageId: this.replyToMessage?.id,
+      formattedContent: this.formattedMessage
     }));
 
     if (!fileUrl) {
       this.newMessage = '';
+      this.formattedMessage = '';
       this.replyToMessage = null;
+      if (this.messageEditor) {
+        this.messageEditor.nativeElement.innerHTML = '';
+      }
     }
+    this.cdr.detectChanges();
   }
 
   replyTo(message: any): void {
@@ -618,11 +727,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.toasts = this.toasts.filter(t => t.id !== id);
   }
 
-  private requestNotificationPermission(): void {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
-    }
-  }
 
   private showBrowserNotification(title: string, body: string): void {
     if (document.visibilityState === 'visible' && document.hasFocus()) return;
@@ -953,52 +1057,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
    *   2. If no conversation is open, auto-select the FIRST user in the list,
    *      create/get their conversation, then send the message.
    */
-  private handleShareMeetingId(meetingId: string, text: string): void {
-    const messageText = text || `Join my meeting! Meeting ID: ${meetingId}`;
-
-    // Case 1 â€” a conversation is already open, send immediately
-    if (this.selectedConversation && this.currentUserId) {
-      this.sendMeetingIdMessage(messageText);
-      return;
-    }
-
-    // Case 2 â€” no conversation open, auto-select first user and send
-    const firstUser = this.users[0];
-    if (!firstUser) {
-      console.warn('[Chat] No users available to share meeting ID with.');
-      return;
-    }
-
-    console.log('[Chat] No conversation selected; auto-selecting first user:', this.getUserDisplayName(firstUser));
-
-    // Select the first user (opens their conversation) then send
-    this.selectUser(firstUser).then(() => {
-      // Give the conversation a moment to initialise before sending
-      setTimeout(() => {
-        if (this.selectedConversation && this.currentUserId) {
-          this.sendMeetingIdMessage(messageText);
-        }
-      }, 500);
-    });
-  }
-
-  /**
-   * Sends the meeting-ID text message into the currently selected conversation.
-   */
-  private sendMeetingIdMessage(text: string): void {
-    if (!this.selectedConversation || !this.currentUserId) return;
-
-    const request: SendMessageRequest = {
-      conversationId: this.selectedConversation.id,
-      messageType:    'Text',
-      content:        text,
-      senderId:       this.currentUserId
-    };
-
-    this.chatSignalrService.sendMessage(request)
-      .then(() => console.log('[Chat] Meeting ID shared in chat.'))
-      .catch((err: any) => console.error('[Chat] Failed to share meeting ID:', err));
-  }
 
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // SEARCH
@@ -1028,16 +1086,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.loadMessages(this.selectedConversation.id);
   }
 
-  private scrollToBottom(): void {
-    try {
-      if (this.chatMessagesContainer) {
-        setTimeout(() => {
-          const el = this.chatMessagesContainer.nativeElement;
-          el.scrollTop = el.scrollHeight;
-        }, 0);
-      }
-    } catch { /* ignore */ }
-  }
 
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // TYPING
@@ -1213,6 +1261,43 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       }))
       .reverse()
       .slice(0, 10);
+  }
+
+  private scrollToBottom(): void {
+    try {
+      this.chatMessagesContainer.nativeElement.scrollTop = this.chatMessagesContainer.nativeElement.scrollHeight;
+    } catch (err) { }
+  }
+
+  private requestNotificationPermission(): void {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => { });
+    }
+  }
+
+  private handleShareMeetingId(meetingId: string, text: string): void {
+    const messageText = text || `Join my meeting! Meeting ID: ${meetingId}`;
+    if (this.selectedConversation && this.currentUserId) {
+      this.sendMeetingIdMessage(messageText);
+    } else {
+      const firstUser = this.users[0];
+      if (firstUser) {
+        this.selectUser(firstUser).then(() => {
+          setTimeout(() => {
+            if (this.selectedConversation) this.sendMeetingIdMessage(messageText);
+          }, 500);
+        });
+      }
+    }
+  }
+
+  private sendMeetingIdMessage(text: string): void {
+    if (!this.selectedConversation || !this.currentUserId) return;
+    this.store.dispatch(MessagesActions.sendMessage({
+      conversationId: this.selectedConversation.id,
+      content: text,
+      messageType: 'Text'
+    }));
   }
 
   private loadActivityFeed(): void {
