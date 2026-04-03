@@ -4,6 +4,33 @@ const fs = require('fs');
 // TEMP SSL BYPASS
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ── CUSTOM WINDOW CONTROLS ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+
+ipcMain.on('win:minimize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.minimize();
+});
+
+ipcMain.on('win:maximize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) {
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  }
+});
+
+ipcMain.on('win:close', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.close();
+});
+
+ipcMain.handle('win:isMaximized', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  return win ? win.isMaximized() : false;
+});
+
 let mainWindow;
 let storedAuthData = null;
 
@@ -62,7 +89,12 @@ function createMainWindow() {
   mainWindow = new BrowserWindow({
     width:  1200,
     height: 800,
+    minWidth: 1000,
+    minHeight: 700,
+    frame: false,
+    titleBarStyle: 'hidden',
     autoHideMenuBar: true,
+    resizable: true,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload:          path.join(__dirname, 'preload.js'),
@@ -131,6 +163,8 @@ ipcMain.on('open-meeting-window', (event, payload) => {
     height:    800,
     minWidth:  900,
     minHeight: 600,
+    frame: false,
+    titleBarStyle: 'hidden',
     title:     'OIS Meet — Meeting',
     autoHideMenuBar: true,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
@@ -433,3 +467,4 @@ ipcMain.handle('transcribe-audio-file', async (event, { buffer, fileName, aiApiB
     };
   }
 });
+

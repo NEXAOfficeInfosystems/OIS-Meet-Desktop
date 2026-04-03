@@ -1,0 +1,10 @@
+.main-content {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+
+  &.with-title-bar {
+    height: calc(100vh - 48px);
+  }
+}
+

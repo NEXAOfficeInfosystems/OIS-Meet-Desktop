@@ -1,1 +1,5 @@
-<router-outlet />
+<app-title-bar></app-title-bar>
+<div class="main-content" [class.with-title-bar]="isElectron">
+  <router-outlet />
+</div>
+

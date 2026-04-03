@@ -14,7 +14,9 @@ import { CommonService }    from '../../core/services/common.service';
 import { UserService }      from '../../core/services/user.service';
 import { StorageService }   from '../../core/services/storage.service';
 import { ChatService }      from '../../core/services/chat.service';
-import { MeetingService }   from '../../core/services/meeting.service';           // ← ADDED
+import { FileService }      from '../../core/services/file.service';
+import { MeetingService }   from '../../core/services/meeting.service';
+import { PresenceService }  from '../../core/services/presence.service';
 import { ChatSignalrService, SendMessageRequest } from '../../core/services/chat-signalr.service';
 import { MeetingLinkPipe }  from '../../shared/pipes/meeting-link.pipe';
 
@@ -39,18 +41,18 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   @ViewChild('chatMessages') private chatMessagesContainer!: ElementRef;
   @ViewChild('fileInput')    fileInput!: ElementRef;
 
-  // ── User / conversation state ────────────────────────────────────────────
+  // â”€â”€ User / conversation state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   users:                any[] = [];
   filteredUsers:        any[] = [];
   selectedUser:         any   = null;
   selectedConversation: any   = null;
   currentUserId:        string | null = null;
 
-  // ── Messages ─────────────────────────────────────────────────────────────
+  // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   messages:    any[]  = [];
   newMessage:  string = '';
 
-  // ── UI flags ──────────────────────────────────────────────────────────────
+  // â”€â”€ UI flags â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   isLoading:        boolean = false;
   isSendingFile:    boolean = false;
   isSendingMessage: boolean = false;
@@ -60,15 +62,37 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   totalUnreadCount: number  = 0;
   searchQuery:      string  = '';
   isConnected:      boolean = false;
+  isUploading:      boolean = false;
 
-  // ── In-app toasts ─────────────────────────────────────────────────────────
+  // â”€â”€ Teams Workspace State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  activeView: 'chat' | 'teams' = 'teams'; 
+  activeTeam: string = '';
+  activeChannel: string = 'General';
+
+  // These will now be populated from the API
+  teams: any[] = [];
+  channels: string[] = ['General']; // Default fallback channel for groups
+
+  sharedFiles = [
+    { name: 'OIS Marketing Campaign.pptx', size: '4.2 MB', type: 'ppt', date: 'Oct 24, 2026', owner: 'Ramya' },
+    { name: 'Campaign Budget.xlsx', size: '1.8 MB', type: 'xls', date: 'Oct 22, 2026', owner: 'Senthil' },
+    { name: 'Branding Guidelines.pdf', size: '12.5 MB', type: 'pdf', date: 'Oct 15, 2026', owner: 'Admin' }
+  ];
+
+  activityFeed = [
+    { user: 'Senthil Kumar', action: 'added you to Marketing Team', time: '2h ago' },
+    { user: 'Ramya', action: 'uploaded Branding Guidelines.pdf', time: '5h ago' },
+    { user: 'Rohan Patel', action: 'reacted to your message', time: '1d ago' }
+  ];
+
+  // â”€â”€ In-app toasts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   toasts:              InAppToast[] = [];
   private toastCounter = 0;
 
-  // ── Image viewer ──────────────────────────────────────────────────────────
+  // â”€â”€ Image viewer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   selectedImage: any = null;
 
-  // ── Private state ─────────────────────────────────────────────────────────
+  // â”€â”€ Private state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   private typingTimeout:    any;
   private shouldScroll:     boolean = false;
   private destroy$         = new Subject<void>();
@@ -80,7 +104,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private connectionStateSubscription!: Subscription;
   private shareMeetingIdHandler: ((e: Event) => void) | null = null;
 
-  // ── Deduplication ─────────────────────────────────────────────────────────
+  // â”€â”€ Deduplication â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   private displayedMessageIds = new Set<string>();
 
   constructor(
@@ -89,15 +113,19 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private userService:        UserService,
     private storageService:     StorageService,
     private chatService:        ChatService,
-    private meetingService:     MeetingService,     // ← ADDED for validateMeeting
+    private fileService:        FileService,
+    private meetingService:     MeetingService,     // â† ADDED for validateMeeting
     private chatSignalrService: ChatSignalrService,
+    private presenceService:    PresenceService,
     private cdr:                ChangeDetectorRef,
     private router:             Router,
-  ) {}
+  ) {
+    this.currentUserId = this.sessionService.getOISMeetUserId();
+  }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // LIFECYCLE
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   ngOnInit(): void {
     this.currentUserId = this.sessionService.getOISMeetUserId() || null;
@@ -107,16 +135,24 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }
 
     this.setupSignalREvents();
+    this.setupPresenceTracking();
 
-    // ── FIX: loadConversations only after SignalR connects ────────────────
-    // Remove the direct loadConversations() call from here — it now only
+    // â”€â”€ FIX: loadConversations only after SignalR connects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Remove the direct loadConversations() call from here â€” it now only
     // fires from connectionState$ AFTER users are loaded
     this.connectionStateSubscription = this.chatSignalrService.connectionState$
       .subscribe(state => {
         this.isConnected = state === signalR.HubConnectionState.Connected;
         if (state === signalR.HubConnectionState.Connected) {
-          // Only load conversations here — users already loaded by this point
+          // Only load conversations here â€” users already loaded by this point
           this.loadConversations();
+          
+          // â”€â”€ ADDED: Auto-select channel if in Teams view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          setTimeout(() => {
+            if (this.activeView === 'teams') {
+              this.selectChannel('General');
+            }
+          }, 1000); // Give a moment for conversations to load
         }
       });
 
@@ -125,7 +161,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       this.isCompanyChanging = true;
       this.isLoading = true;
     } else {
-      // ── FIX: load users FIRST, then conversations inside the callback ──
+      // â”€â”€ FIX: load users FIRST, then conversations inside the callback â”€â”€
       this.loadUsersForCurrentCompany();
     }
 
@@ -167,9 +203,73 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.conversationSwitch$.complete();
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  sendMessage(fileUrl?: string, fileName?: string): void {
+    const content = this.newMessage?.trim();
+    if (!content && !fileUrl) return;
+
+    this.isSendingMessage = true;
+    const conversationId = this.selectedConversation?.id;
+    if (!conversationId) return;
+
+    const msgType = fileUrl ? 'File' : 'Text';
+
+    this.chatService.sendMessageApi(conversationId, content || '', msgType, fileUrl, fileName)
+      .subscribe({
+        next: (res) => {
+          if (res.success) {
+            if (!fileUrl) this.newMessage = '';
+          }
+          this.isSendingMessage = false;
+        },
+        error: (err) => {
+          console.error('API Send failed', err);
+          this.isSendingMessage = false;
+        }
+      });
+  }
+
+  // â”€â”€ FILE UPLOAD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  onFileSelected(event: any): void {
+    const file: File = event.target.files[0];
+    if (file) {
+      this.uploadFile(file);
+    }
+  }
+
+  private uploadFile(file: File): void {
+    this.isUploading = true;
+    this.fileService.uploadFile(file).subscribe({
+      next: (event: any) => {
+        if (event.type === 4) { // Sent
+          const res = event.body;
+          if (res.success && res.data) {
+            this.sendMessage(res.data.url, res.data.fileName);
+          }
+          this.isUploading = false;
+        }
+      },
+      error: (err) => {
+        console.error('Upload failed', err);
+        this.isUploading = false;
+      }
+    });
+  }
+
+  public downloadFile(fileUrl: string, fileName: string): void {
+    const fullUrl = this.fileService.getFileUrl(fileUrl);
+    const link = document.createElement('a');
+    link.href = fullUrl;
+    link.download = fileName;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // COMPANY CHANGE
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   private handleCompanyChange(): void {
     this.users         = [];
@@ -187,63 +287,73 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.loadUsersForCurrentCompany();
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // USER LOADING
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   private loadUsersForCurrentCompany(): void {
     if (this.isCompanyChanging) return;
 
     this.isLoading = true;
     const clientId = this.sessionService.getClientId() ?? '';
-    const companyId = this.sessionService.getCompanyId() ?? 0;
-    const appId = this.sessionService.getMeetAppId() ?? '';
+    const companyIdRaw = this.sessionService.getCompanyId() ?? 0;
+    const companyId = Number(companyIdRaw);
 
-    this.userService.getOisMeetUsers(clientId, companyId, appId)
+    this.chatService.getUsers(clientId, companyId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
           if (res.success && res.data) {
-            const loggedInSSOUserId = this.sessionService.getUserId() || '';
-            const currentUser = res.data.find(
-              (u: any) => u.ssoUserId === loggedInSSOUserId
-            );
-
-            if (currentUser) {
-              this.storageService.setItem('oisMeetUserId', currentUser.id);
-              this.currentUserId = currentUser.id;
-            }
-
-            const transformed = this.transformSSOUsersToChatUsers(res.data)
-              .filter((u: any) => u.id !== this.currentUserId);
-
-            // ── Merge to preserve any unread already set ─────────────────
-            transformed.forEach(newUser => {
-              const existing = this.users.find(
-                u => u.id?.toString() === newUser.id?.toString()
-              );
-              if (existing) {
-                newUser.unreadCount = existing.unreadCount || 0;
-                newUser.conversationId = existing.conversationId || null;
-                newUser.lastMessage = existing.lastMessage || '';
-                newUser.lastMessageTime = existing.lastMessageTime || '';
-                newUser.lastMessageType = existing.lastMessageType || '';
-                newUser.lastMessageAt = existing.lastMessageAt || null;
+            const transformed = res.data.map((u: any) => ({
+              id:              u.id?.toString(),
+              userId:          u.ssoUserId || u.id?.toString(),
+              name:            u.fullName || u.name || u.userName || 'Unknown',
+              fullName:        u.fullName || u.name || u.userName || 'Unknown',
+              email:           u.email || '',
+              isOnline:        u.isOnline || false,
+              lastMessage:     '',
+              lastMessageTime: '',
+              lastMessageType: '',
+              lastMessageAt:   null as Date | null,
+              unreadCount:     0,
+              avatarColor:     this.commonService.getRandomColor(),
+              status:          'Available',
+              isGroup:         false,
+              isSelf:          u.id?.toString() === this.currentUserId?.toString()
+            })).map((u: any) => {
+              if (u.isSelf) {
+                u.name = u.name + ' (You)';
+                u.fullName = u.fullName + ' (You)';
               }
+              return u;
             });
 
-            this.users = transformed;
-            this.filteredUsers = [...this.users];
+            // Filter out self
+            const filteredTransformed = transformed.filter((u: any) => u.id !== this.currentUserId);
+
+            // Merge with existing state to preserve conversationId / lastMessage
+            filteredTransformed.forEach((newUser: any) => {
+              const existing = this.users.find(u => u.id === newUser.id);
+              if (existing) {
+                newUser.conversationId = existing.conversationId;
+                newUser.lastMessage = existing.lastMessage;
+                newUser.lastMessageTime = existing.lastMessageTime;
+                newUser.lastMessageAt = existing.lastMessageAt;
+                newUser.unreadCount = existing.unreadCount;
+                newUser.isGroup = existing.isGroup;
+              }
+            });
+            this.users = filteredTransformed;
+            this.updateTeamsList();
+            this.applySearch();
+
+            if (this.currentUserId && !this.chatSignalrService.isConnected()) {
+              this.chatSignalrService.startConnection(this.currentUserId);
+            } else if (this.chatSignalrService.isConnected()) {
+              this.loadConversations();
+            }
           }
           this.isLoading = false;
-
-          // ── FIX: if SignalR already connected before users finished
-          //    loading, loadConversations was skipped — call it now ───────
-          if (this.chatSignalrService.isConnected()) {
-            this.loadConversations();
-          }
-          // If NOT yet connected, connectionState$ will fire loadConversations
-          // once SignalR connects — which will always be AFTER this completes
         },
         error: () => {
           this.isLoading = false;
@@ -254,33 +364,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       });
   }
 
-  private transformSSOUsersToChatUsers(users: any[]): any[] {
-    return users.map(u => ({
-      id:              u.id,
-      userId:          u.ssoUserId || u.id,
-      name:            u.fullName || u.name || 'Unknown',
-      fullName:        u.fullName || u.name || 'Unknown',
-      email:           u.email || '',
-      isOnline:        true,
-      lastMessage:     '',
-      lastMessageTime: '',
-      lastMessageType: '',
-      lastMessageAt:   null as Date | null,
-      unreadCount:     0,
-      avatarColor:     this.commonService.getRandomColor(),
-      status:          'Available',
-      clientId:        u.clientId,
-      companyId:       u.companyId
-    }));
-  }
-
   getUserDisplayName(user: any): string {
     return user?.fullName || user?.name || 'Unknown';
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // SIGNALR EVENT SUBSCRIPTIONS
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   private setupSignalREvents(): void {
     this.chatSignalrService.messageReceived$
@@ -300,14 +390,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(data => { if (data) this.updateMessageStatus(data.messageId, data.status); });
 
-    this.chatSignalrService.userOnline$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(userId => { if (userId) this.updateUserOnlineStatus(userId, true); });
-
-    this.chatSignalrService.userOffline$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(userId => { if (userId) this.updateUserOnlineStatus(userId, false); });
-
     this.chatSignalrService.messageDeleted$
       .pipe(takeUntil(this.destroy$))
       .subscribe(msgId => { if (msgId) this.deleteMessageFromUI(msgId); });
@@ -317,9 +399,20 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .subscribe(conv => { if (conv) this.addNewConversation(conv); });
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  private setupPresenceTracking(): void {
+    this.presenceService.onlineUsers$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(onlineIds => {
+        this.users.forEach(u => {
+          u.isOnline = onlineIds.map(id => id.toString()).includes(u.id?.toString());
+        });
+        this.cdr.detectChanges();
+      });
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // INCOMING MESSAGE HANDLER
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   private handleNewMessage(message: any): void {
     if (!message?.conversationId) return;
@@ -338,8 +431,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       const updated = [...this.messages, message];
       this.messages = this.decorateMessagesWithDates(updated);
       this.shouldScroll = true;
+      this.updateSharedFiles();
 
-      // ── FIX: Mark as read immediately if conversation is open ──────────
       if (!isFromMe && !isAppBackgrounded) {
         setTimeout(() => this.markAllUnreadAsRead(conversationId), 300);
       }
@@ -354,7 +447,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       const avatarColor = sender?.avatarColor ?? '#1a73e8';
       const preview =
         message.messageType === 'Text' ? (message.content ?? '').substring(0, 60) :
-          message.messageType === 'Image' ? '📷 Image' : '📎 File';
+          message.messageType === 'Image' ? 'ðŸ“· Image' : 'ðŸ“Ž File';
 
       this.showInAppToast(senderName, preview, avatarColor);
       this.showBrowserNotification(senderName, preview);
@@ -378,7 +471,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     user.lastMessage =
       message.messageType === 'Text'  ? (message.content ?? '') :
-      message.messageType === 'Image' ? '📷 Image' : `📎 ${message.attachments?.[0]?.fileName ?? 'File'}`;
+      message.messageType === 'Image' ? 'ðŸ“· Image' : `ðŸ“Ž ${message.attachments?.[0]?.fileName ?? 'File'}`;
     const parsedSent = this.parseDate(message.sentAt ?? Date.now()) ?? new Date();
     user.lastMessageTime = this.formatMessageTime(parsedSent);
     user.lastMessageType = message.messageType;
@@ -419,20 +512,38 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.filteredUsers = q
       ? this.users.filter(u => this.getUserDisplayName(u).toLowerCase().includes(q))
       : [...this.users];
+    this.users = [...this.users];
+    this.updateTeamsList();
     this.cdr.detectChanges();
+  }
+
+  private updateTeamsList(): void {
+    // Derived Teams are all Group conversations in our users list
+    const groupUsers = this.users.filter(u => u.isGroup);
+    
+    this.teams = groupUsers.map(u => ({
+      id: u.id,
+      name: u.name,
+      color: u.avatarColor || '#10b981',
+      icon: 'bi bi-hash',
+      conversationId: u.conversationId
+    }));
+
+    if (this.teams.length > 0 && !this.activeTeam) {
+      this.activeTeam = this.teams[0].name;
+    }
   }
 
   private applySearch(): void {
      this.sortUsersByLastMessage();
-    // const q = this.searchQuery?.trim().toLowerCase() ?? '';
     // this.filteredUsers = q
     //   ? this.users.filter(u => this.getUserDisplayName(u).toLowerCase().includes(q))
     //   : [...this.users];
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // NOTIFICATIONS
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   showInAppToast(senderName: string, preview: string, avatarColor: string): void {
     const toast: InAppToast = {
@@ -476,9 +587,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     } catch { /* ignore */ }
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // CONVERSATIONS & MESSAGES
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   loadConversations(): void {
     this.chatService.getConversations()
@@ -488,28 +599,32 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           if (!res.success || !res.data) return;
 
           (res.data as any[]).forEach((conv: any) => {
+            const isGroup = conv.conversationType === 'Group';
             const other = conv.participants?.[0] || {};
-            let user = this.users.find(
-              u => u.id?.toString() === other.userId?.toString()
-            );
+            
+            // For groups, uniquely identify by conversationId. For direct, by other user's id.
+            let user = isGroup 
+              ? this.users.find(u => u.conversationId === conv.id?.toString())
+              : this.users.find(u => u.id?.toString() === other.userId?.toString());
 
             if (user) {
               user.conversationId = conv.id?.toString();
+              user.isGroup = isGroup;
               user.lastMessage = conv.lastMessage?.content || '';
               user.lastMessageTime = conv.lastMessage?.sentAt
                 ? this.formatMessageTime(this.parseDate(conv.lastMessage.sentAt)) : '';
               user.lastMessageType = conv.lastMessage?.messageType || '';
               user.lastMessageAt = conv.lastMessage?.sentAt
                 ? this.parseDate(conv.lastMessage.sentAt) : null;
-              user.unreadCount = conv.unreadCount || 0;   // ← from API
+              user.unreadCount = conv.unreadCount || 0;
             } else {
               this.users.push({
-                id: other.userId?.toString(),
-                userId: other.userId?.toString(),
-                name: other.name,
-                fullName: other.name,
-                email: other.email,
-                isOnline: other.isOnline || false,
+                id: isGroup ? conv.id?.toString() : other.userId?.toString(),
+                userId: isGroup ? null : other.userId?.toString(),
+                name: isGroup ? (conv.name || 'Marketing Team') : other.name,
+                fullName: isGroup ? (conv.name || 'Marketing Team') : other.name,
+                email: other.email || '',
+                isOnline: isGroup ? true : (other.isOnline || false),
                 lastMessage: conv.lastMessage?.content || '',
                 lastMessageTime: conv.lastMessage?.sentAt
                   ? this.formatMessageTime(this.parseDate(conv.lastMessage.sentAt)) : '',
@@ -518,10 +633,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
                   ? this.parseDate(conv.lastMessage.sentAt) : null,
                 unreadCount: conv.unreadCount || 0,
                 conversationId: conv.id?.toString(),
-                avatarColor: this.commonService.getRandomColor()
+                avatarColor: this.commonService.getRandomColor(),
+                isGroup: isGroup
               });
             }
           });
+
+          this.updateTeamsList();
 
           if (this.chatSignalrService.isConnected()) {
             (res.data as any[]).forEach((conv: any) => {
@@ -529,12 +647,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
             });
           }
 
-          // ── FIX: force new array reference so Angular re-evaluates
-          //    unreadCount > 0 for bold and badge in the template ─────────
+          // â”€â”€ FIX: force new array reference so Angular re-evaluates
+          //    unreadCount > 0 for bold and badge in the template â”€â”€â”€â”€â”€â”€â”€â”€â”€
           this.totalUnreadCount = this.users.reduce(
             (s, u) => s + (u.unreadCount || 0), 0
           );
-          this.users = [...this.users];        // ← THIS is why badge was not showing
+          this.users = [...this.users];
+          this.updateTeamsList();
           this.sortUsersByLastMessage();
         },
         error: (err) => console.error('Failed to load conversations', err)
@@ -564,6 +683,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
             if (this.currentPage === 1) {
               this.messages = this.decorateMessagesWithDates(msgs);
+              this.updateSharedFiles();
               this.shouldScroll = true;
             } else {
               const combined = [...msgs, ...this.messages];
@@ -572,8 +692,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
             this.hasMoreMessages = msgs.length === 50;
 
-            // ── FIX: Mark ALL unread messages as read immediately ────────
-            // No scrolling required — opening the conversation = read
+            // â”€â”€ FIX: Mark ALL unread messages as read immediately â”€â”€â”€â”€â”€â”€â”€â”€
+            // No scrolling required â€” opening the conversation = read
             this.markAllUnreadAsRead(conversationId);
           }
 
@@ -608,7 +728,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       return m;
     });
 
-    // ── Use MarkAllMessagesAsRead — covers ALL pages, not just loaded ones
+    // â”€â”€ Use MarkAllMessagesAsRead â€” covers ALL pages, not just loaded ones
     this.chatSignalrService
       .markAllMessagesAsRead(conversationId)
       .catch(err => console.error('markAllMessagesAsRead failed:', err));
@@ -625,7 +745,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.hasMoreMessages = true;
     this.isLoading = false;
 
-    // ── FIX: Clear unread badge immediately when user opens conversation ──
+    // â”€â”€ FIX: Clear unread badge immediately when user opens conversation â”€â”€
     if (user.unreadCount > 0) {
       user.unreadCount = 0;
       this.totalUnreadCount = this.users.reduce((s, u) => s + (u.unreadCount || 0), 0);
@@ -669,48 +789,47 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
-  // SEND MESSAGE
-  // ═════════════════════════════════════════════════════════════════════════
+  // â”€â”€ TEAMS & CHANNELS LOGIC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  async sendMessage(): Promise<void> {
-    if (!this.newMessage.trim() || !this.selectedConversation || this.isSendingMessage) return;
-    if (!this.currentUserId) return;
+  selectTeam(team: any): void {
+    this.activeTeam = team.name;
+    // For now, default to the 'General' channel of the selected team
+    this.selectChannel('General');
+  }
 
-    const content         = this.newMessage.trim();
-    this.newMessage       = '';
-    this.isSendingMessage = true;
+  selectChannel(channel: string): void {
+    this.activeChannel = channel;
+    this.messages = [];
+    this.currentPage = 1;
+    this.hasMoreMessages = true;
 
-    const request: SendMessageRequest = {
-      conversationId: this.selectedConversation.id,
-      messageType:    'Text',
-      content,
-      senderId:       this.currentUserId
-    };
-
-    try {
-      await this.chatSignalrService.sendMessage(request);
-    } catch (err: any) {
-      this.newMessage = content;
-      console.error('Failed to send message:', err);
-
-      const msg = err?.message || '';
-      if (msg.includes('Conversation not found')) {
-        alert('Conversation not found. Please select the user again.');
-        this.selectedConversation = null;
-      } else if (msg.includes('Connection is Disconnected')) {
-        if (this.currentUserId) this.chatSignalrService.startConnection(this.currentUserId);
-      } else {
-        alert('Failed to send message. Please try again.');
-      }
-    } finally {
-      this.isSendingMessage = false;
+    // Find the 'Group' conversation that represents this channel
+    // In a real app, channels would have their own IDs. 
+    // Here we'll search conversations where type is 'Group' 
+    // or just use a fallback if not found.
+    const groupConv = this.users.find(u => u.name === this.activeTeam && u.isGroup);
+    
+    if (groupConv && groupConv.conversationId) {
+      this.selectedConversation = { id: groupConv.conversationId };
+      this.loadMessages(groupConv.conversationId);
+    } else {
+      // Fallback: If no real backend group conversation exists, 
+      // we show a descriptive message or the previous mock logic
+      console.log(`No API conversation found for ${this.activeTeam} - ${this.activeChannel}`);
+      this.messages = []; // Clear for now
     }
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
-  // MEETING LINK CLICK — FIX: validate then join as participant
-  // ═════════════════════════════════════════════════════════════════════════
+  getMemberAvatarColor(senderName: string): string {
+    // Look up in users list or generate consistent color based on name
+    const user = this.users.find(u => u.name === senderName);
+    return user?.avatarColor || '#3b82f6';
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // MEETING LINK CLICK â€” FIX: validate then join as participant
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   /**
    * Event-delegation handler on each text-message bubble.
@@ -723,7 +842,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   onMessageClick(event: MouseEvent): void {
     const target = event.target as HTMLElement;
 
-    // Walk up one level in case user clicked the <small> ▶ Join child
+    // Walk up one level in case user clicked the <small> â–¶ Join child
     const chip = target.classList.contains('meeting-id-link')
       ? target
       : (target.parentElement?.classList.contains('meeting-id-link')
@@ -811,15 +930,15 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         queryString: params.toString(),
       });
     } else {
-      // Browser / dev-server fallback — window.location.origin is valid here
+      // Browser / dev-server fallback â€” window.location.origin is valid here
       const url = `${window.location.origin}/meeting/${meetingId}?${params}`;
       window.open(url, '_blank', 'width=1280,height=800,menubar=no,toolbar=no');
     }
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
-  // SHARE MEETING ID — FIX: auto-select first user if none selected
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // SHARE MEETING ID â€” FIX: auto-select first user if none selected
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   /**
    * FIX for Issue 1:
@@ -833,13 +952,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private handleShareMeetingId(meetingId: string, text: string): void {
     const messageText = text || `Join my meeting! Meeting ID: ${meetingId}`;
 
-    // Case 1 — a conversation is already open, send immediately
+    // Case 1 â€” a conversation is already open, send immediately
     if (this.selectedConversation && this.currentUserId) {
       this.sendMeetingIdMessage(messageText);
       return;
     }
 
-    // Case 2 — no conversation open, auto-select first user and send
+    // Case 2 â€” no conversation open, auto-select first user and send
     const firstUser = this.users[0];
     if (!firstUser) {
       console.warn('[Chat] No users available to share meeting ID with.');
@@ -877,18 +996,18 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .catch((err: any) => console.error('[Chat] Failed to share meeting ID:', err));
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // SEARCH
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   searchUsers(event: any): void {
     this.searchQuery = event.target.value.toLowerCase();
     this.applySearch();
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // SCROLL / PAGINATION
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   onScroll(event: any): void {
     if (this.isSwitchingUser) return;
@@ -916,9 +1035,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     } catch { /* ignore */ }
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // TYPING
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   onTyping(): void {
     if (!this.selectedConversation || !this.currentUserId) return;
@@ -931,42 +1050,16 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }, 2000);
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // FILE HANDLING
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-  onFileSelected(event: any): void {
-    const file = event.target.files[0];
-    if (file) this.sendFile(file);
-  }
-
-  sendFile(file: File): void {
-    if (!this.selectedConversation || !this.selectedUser) return;
-    if (file.size > 10 * 1024 * 1024) { alert('File size exceeds 10MB limit'); return; }
-
-    this.isSendingFile = true;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64Data = (reader.result as string).split(',')[1];
-      const request: SendMessageRequest = {
-        conversationId: this.selectedConversation!.id,
-        messageType:    file.type.startsWith('image/') ? 'Image' : 'File',
-        content:        '',
-        senderId:       this.currentUserId,
-        attachments:    [{ fileName: file.name, fileData: base64Data, fileSize: file.size, mimeType: file.type }]
-      };
-      this.chatSignalrService.sendMessage(request)
-        .then(() => { this.isSendingFile = false; if (this.fileInput) this.fileInput.nativeElement.value = ''; })
-        .catch(() => { this.isSendingFile = false; });
-    };
-    reader.readAsDataURL(file);
-  }
 
   triggerFileInput(): void { this.fileInput.nativeElement.click(); }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // MISC HELPERS
-  // ═════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   selectConversation(conversation: any): void {
     this.selectedConversation = conversation;
@@ -1101,5 +1194,20 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         dateSeparatorLabel: show ? this.getDateLabel(msg.sentAt) : ''
       };
     });
+  }
+
+  private updateSharedFiles() {
+    this.sharedFiles = this.messages
+      .filter(m => m.fileUrl)
+      .map(m => ({
+        name: m.fileName || 'Unnamed File',
+        size: 'View',
+        type: 'file',
+        date: this.formatMessageTime(m.sentAt),
+        owner: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : m.senderName,
+        url: m.fileUrl
+      }))
+      .reverse()
+      .slice(0, 10);
   }
 }

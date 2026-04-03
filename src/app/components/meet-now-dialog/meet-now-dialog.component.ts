@@ -6,8 +6,19 @@ import { Router } from '@angular/router';
 import { SessionService }  from '../../core/services/session.service';
 import { MeetingService }  from '../../core/services/meeting.service';
 
+import { CommonModule } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { ClipboardModule } from '@angular/cdk/clipboard';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialogModule } from '@angular/material/dialog';
+
 @Component({
   selector:    'app-meet-now-dialog',
+  standalone:  true,
+  imports:     [CommonModule, MatDialogModule, MatSnackBarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, ClipboardModule],
   templateUrl: './meet-now-dialog.component.html',
   styleUrls:   ['./meet-now-dialog.component.scss']
 })

@@ -23,7 +23,7 @@ export interface AttachmentDto {
   providedIn: 'root'
 })
 export class ChatService {
-  private apiUrl = `${environment.apiBaseUrl}/chat`;
+  private apiUrl = `${environment.apiBaseUrl}/Chat`;
 
   constructor(
     private http: HttpClient,
@@ -32,7 +32,8 @@ export class ChatService {
 
   private getHeaders(): HttpHeaders {
     return new HttpHeaders({
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${this.sessionService.getSsoToken()}`
     });
   }
 
@@ -43,13 +44,11 @@ export class ChatService {
   }
 
   getUsers(clientId: string, companyId: number): Observable<any> {
-    const currentUserId = this.getCurrentUserId();
     return this.http.get(`${this.apiUrl}/users`, {
       headers: this.getHeaders(),
       params: {
         clientId,
-        companyId: companyId.toString(),
-        currentUserId: currentUserId
+        companyId: companyId.toString()
       }
     });
   }
@@ -59,6 +58,12 @@ export class ChatService {
     return this.http.get(`${this.apiUrl}/conversations`, {
       headers: this.getHeaders(),
       params: { currentUserId: currentUserId }
+    });
+  }
+
+  getActiveUsers(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/active`, {
+      headers: this.getHeaders()
     });
   }
 
@@ -112,6 +117,24 @@ export class ChatService {
     return this.http.delete(`${this.apiUrl}/messages/${messageId}`, {
       headers: this.getHeaders(),
       params: { currentUserId: currentUserId }
+    });
+  }
+
+  // --- NEW WORKFLOWS PER feature/meeting-page-enhancement ---
+
+  sendMessageApi(conversationId: string, content: string, type: string = 'Text', fileUrl?: string, fileName?: string): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    const requestBody = {
+      conversationId: conversationId,
+      senderId: currentUserId,
+      content: content,
+      messageType: type,
+      fileUrl: fileUrl,
+      fileName: fileName
+    };
+
+    return this.http.post(`${this.apiUrl}/send`, requestBody, {
+      headers: this.getHeaders()
     });
   }
 }

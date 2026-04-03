@@ -224,28 +224,32 @@ private loadPostLoginData(token: string, userinfo: string): void {
       );
     }),
     switchMap((user: any) => {
-      const userId = user?.Id;
+      const userId = user?.Id || user?.UserId || user?.userId || user?.id;
       if (!userId) {
+        console.error('[Login] User mapping failed. Raw user data:', user);
         throw new Error('UserId not found in GetUser response.');
       }
       return this.ssoApiService.getApplicationList(token, userinfo, userId)
         .pipe(
           switchMap((apps: any[]) => {
-            const meetApp = apps.find(app =>
-              app.Code === 'Meet' ||
-              app.Code === 'OISMeet'
-            );
+            const meetApp = apps.find(app => {
+              const code = (app.Code || app.code || '').toUpperCase();
+              return code === 'MEET' || code === 'OISMEET';
+            });
 
-            if (!meetApp?.ApplicationId) {
+            const meetAppId = meetApp?.ApplicationId || meetApp?.applicationId;
+
+            if (!meetAppId) {
+              console.error('[Login] Meet app mapping failed. Apps list:', apps);
               throw new Error('Meet app not found in application list.');
             }
 
-            this.storageService.setItem('meetAppId', meetApp.ApplicationId.toString());
-            this.storageService.setItem('applicationName', meetApp.ApplicationName ?? '');
+            this.storageService.setItem('meetAppId', meetAppId.toString());
+            this.storageService.setItem('applicationName', meetApp.ApplicationName || meetApp.applicationName || '');
 
             return forkJoin({
-              meetUrl: this.ssoApiService.getMeetUrl(token, userinfo, meetApp.ApplicationId),
-              companyUrl: this.ssoApiService.getCompanyURL(token, userinfo, userId, meetApp.ApplicationId),
+              meetUrl: this.ssoApiService.getMeetUrl(token, userinfo, meetAppId),
+              companyUrl: this.ssoApiService.getCompanyURL(token, userinfo, userId, meetAppId),
             });
           })
         );

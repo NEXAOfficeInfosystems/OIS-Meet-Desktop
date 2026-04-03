@@ -1,21 +1,24 @@
 :root {
-  --app-header-height: 50px;
+  --app-header-height: 64px;
   --app-header-offset: var(--app-header-height);
-  --app-footer-height: 40px;
+  --app-footer-height: 0px; // Footer is hidden or not used in current designs
 
   /* Theme colors */
   --light-bg: #fcfcfc;
-  --light-text: #212529;
+  --light-text: #1e293b;
 
   --dark-bg: #0f172a;
-  --dark-text: #e5e7eb;
+  --dark-text: #f8fafc;
 }
 
 html,
 body {
-  height: 100%;
+  height: 100vh;
+  width: 100vw;
   margin: 0;
-  font-family: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+  padding: 0;
+  overflow: hidden;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
 body.theme-light {
@@ -29,6 +32,7 @@ body.theme-dark {
   background-color: var(--dark-bg);
   color: var(--dark-text);
 }
+
 .meet-now-dialog .mat-mdc-dialog-container {
   padding: 0;
   border-radius: 10px;
@@ -57,4 +61,9 @@ body.theme-dark {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
 /* ===== Scrollbar CSS End===== */
+
+.mb-0 {
+  margin-bottom: 0px !important;
+}

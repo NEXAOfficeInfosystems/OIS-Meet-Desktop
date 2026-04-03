@@ -1,0 +1,101 @@
+<header class="title-bar" [class.is-electron]="isElectron">
+  <!-- Left Side: Brand & Drag Handle -->
+  <div class="brand-section">
+    <div class="drag-handle" *ngIf="isElectron"></div>
+    <a class="app-brand" routerLink="/chat" title="Go to Home">
+      <img src="assets/login/logo.png" alt="OIS Meet App Icon" class="app-logo" />
+      <span class="app-title">OIS Meet</span>
+    </a>
+  </div>
+
+  <!-- Center-Left Actions (Visible when Authenticated) -->
+  <div class="main-actions" *ngIf="isAuthenticated$ | async">
+    <div class="meet-controls flex-shrink-0">
+      <button type="button" class="btn-meet btn-meet-primary" (click)="openMeetNowDialog('meet-now')">
+        <i class="bi bi-camera-video-fill"></i>
+        <span>Meet Now</span>
+      </button>
+      <button type="button" class="btn-meet btn-meet-outline" (click)="openMeetNowDialog('join-meeting')">
+        <i class="bi bi-plus-circle"></i>
+        <span>Join</span>
+      </button>
+    </div>
+
+    <!-- Right Side Actions: Welcome, Theme, Profile -->
+    <div class="right-actions">
+      <div class="welcome-section d-none d-xl-flex" *ngIf="userFullName">
+        <span class="welcome-label">Welcome,</span>
+        <span class="user-name">{{ userFullName }}</span>
+      </div>
+
+      <div class="action-group">
+        <button type="button" class="icon-btn theme-toggle" (click)="toggleTheme()"
+          [attr.title]="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
+          <i class="bi"
+            [ngClass]="theme === 'dark' ? 'bi-sun-fill text-warning' : 'bi-moon-stars-fill text-primary'"></i>
+        </button>
+
+        <div class="user-dropdown">
+          <button type="button" class="avatar-trigger" (click)="toggleUserMenu($event)" [class.active]="isUserMenuOpen">
+            <div class="avatar-circle">
+              <i class="bi bi-person-fill"></i>
+            </div>
+            <i class="bi bi-chevron-down caret-icon"></i>
+          </button>
+
+          <!-- Dropdown Menu -->
+          <div class="dropdown-window shadow" *ngIf="isUserMenuOpen" (click)="$event.stopPropagation()">
+            <div class="dropdown-header">
+              <span class="menu-title">User Account</span>
+            </div>
+
+            <div class="company-section">
+              <div class="company-trigger" (click)="toggleCompanyMenu($event)">
+                <span><i class="bi bi-building me-2"></i>Switch Company</span>
+                <i class="bi" [ngClass]="isCompanyMenuOpen ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+              </div>
+
+              <div class="company-list" *ngIf="isCompanyMenuOpen">
+                <div class="company-item" *ngFor="let item of companyList" (click)="selectCompany(item)"
+                  [class.active]="item.companyId === selectedCompanyId">
+                  <span class="name">{{ item?.name | titlecase }}</span>
+                  <i *ngIf="item.companyId === selectedCompanyId" class="bi bi-check2"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="dropdown-divider"></div>
+            <button class="logout-btn" (click)="logout()">
+              <i class="bi bi-box-arrow-right me-2"></i>Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Far Right: Electron Window Controls -->
+  <div class="window-controls" *ngIf="isElectron">
+    <button class="control-btn minimize" (click)="onMinimize()" title="Minimize">
+      <svg width="10" height="10" viewBox="0 0 10 1" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="10" height="1" fill="currentColor" />
+      </svg>
+    </button>
+    <button class="control-btn maximize" (click)="onMaximize()" title="{{ isMaximized ? 'Restore' : 'Maximize' }}">
+      <svg *ngIf="!isMaximized" width="10" height="10" viewBox="0 0 10 10" fill="none"
+        xmlns="http://www.w3.org/2000/svg">
+        <rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" />
+      </svg>
+      <svg *ngIf="isMaximized" width="10" height="10" viewBox="0 0 10 10" fill="none"
+        xmlns="http://www.w3.org/2000/svg">
+        <path d="M3.5 0.5H9.5V6.5" stroke="currentColor" />
+        <rect x="0.5" y="3.5" width="6" height="6" stroke="currentColor" fill="transparent" />
+      </svg>
+    </button>
+    <button class="control-btn close" (click)="onClose()" title="Close">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2" />
+      </svg>
+    </button>
+  </div>
+</header>

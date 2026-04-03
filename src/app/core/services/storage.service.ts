@@ -77,28 +77,28 @@ export class StorageService {
     }
   }
 
-   pickUserDetailsForStorage(user: UserDetailsResponse): StoredUserDetails {
+   pickUserDetailsForStorage(user: any): StoredUserDetails {
     return {
-      Id: user?.Id,
-      Email: user?.Email,
-      FullName: user?.FullName,
-      PhoneNumber: user?.PhoneNumber,
-      IsActive: user?.IsActive,
-      Name: user?.Name,
-      Surname: user?.Surname,
-      UserTypeId: user?.UserTypeId,
-      UserId: user?.UserId,
-      GenderId: user?.GenderId,
-      UserStatusId: user?.UserStatusId,
-      RoleId: user?.RoleId,
-      IsAdmin: user?.IsAdmin,
-      ImageUrl: user?.ImageUrl,
-      dialCode: user?.dialCode,
-      IsDefault: user?.IsDefault,
-      EmpId: user?.EmpId,
-      WorkingCompanyId: user?.WorkingCompanyId,
-      IsDeleted: user?.IsDeleted,
-      CompanyName: user?.CompanyName,
+      Id: user?.Id || user?.id || user?.UserId || user?.userId,
+      Email: user?.Email || user?.email,
+      FullName: user?.FullName || user?.fullName || user?.Name || user?.name,
+      PhoneNumber: user?.PhoneNumber || user?.phoneNumber || user?.Mobile || user?.mobile,
+      IsActive: user?.IsActive ?? user?.isActive,
+      Name: user?.Name || user?.name,
+      Surname: user?.Surname || user?.surname,
+      UserTypeId: user?.UserTypeId || user?.userTypeId,
+      UserId: user?.UserId || user?.userId || user?.Id || user?.id,
+      GenderId: user?.GenderId || user?.genderId,
+      UserStatusId: user?.UserStatusId ?? user?.userStatusId,
+      RoleId: user?.RoleId || user?.roleId,
+      IsAdmin: user?.IsAdmin ?? user?.isAdmin,
+      ImageUrl: user?.ImageUrl || user?.imageUrl,
+      dialCode: user?.dialCode || user?.DialCode,
+      IsDefault: user?.IsDefault ?? user?.isDefault,
+      EmpId: user?.EmpId || user?.empId,
+      WorkingCompanyId: user?.WorkingCompanyId || user?.workingCompanyId,
+      IsDeleted: user?.IsDeleted ?? user?.isDeleted,
+      CompanyName: user?.CompanyName || user?.companyName,
     };
   }
 }

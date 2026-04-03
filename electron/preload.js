@@ -57,6 +57,13 @@ contextBridge.exposeInMainWorld('oisMeet', {
   }
 });
 
+contextBridge.exposeInMainWorld('windowAPI', {
+  minimize: () => ipcRenderer.send('win:minimize'),
+  maximize: () => ipcRenderer.send('win:maximize'),
+  close: () => ipcRenderer.send('win:close'),
+  isMaximized: () => ipcRenderer.invoke('win:isMaximized')
+});
+
 // When main process forwards cached auth for a newly created window, emit
 // a DOM CustomEvent so renderer code listening for 'electron-auth-data'
 // receives it (this mirrors the existing renderer-side listener).

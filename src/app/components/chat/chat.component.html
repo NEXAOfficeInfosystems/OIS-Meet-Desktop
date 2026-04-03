@@ -1,4 +1,4 @@
-<!-- ── In-app toast notifications ─────────────────────────────────────────── -->
+<!-- In-app toast notifications -->
 <div class="ois-toast-container">
   <div class="ois-toast" *ngFor="let toast of toasts" (click)="dismissToast(toast.id)">
     <div class="ois-toast-avatar" [style.background-color]="toast.avatarColor">
@@ -14,223 +14,221 @@
   </div>
 </div>
 
-<!-- ── Main chat layout ────────────────────────────────────────────────────── -->
-<div class="teams-chat-container">
-
-  <!-- Left Sidebar -->
-  <div class="users-sidebar">
-    <div class="sidebar-header">
-      <h5 class="mb-0">Chat </h5>
+<div class="workspace-wrapper">
+  
+  <!-- TEAM/CHANNEL SIDEBAR (Secondary Sidebar) -->
+  <div class="secondary-sidebar">
+    <div class="sidebar-top">
+      <h6 class="sidebar-title">Teams</h6>
+      <button class="btn btn-icon-sm"><i class="bi bi-plus-lg"></i></button>
     </div>
-
-    <div class="search-box px-3 pb-3">
-      <div class="input-group">
-        <span class="input-group-text bg-light border-end-0"><i class="bi bi-search"></i></span>
-        <input type="text" class="form-control bg-light border-start-0"
-               placeholder="Search" (input)="searchUsers($event)">
+    
+    <div class="team-scroll-area">
+      <div class="team-section" *ngFor="let team of teams">
+        <div class="team-header d-flex align-items-center gap-2" 
+             [class.active]="activeTeam === team.name"
+             (click)="selectTeam(team)">
+          <div class="team-icon" [style.background-color]="team.color">
+            <i [class]="team.icon"></i>
+          </div>
+          <span class="team-name">{{ team.name }}</span>
+        </div>
+        
+        <ul class="channel-list" *ngIf="activeTeam === team.name">
+          <li *ngFor="let ch of channels" 
+              class="channel-item" 
+              [class.active]="activeChannel === ch"
+              (click)="selectChannel(ch)">
+            <i class="bi bi-hash"></i> {{ ch }}
+          </li>
+        </ul>
       </div>
     </div>
+  </div>
 
-    <div class="users-list">
-      <div *ngFor="let user of filteredUsers"
-           class="user-item"
-           [class.active]="selectedUser?.id === user.id"
-           (click)="selectUser(user)">
-
-        <div class="user-avatar" [style.background-color]="user.avatarColor">
-          {{ getUserDisplayName(user).charAt(0) }}
-          <span class="status-indicator" [class.online]="user.isOnline"></span>
-        </div>
-
-        <div class="user-info">
-          <div class="user-name-row">
-            <span class="user-name" [class.fw-bold]="user.unreadCount > 0">
-              {{ getUserDisplayName(user) }}
-            </span>
-            <span class="user-time">{{ user.lastMessageTime }}</span>
+  <!-- MAIN CONTENT AREA (Conversation Feed) -->
+  <div class="main-workspace-content">
+    
+    <!-- Workspace Header -->
+    <header class="workspace-header">
+      <div class="header-left">
+        <div class="channel-info">
+          <h5 class="channel-title"># {{ activeChannel }}</h5>
+          <div class="channel-meta">
+            <span class="member-count"><i class="bi bi-people"></i> 24 members</span>
+            <span class="divider"></span>
+            <span class="channel-topic">Strategic planning for Q4 product launches</span>
           </div>
-          <div class="last-message">
-            <span class="message-preview"
-                  [class.fw-semibold]="user.unreadCount > 0"
-                  [class.text-dark]="user.unreadCount > 0">
-              <i *ngIf="user.lastMessageType === 'Image'" class="bi bi-image me-1"></i>
-              <i *ngIf="user.lastMessageType === 'File'"  class="bi bi-file-earmark me-1"></i>
-              {{ user.lastMessage }}
-            </span>
-            <span *ngIf="user.unreadCount > 0" class="unread-badge">{{ user.unreadCount }}</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="header-actions">
+          <button class="action-btn"><i class="bi bi-telephone"></i></button>
+          <button class="action-btn"><i class="bi bi-camera-video"></i></button>
+          <button class="action-btn"><i class="bi bi-info-circle"></i></button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Chat Conversation Feed -->
+    <div class="chat-feed" #chatScrollArea>
+      <div *ngIf="messages.length === 0 && !isLoading" class="empty-state text-center py-5 opacity-50">
+        <i class="bi bi-chat-left-text fs-1 mb-3 d-block"></i>
+        <p>No messages in {{ activeChannel }} yet. Start the conversation!</p>
+      </div>
+
+      <div class="message-group" *ngFor="let msg of messages" 
+           [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
+        <div class="message-avatar-col" *ngIf="msg.senderId?.toString() !== currentUserId?.toString()">
+          <div class="msg-avatar" [style.background-color]="getMemberAvatarColor(msg.senderName)">
+            {{ msg.senderName.charAt(0).toUpperCase() }}
+          </div>
+        </div>
+        <div class="message-data-col">
+          <div class="msg-header">
+            <span class="sender-name">{{ msg.senderId?.toString() === currentUserId?.toString() ? 'You' : msg.senderName }}</span>
+            <span class="msg-time">{{ msg.sentAt | date:'shortTime' }}</span>
+          </div>
+          <div class="msg-content">
+            <p class="mb-0" *ngIf="msg.content">{{ msg.content }}</p>
+            
+            <!-- Attachments (Single File) -->
+            <div class="msg-attachments mt-2" *ngIf="msg.fileUrl">
+              <div class="file-chip" (click)="downloadFile(msg.fileUrl, msg.fileName)">
+                <i [class]="msg.fileName?.endsWith('.ppt') || msg.fileName?.endsWith('.pptx') ? 'bi bi-file-earmark-ppt-fill text-danger' : 
+                           msg.fileName?.endsWith('.xlsx') || msg.fileName?.endsWith('.xls') ? 'bi bi-file-earmark-excel-fill text-success' : 
+                           msg.fileName?.endsWith('.jpg') || msg.fileName?.endsWith('.png') ? 'bi bi-file-earmark-image-fill text-info' :
+                           'bi bi-file-earmark-fill text-primary'" class="fs-4"></i>
+                <div class="file-info">
+                  <span class="file-name text-truncate" style="max-width: 200px;">{{ msg.fileName }}</span>
+                </div>
+                <button class="btn-download"><i class="bi bi-download"></i></button>
+              </div>
+            </div>
+
+            <!-- Legacy Attachments -->
+            <div class="msg-attachments" *ngIf="msg.attachments && msg.attachments.length > 0">
+              <div class="file-chip" *ngFor="let file of msg.attachments">
+                <i class="bi bi-file-earmark-fill text-primary fs-4"></i>
+                <div class="file-info">
+                  <span class="file-name">{{ file.fileName }}</span>
+                </div>
+                <button class="btn-download"><i class="bi bi-download"></i></button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div *ngIf="isLoading" class="text-center p-3">
+      <div *ngIf="isLoading" class="text-center py-3">
         <div class="spinner-border spinner-border-sm text-primary" role="status">
-          <span class="visually-hidden">Loading...</span>
+          <span class="visually-hidden">Loading messages...</span>
         </div>
       </div>
-
-      <div *ngIf="users.length === 0 && !isLoading" class="text-center p-3 text-muted">
-        No conversations yet
+      
+      <div *ngIf="isUploading" class="text-center py-2 text-muted fs-small">
+        <div class="spinner-border spinner-border-xs me-2" role="status"></div>
+        Uploading file...
       </div>
     </div>
+
+    <!-- Message Input -->
+    <footer class="workspace-input-area">
+      <div class="input-card shadow-sm">
+        <div class="toolbar">
+          <button class="tool-btn"><i class="bi bi-type-bold"></i></button>
+          <button class="tool-btn"><i class="bi bi-type-italic"></i></button>
+          <button class="tool-btn"><i class="bi bi-link-45deg"></i></button>
+          <button class="tool-btn"><i class="bi bi-list-ul"></i></button>
+          <span class="v-divider"></span>
+          <button class="tool-btn"><i class="bi bi-code-slash"></i></button>
+        </div>
+        <div class="message-field-wrapper">
+          <textarea class="message-textarea" 
+                    [(ngModel)]="newMessage" 
+                    (keyup.enter)="sendMessage()"
+                    placeholder="Message # {{ activeChannel }}"></textarea>
+        </div>
+        <div class="input-footer">
+          <div class="left-actions">
+            <!-- Hidden file input -->
+            <input type="file" #fileInput style="display: none" (change)='onFileSelected($event)'>
+            <button class="action-icon" (click)="fileInput.click()"><i class="bi bi-plus-circle"></i></button>
+            <button class="action-icon"><i class="bi bi-emoji-smile"></i></button>
+            <button class="action-icon"><i class="bi bi-mention"></i></button>
+          </div>
+          <button class="send-btn-primary" (click)="sendMessage()" [disabled]="isSendingMessage || (!newMessage.trim() && !isUploading)">
+            <i class="bi bi-send-fill" *ngIf="!isSendingMessage"></i>
+            <div class="spinner-border spinner-border-sm" *ngIf="isSendingMessage"></div>
+          </button>
+        </div>
+      </div>
+    </footer>
   </div>
 
-  <!-- Chat window -->
-  <div class="chat-window" *ngIf="selectedUser; else noChatSelected">
-
-    <!-- Header -->
-    <div class="chat-header">
-      <div class="chat-user-info">
-        <div class="user-avatar small" [style.background-color]="selectedUser.avatarColor">
-          {{ getUserDisplayName(selectedUser).charAt(0) }}
-          <span class="status-indicator small" [class.online]="selectedUser.isOnline"></span>
+  <!-- RIGHT PANEL (Info / Activity / Files) -->
+  <aside class="workspace-right-panel">
+    
+    <!-- User Profile Widget (Slack Style) -->
+    <section class="panel-section profile-widget" *ngIf="selectedUser">
+      <div class="profile-card border rounded-3 p-3 text-center mb-4">
+        <div class="avatar-large mx-auto mb-2" [style.background-color]="selectedUser.avatarColor || '#3b82f6'">
+          {{ (selectedUser.fullName || selectedUser.name || 'U').charAt(0).toUpperCase() }}
         </div>
-        <div class="chat-user-details">
-          <h6 class="mb-0">{{ getUserDisplayName(selectedUser) }}</h6>
-          <small class="user-status">
-            <span *ngIf="selectedUser.isOnline">Online</span>
-            <span *ngIf="!selectedUser.isOnline && selectedUser.lastSeen">
-              Last seen {{ selectedUser.lastSeen | date:'short' }}
+        <h6 class="mb-1">{{ selectedUser.fullName || selectedUser.name }}</h6>
+        <p class="text-muted small mb-0">{{ selectedUser.email }}</p>
+        <div class="mt-2">
+            <span class="badge rounded-pill" [ngClass]="selectedUser.isOnline ? 'bg-success-soft text-success' : 'bg-secondary-soft text-muted'">
+              ● {{ selectedUser.isOnline ? 'Online' : 'Offline' }}
             </span>
-            <span *ngIf="!selectedUser.isOnline && !selectedUser.lastSeen">Offline</span>
-            <span *ngIf="isTyping" class="typing-indicator ms-2">
-              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-            </span>
-          </small>
         </div>
       </div>
-      <div class="chat-actions">
-        <button class="btn btn-light btn-sm rounded-circle p-2 me-1" (click)="startVoiceCall()">
-          <i class="bi bi-telephone"></i>
-        </button>
-        <button class="btn btn-light btn-sm rounded-circle p-2 me-1" (click)="startVideoCall()">
-          <i class="bi bi-camera-video"></i>
-        </button>
-        <button class="btn btn-light btn-sm rounded-circle p-2" (click)="showUserInfo()">
-          <i class="bi bi-three-dots-vertical"></i>
-        </button>
+    </section>
+
+    <!-- Activity Feed -->
+    <section class="panel-section">
+      <div class="section-header d-flex justify-content-between mb-3">
+        <h6 class="fw-bold fs-7 mb-0">Team Activity</h6>
+        <a href="#" class="text-primary fs-small text-decoration-none">View all</a>
       </div>
-    </div>
-
-<!-- Messages -->
-  <div class="chat-messages" #chatMessages (scroll)="onScroll($event)">
-
-    <ng-container *ngFor="let msg of messages">
-
-      <!-- Date separator — driven by data, no method calls in template -->
-      <div *ngIf="msg.showDateSeparator" class="date-separator">
-        <span class="date-separator-label">{{ msg.dateSeparatorLabel }}</span>
-      </div>
-
-      <div class="message"
-          [class.message-me]="msg.senderId?.toString() === currentUserId">
-
-        <div class="message-avatar" *ngIf="msg.senderId?.toString() !== currentUserId">
-          <div class="user-avatar smallest" [style.background-color]="selectedUser.avatarColor">
-            {{ getUserDisplayName(selectedUser).charAt(0) }}
-          </div>
-        </div>
-
-        <div class="message-content">
-          <div class="bubble"
-              [class.me-bubble]="msg.senderId?.toString() === currentUserId"
-              [class.image-message]="msg.messageType === 'Image'">
-
-            <div *ngIf="msg.messageType === 'Text'"
-                [innerHTML]="msg.content | meetingLink"
-                (click)="onMessageClick($event)">
-            </div>
-
-            <div *ngIf="msg.messageType === 'Image'" class="image-attachment">
-              <img [src]="msg.fileUrl || msg.attachments?.[0]?.fileUrl"
-                  [alt]="msg.fileName || msg.attachments?.[0]?.fileName"
-                  class="img-fluid rounded" (click)="viewImage(msg)">
-            </div>
-
-            <div *ngIf="msg.messageType === 'File'" class="file-attachment">
-              <i class="bi bi-file-earmark me-2"></i>
-              <span class="file-name" (click)="downloadAttachment(msg.attachments?.[0])">
-                {{ msg.fileName || msg.attachments?.[0]?.fileName }}
-              </span>
-              <small class="text-muted ms-2">
-                ({{ getFileSize(msg.fileSize || msg.attachments?.[0]?.fileSize) }})
-              </small>
-            </div>
-
-            <div *ngIf="msg.messageType === 'System'"
-                class="system-message text-center text-muted small">
-              {{ msg.content }}
-            </div>
-          </div>
-
-          <div class="message-meta">
-            <span class="message-time">{{ formatTime(msg.sentAt) }}</span>
-            <i *ngIf="msg.senderId?.toString() === currentUserId"
-              class="bi read-receipt"
-              [class.bi-check]="!msg.isDelivered"
-              [class.bi-check-all]="msg.isDelivered"
-              [class.read]="msg.isRead"></i>
+      <div class="activity-list">
+        <div class="activity-item d-flex gap-2 mb-3" *ngFor="let act of activityFeed">
+          <div class="activity-dot mt-1"></div>
+          <div class="activity-content">
+            <p class="mb-0 fs-small"><strong>{{ act.user }}</strong> {{ act.action }}</p>
+            <span class="text-muted fs-xs">{{ act.time }}</span>
           </div>
         </div>
       </div>
+    </section>
 
-    </ng-container>
+    <hr class="section-divider">
 
-    <div *ngIf="isLoading && messages.length > 0" class="text-center p-2">
-      <div class="spinner-border spinner-border-sm text-primary" role="status">
-        <span class="visually-hidden">Loading more...</span>
+    <!-- Shared Files Section -->
+    <section class="panel-section">
+      <div class="section-header d-flex justify-content-between mb-3">
+        <h6 class="fw-bold fs-7 mb-0">Shared Files</h6>
+        <i class="bi bi-files text-muted"></i>
       </div>
-    </div>
-  </div>
-
-    <!-- Input area -->
-    <div class="chat-input-area">
-      <div class="input-container">
-        <input type="file" #fileInput style="display:none"
-               (change)="onFileSelected($event)"
-               accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx">
-
-        <button class="btn btn-link text-secondary attach-btn"
-                (click)="triggerFileInput()" [disabled]="isSendingFile || isSendingMessage">
-          <i class="bi bi-paperclip"></i>
-        </button>
-
-        <div class="flex-grow-1 position-relative">
-          <input type="text"
-                 class="form-control message-input border-0 bg-light"
-                 placeholder="Type a message"
-                 [(ngModel)]="newMessage"
-                 (keydown.enter)="sendMessage()"
-                 (input)="onTyping()"
-                 [disabled]="isSendingMessage">
+      <div class="file-list-small">
+        <div class="file-item-mini d-flex align-items-center gap-2 p-2 rounded mb-1" *ngFor="let file of sharedFiles">
+          <div class="file-icon-bg bg-light rounded p-2">
+            <i class="bi bi-file-earmark-fill text-primary"></i>
+          </div>
+          <div class="file-details-mini flex-grow-1 min-w-0">
+            <div class="file-name-mini text-truncate fs-xs fw-semibold">{{ file.name }}</div>
+            <div class="file-meta-mini fs-xs opacity-50">{{ file.date }} • {{ file.owner }}</div>
+          </div>
+          <button class="btn btn-sm text-secondary p-0"><i class="bi bi-three-dots"></i></button>
         </div>
-
-        <button class="btn btn-link send-btn"
-                [class.text-primary]="newMessage.trim() && !isSendingMessage"
-                [class.text-secondary]="!newMessage.trim() || isSendingMessage"
-                [disabled]="!newMessage.trim() || isSendingFile || isSendingMessage"
-                (click)="sendMessage()">
-          <span *ngIf="isSendingMessage"
-                class="spinner-border spinner-border-sm"
-                role="status" aria-hidden="true"></span>
-          <i *ngIf="!isSendingMessage" class="bi bi-send"></i>
-        </button>
-
-        <button class="btn btn-link text-secondary emoji-btn" (click)="showEmojiPicker()">
-          <i class="bi bi-emoji-smile"></i>
-        </button>
       </div>
-    </div>
-  </div>
+      <button class="btn btn-outline-secondary w-100 btn-sm mt-3">Browser all files</button>
+    </section>
 
-  <!-- No chat selected -->
-  <ng-template #noChatSelected>
-    <div class="no-chat-selected">
-      <i class="bi bi-chat-dots no-chat-icon"></i>
-      <h5>Select a conversation</h5>
-      <p class="text-muted">Choose a user from the list to start chatting</p>
-    </div>
-  </ng-template>
+  </aside>
+
 </div>
+
 
 <!-- Image viewer modal -->
 <div class="modal fade" id="imageViewerModal" tabindex="-1" aria-hidden="true">

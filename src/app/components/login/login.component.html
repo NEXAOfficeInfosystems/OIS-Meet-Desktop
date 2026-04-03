@@ -1,153 +1,140 @@
-<div class="login-body min-vh-100">
-  <div class="container-fluid min-vh-100">
-    <div class="row min-vh-100">
+<div class="login-container">
 
-      <!-- LEFT PANEL -->
-      <div class="col-lg-6 d-none d-lg-flex flex-column justify-content-between text-white p-5 left-panel">
-
-        <!-- TOP BRAND -->
-        <div>
-          <img src="assets/login/ois-meet-logo.svg" width="180" alt="OIS Meet Logo">
-        </div>
-
-        <!-- CENTER CONTENT -->
-        <div>
-          <h1 class="fw-bold">Welcome to<br>
-            OIS<span class="success-clr"> MEET</span>
-          </h1>
-          <hr class="custom-hr w-50 my-4">
-          <div class="down-content">
-            <p>Sign in once to access all your connected services.</p>
-          </div>
-
-        </div>
-
-        <!-- FOOTER -->
-        <div>
-          <h6>Powered by OIS © 2026</h6>
-        </div>
+  <!-- LEFT PANEL: Branding & Welcome -->
+  <section class="left-panel animate-fade-in">
+    <div class="branding-content">
+      <div class="brand-header mb-5">
+        <img src="assets/login/ois-meet-logo.svg" width="180" alt="OIS Meet Logo" class="brand-logo">
       </div>
 
-      <!-- RIGHT PANEL -->
-      <div class="col-12 col-lg-6 d-flex justify-content-center align-items-center">
+      <div class="hero-content">
+        <h1 class="hero-title">Welcome to<br>OIS <span class="accent-green">MEET</span></h1>
+        <div class="divider"></div>
+        <p class="hero-subtext">Sign in once to access all your connected services. Collaborate seamlessly across your
+          organization.</p>
+      </div>
 
-        <div class="login-wrapper">
+      <div class="brand-footer mt-5 opacity-50">
+        <p class="mb-0">Powered by OIS &copy; 2026</p>
+      </div>
+    </div>
+  </section>
 
-          <!-- LOGO -->
-          <div class="login-logo">
-            <img src="assets/login/logo.png" alt="OIS Meet">
+  <!-- RIGHT PANEL: Authentication Form -->
+  <section class="right-panel">
+
+    <div class="auth-card-container animate-slide-up">
+
+      <!-- Mobile Logo (Hidden via CSS on Desktop) -->
+      <div class="mobile-logo-wrapper d-lg-none text-center mb-2">
+        <img src="assets/login/ois-meet-logo.svg" width="140" alt="OIS Meet Logo">
+      </div>
+
+      <div class="auth-card shadow-sm">
+
+        <header class="text-center mb-1">
+          <h2 class="fw-bold text-dark">Log In</h2>
+          <p class="text-muted small">Access your workspace and start meeting</p>
+        </header>
+
+        <!-- Error Message Alert -->
+        <div *ngIf="formError"
+          class="alert alert-danger border-0 shadow-sm d-flex align-items-center gap-2 mb-2 animate-shake" role="alert">
+          <i class="bi bi-exclamation-circle-fill fs-5"></i>
+          <div>{{ formError }}</div>
+        </div>
+
+        <!-- Login Method Tabs -->
+        <nav class="custom-tabs mb-2">
+          <button class="nav-link" [class.active]="selectedTab === 'email'" (click)="showTab('email')" type="button">
+            <i class="bi bi-envelope me-1"></i> Email
+          </button>
+          <button class="nav-link" [class.active]="selectedTab === 'userid'" (click)="showTab('userid')" type="button">
+            <i class="bi bi-person-badge me-1"></i> ID
+          </button>
+          <button class="nav-link" [class.active]="selectedTab === 'mobile'" (click)="showTab('mobile')" type="button">
+            <i class="bi bi-phone me-1"></i> Mobile
+          </button>
+        </nav>
+
+        <form (ngSubmit)="onSubmit()" class="login-form">
+
+          <!-- Tab-Specific Input Fields -->
+          <div class="form-floating mb-2 animate-fade-in" *ngIf="selectedTab === 'email'">
+            <input type="email" class="form-control" id="emailInput" placeholder="name@company.com" [(ngModel)]="userID"
+              name="userID" required #emailInput>
+            <label for="emailInput">Email address</label>
           </div>
 
-          <!-- CARD -->
-          <div class="card login-card shadow-lg border-0 rounded-4">
-            <div class="card-body">
+          <div class="form-floating mb-2 animate-fade-in" *ngIf="selectedTab === 'userid'">
+            <input type="text" class="form-control" id="useridInput" placeholder="User ID" [(ngModel)]="userID"
+              name="userID" required #useridInput>
+            <label for="useridInput">User ID</label>
+          </div>
 
-              <!-- INLINE ERROR -->
-              <div *ngIf="formError" class="alert alert-danger d-flex align-items-start gap-2" role="alert">
-                <i class="bi bi-exclamation-triangle-fill mt-1"></i>
-                <div class="flex-grow-1 mt-1">{{ formError }}</div>
+          <div class="form-floating mb-2 animate-fade-in" *ngIf="selectedTab === 'mobile'">
+            <input type="tel" class="form-control" id="mobileInput" placeholder="Mobile Number" [(ngModel)]="userID"
+              name="userID" required #mobileInput>
+            <label for="mobileInput">Mobile Number</label>
+          </div>
+
+          <!-- Password Field -->
+          <div class="form-floating mb-2 position-relative">
+            <input [type]="isPasswordVisible ? 'text' : 'password'" class="form-control pe-5" id="passwordInput"
+              placeholder="Password" [(ngModel)]="password" name="password" required #passwordInput>
+            <label for="passwordInput">Password</label>
+            <button type="button"
+              class="btn btn-link password-toggle-btn position-absolute top-50 end-0 translate-middle-y me-2"
+              (click)="togglePasswordVisibility()" title="Toggle password visibility">
+              <i class="bi" [ngClass]="isPasswordVisible ? 'bi-eye-slash' : 'bi-eye'"></i>
+            </button>
+          </div>
+
+          <!-- CAPTCHA Section -->
+          <div class="captcha-container mb-2">
+            <div class="d-flex align-items-center gap-3">
+              <div class="captcha-image-wrapper p-1 bg-white rounded flex-shrink-0">
+                <img [src]="captcha?.imageBase64" alt="CAPTCHA" class="img-fluid" style="max-height: 40px;" />
               </div>
-
-              <!-- TABS -->
-              <ul class="nav nav-tabs nav-fill mb-4">
-                <li class="nav-item">
-                  <button class="nav-link" [class.active]="selectedTab === 'email'" (click)="showTab('email')">
-                    Email
-                  </button>
-                </li>
-                <li class="nav-item">
-                  <button class="nav-link" [class.active]="selectedTab === 'userid'" (click)="showTab('userid')">
-                    User ID
-                  </button>
-                </li>
-                <li class="nav-item">
-                  <button class="nav-link" [class.active]="selectedTab === 'mobile'" (click)="showTab('mobile')">
-                    Mobile
-                  </button>
-                </li>
-              </ul>
-
-              <!-- FORM -->
-              <form (ngSubmit)="onSubmit()" class="d-grid">
-
-                <!-- EMAIL -->
-                <div *ngIf="selectedTab === 'email'">
-                  <div class="input-group input-group-lg">
-                    <span class="input-group-text">
-                      <i class="bi bi-envelope"></i>
-                    </span>
-                      <input type="text" class="form-control" placeholder="Enter your email" [(ngModel)]="userID"
-                        name="userID" required #emailInput>
-                  </div>
-                </div>
-
-                <!-- USER ID -->
-                <div *ngIf="selectedTab === 'userid'">
-                  <div class="input-group input-group-lg">
-                    <span class="input-group-text">
-                      <i class="bi bi-person-badge"></i>
-                    </span>
-                      <input type="text" class="form-control" placeholder="Enter your user ID" [(ngModel)]="userID"
-                        name="userID" required #useridInput>
-                  </div>
-                </div>
-
-                <!-- MOBILE -->
-                <div *ngIf="selectedTab === 'mobile'">
-                  <div class="input-group input-group-lg">
-                    <span class="input-group-text">
-                      <i class="bi bi-phone"></i>
-                    </span>
-                      <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control no-spinner"
-                        placeholder="Enter your mobile number" [(ngModel)]="userID" name="userID" required #mobileInput>
-                  </div>
-                </div>
-
-                <!-- PASSWORD -->
-                <div class="input-group input-group-lg">
-                  <span class="input-group-text">
-                    <i class="bi bi-lock"></i>
-                  </span>
-                    <input [type]="isPasswordVisible ? 'text' : 'password'" class="form-control"
-                      placeholder="Enter your password" [(ngModel)]="password" name="password" required #passwordInput />
-                  <button type="button" class="btn btn-outline-secondary" (click)="togglePasswordVisibility()">
-                    <i class="bi" [ngClass]="isPasswordVisible ? 'bi-eye' : 'bi-eye-slash'"></i>
-                  </button>
-                </div>
-
-                <!-- CAPTCHA -->
-                <div class="row g-2 align-items-center">
-                  <div class="col-auto">
-                    <div class="captcha-box">
-                      <img [src]="captcha?.imageBase64" />
-                      <button type="button" class="btn btn-link p-0" (click)="getCaptcha()">↻</button>
-                    </div>
-                  </div>
-                  <div class="col">
-                      <input type="text" class="form-control" placeholder="Enter CAPTCHA" [(ngModel)]="enteredCode"
-                        name="captchaCode" required #captchaInput />
-                  </div>
-                </div>
-
-                <!-- REMEMBER ME -->
-                <div class="form-check">
-                  <input type="checkbox" class="form-check-input" [(ngModel)]="isRememberMeChecked" name="rememberMe" />
-                  <label class="form-check-label">Remember me</label>
-                </div>
-
-                <!-- LOGIN -->
-                <button type="submit" class="login-btn" [disabled]="showLoading">
-                  <span *ngIf="showLoading" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-                  <span>{{ showLoading ? loadingMessage : 'Log In' }}</span>
-                </button>
-
-              </form>
-
+              <button type="button" class="refresh-btn bg-white" (click)="getCaptcha()" title="Refresh">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+              <div class="form-floating flex-grow-1 mb-0">
+                <input type="text" class="form-control" id="captchaInput" placeholder="Code" [(ngModel)]="enteredCode"
+                  name="captchaCode" required #captchaInput>
+                <label for="captchaInput">Enter code</label>
+              </div>
             </div>
           </div>
-        </div>
+
+          <!-- Remember Me & Forgot Password -->
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="form-check custom-checkbox">
+              <input class="form-check-input" type="checkbox" id="rememberMe" [(ngModel)]="isRememberMeChecked"
+                name="rememberMe">
+              <label class="form-check-label text-muted small" for="rememberMe">Remember me</label>
+            </div>
+            <a href="javascript:void(0)" class="text-decoration-none small">Forgot password?</a>
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" class="login-submit-btn" [disabled]="showLoading">
+            <div class="d-flex align-items-center justify-content-center gap-2">
+              <span *ngIf="showLoading" class="spinner-border spinner-border-sm" role="status"></span>
+              <span>{{ showLoading ? loadingMessage : 'Log In' }}</span>
+              <i *ngIf="!showLoading" class="bi bi-arrow-right"></i>
+            </div>
+          </button>
+
+        </form>
+
+        <footer class="text-center mt-4 pt-2">
+          <p class="text-muted small mb-0">Don't have an account? <a href="javascript:void(0)" class="fw-bold">Contact
+              Support</a></p>
+        </footer>
 
       </div>
     </div>
-  </div>
+  </section>
+
 </div>

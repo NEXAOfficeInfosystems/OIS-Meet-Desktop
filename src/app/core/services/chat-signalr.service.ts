@@ -37,6 +37,7 @@ export class ChatSignalrService {
   private messageDeletedSubject = new BehaviorSubject<string | null>(null);
   private messagesReadSubject = new BehaviorSubject<any>(null);
   private newConversationSubject = new BehaviorSubject<any>(null);
+  private activeUsersListSubject = new BehaviorSubject<string[]>([]);
   private connectionStateSubject = new BehaviorSubject<signalR.HubConnectionState>(
     signalR.HubConnectionState.Disconnected
   );
@@ -54,6 +55,7 @@ export class ChatSignalrService {
   messageDeleted$ = this.messageDeletedSubject.asObservable();
   messagesRead$ = this.messagesReadSubject.asObservable();
   newConversation$ = this.newConversationSubject.asObservable();
+  activeUsersList$ = this.activeUsersListSubject.asObservable();
   connectionState$ = this.connectionStateSubject.asObservable();
 
   startConnection(userId: string | null): void {
@@ -116,19 +118,23 @@ export class ChatSignalrService {
   private registerChatEvents(): void {
     // Remove all existing handlers first to avoid duplicates
     this.hubConnection.off('MessageReceived');
+    this.hubConnection.off('ReceiveMessage');
     this.hubConnection.off('UserTyping');
     this.hubConnection.off('MessageStatus');
     this.hubConnection.off('UserOnline');
     this.hubConnection.off('UserOffline');
+    this.hubConnection.off('ActiveUsersList');
     this.hubConnection.off('MessageDeleted');
     this.hubConnection.off('MessagesRead');
     this.hubConnection.off('NewConversation');
 
     // Handle new messages
-    this.hubConnection.on('MessageReceived', (message: any) => {
+    const messageHandler = (message: any) => {
       console.log('📨 Message received:', message);
       this.messageReceivedSubject.next(message);
-    });
+    };
+    this.hubConnection.on('MessageReceived', messageHandler);
+    this.hubConnection.on('ReceiveMessage', messageHandler);
 
     // Handle typing indicators
     this.hubConnection.on('UserTyping', (data: { userId: string, isTyping: boolean }) => {
@@ -150,6 +156,11 @@ export class ChatSignalrService {
     this.hubConnection.on('UserOffline', (userId: string) => {
       console.log('🔴 User offline:', userId);
       this.userOfflineSubject.next(userId);
+    });
+
+    this.hubConnection.on('ActiveUsersList', (userIds: string[]) => {
+      console.log('👥 Active users list received:', userIds);
+      this.activeUsersListSubject.next(userIds);
     });
 
     // Handle deleted messages
