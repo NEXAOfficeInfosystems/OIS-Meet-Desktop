@@ -121,11 +121,11 @@ export class ChatService {
     type: string = 'Text',
     fileUrl?: string,
     fileName?: string,
-    formattedContent?: string,
-    replyToMessageId?: string
+    replyToMessageId?: string,
+    formattedContent?: string
   ): Observable<any> {
     const currentUserId = this.getCurrentUserId();
-    const requestBody = {
+    const requestBody: any = {
       conversationId: conversationId,
       senderId: currentUserId,
       content: content,

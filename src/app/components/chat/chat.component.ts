@@ -8,6 +8,12 @@ import { Subject, Subscription, takeUntil } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
 import { Router } from '@angular/router';
 import * as signalR from '@microsoft/signalr';
+import { Store } from '@ngrx/store';
+import { messagesFeature } from '../../core/state/messages/messages.reducer';
+import { MessagesActions } from '../../core/state/messages/messages.actions';
+import { notificationsFeature } from '../../core/state/notifications/notifications.reducer';
+import { callsFeature } from '../../core/state/calls/calls.reducer';
+import { presenceFeature } from '../../core/state/presence/presence.reducer';
 
 import { SessionService }   from '../../core/services/session.service';
 import { CommonService }    from '../../core/services/common.service';
@@ -52,6 +58,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   messages:    any[]  = [];
   newMessage:  string = '';
+  replyToMessage: any = null;
+  editingMessage: any = null;
+  editContent: string = '';
 
   // â”€â”€ UI flags â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   isLoading:        boolean = false;
@@ -101,7 +110,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private connectionStateSubscription!: Subscription;
   private shareMeetingIdHandler: ((e: Event) => void) | null = null;
 
-  // â”€â”€ Deduplication â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————
   private displayedMessageIds = new Set<string>();
 
   constructor(
@@ -111,12 +120,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private storageService:     StorageService,
     private chatService:        ChatService,
     private fileService:        FileService,
-    private meetingService:     MeetingService,     // â† ADDED for validateMeeting
+    private meetingService:     MeetingService,     // ← ADDED for validateMeeting
     private chatSignalrService: ChatSignalrService,
     private presenceService:    PresenceService,
     private collaborationService: CollaborationService,
     private cdr:                ChangeDetectorRef,
     private router:             Router,
+    private store:              Store
   ) {
     this.currentUserId = this.sessionService.getOISMeetUserId();
   }
@@ -135,31 +145,40 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.setupSignalREvents();
     this.setupPresenceTracking();
 
-    // â”€â”€ FIX: loadConversations only after SignalR connects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Remove the direct loadConversations() call from here â€” it now only
-    // fires from connectionState$ AFTER users are loaded
     this.connectionStateSubscription = this.chatSignalrService.connectionState$
       .subscribe(state => {
         this.isConnected = state === signalR.HubConnectionState.Connected;
         if (state === signalR.HubConnectionState.Connected) {
-          // Only load conversations here â€” users already loaded by this point
           this.loadConversations();
           
-          // â”€â”€ ADDED: Auto-select channel if in Teams view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           setTimeout(() => {
             if (this.activeView === 'teams') {
-              this.selectChannel('General');
+              const generalConv = this.users.find(u => u.isGroup && (u.name === 'General' || u.name === 'general' || u.name === 'Marketing Team'));
+              if (generalConv) this.selectUser(generalConv);
+              else this.selectChannel('General');
             }
-          }, 1000); // Give a moment for conversations to load
+          }, 1000);
         }
       });
+
+    // NgRx subscriptions
+    this.store.select(messagesFeature.selectByConversation).pipe(takeUntil(this.destroy$)).subscribe(byConv => {
+      const convId = this.selectedConversation?.id;
+      if (convId && byConv[convId]) {
+        this.messages = this.decorateMessagesWithDates(byConv[convId]);
+        this.shouldScroll = true;
+      }
+    });
+
+    this.store.select(messagesFeature.selectLoading).pipe(takeUntil(this.destroy$)).subscribe(loading => {
+      this.isLoading = loading;
+    });
 
     const pendingCompanyId = sessionStorage.getItem('selectedCompanyId');
     if (pendingCompanyId) {
       this.isCompanyChanging = true;
       this.isLoading = true;
     } else {
-      // â”€â”€ FIX: load users FIRST, then conversations inside the callback â”€â”€
       this.loadUsersForCurrentCompany();
     }
 
@@ -206,25 +225,61 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const content = this.newMessage?.trim();
     if (!content && !fileUrl) return;
 
-    this.isSendingMessage = true;
     const conversationId = this.selectedConversation?.id;
     if (!conversationId) return;
 
     const msgType = fileUrl ? 'File' : 'Text';
 
-    this.chatService.sendMessageApi(conversationId, content || '', msgType, fileUrl, fileName)
-      .subscribe({
-        next: (res) => {
-          if (res.success) {
-            if (!fileUrl) this.newMessage = '';
-          }
-          this.isSendingMessage = false;
-        },
-        error: (err) => {
-          console.error('API Send failed', err);
-          this.isSendingMessage = false;
-        }
-      });
+    this.store.dispatch(MessagesActions.sendMessage({
+      conversationId,
+      content: content || '',
+      messageType: msgType,
+      fileUrl,
+      fileName,
+      replyToMessageId: this.replyToMessage?.id
+    }));
+
+    if (!fileUrl) {
+      this.newMessage = '';
+      this.replyToMessage = null;
+    }
+  }
+
+  replyTo(message: any): void {
+    this.replyToMessage = message;
+    this.cdr.detectChanges();
+  }
+
+  cancelReply(): void {
+    this.replyToMessage = null;
+    this.cdr.detectChanges();
+  }
+
+  deleteMessage(messageId: string): void {
+    if (confirm('Are you sure you want to delete this message?')) {
+      this.store.dispatch(MessagesActions.deleteMessage({ messageId }));
+    }
+  }
+
+  editMessage(message: any): void {
+    this.editingMessage = { ...message };
+    this.editContent = message.content;
+    this.cdr.detectChanges();
+  }
+
+  saveEdit(): void {
+    if (!this.editingMessage || !this.editContent.trim()) return;
+    this.store.dispatch(MessagesActions.editMessage({
+      messageId: this.editingMessage.id,
+      content: this.editContent.trim()
+    }));
+    this.editingMessage = null;
+    this.editContent = '';
+  }
+
+  cancelEdit(): void {
+    this.editingMessage = null;
+    this.editContent = '';
   }
 
   // â”€â”€ FILE UPLOAD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -661,49 +716,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   loadMessages(conversationId: string): void {
     if (!conversationId) return;
-    this.isLoading = true;
-    this.displayedMessageIds.clear();
-
-    this.chatService.getMessages(conversationId, this.currentPage)
-      .pipe(
-        takeUntil(this.destroy$),
-        takeUntil(this.conversationSwitch$)
-      )
-      .subscribe({
-        next: (res) => {
-          if (this.selectedConversation?.id?.toString() !== conversationId?.toString()) {
-            this.isSwitchingUser = false;
-            return;
-          }
-
-          if (res.success && res.data) {
-            const msgs: any[] = res.data;
-            msgs.forEach(m => { if (m.id) this.displayedMessageIds.add(m.id.toString()); });
-
-            if (this.currentPage === 1) {
-              this.messages = this.decorateMessagesWithDates(msgs);
-              this.updateSharedFiles();
-              this.shouldScroll = true;
-            } else {
-              const combined = [...msgs, ...this.messages];
-              this.messages = this.decorateMessagesWithDates(combined);
-            }
-
-            this.hasMoreMessages = msgs.length === 50;
-
-            // â”€â”€ FIX: Mark ALL unread messages as read immediately â”€â”€â”€â”€â”€â”€â”€â”€
-            // No scrolling required â€” opening the conversation = read
-            this.markAllUnreadAsRead(conversationId);
-          }
-
-          this.isLoading = false;
-          this.isSwitchingUser = false;
-        },
-        error: () => {
-          this.isLoading = false;
-          this.isSwitchingUser = false;
-        }
-      });
+    this.store.dispatch(MessagesActions.loadConversationMessages({ 
+      conversationId, 
+      page: this.currentPage 
+    }));
   }
 
   private markAllUnreadAsRead(conversationId: string): void {
@@ -719,7 +735,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     if (!unreadIds.length) return;
 
-    // Update UI immediately
+    // Update UI immediately (local optimistic update, though store will sync)
     this.messages = this.messages.map(m => {
       if (unreadIds.includes(m.id?.toString())) {
         return { ...m, isRead: true, isDelivered: true };
@@ -727,13 +743,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       return m;
     });
 
-    // â”€â”€ Use MarkAllMessagesAsRead â€” covers ALL pages, not just loaded ones
     this.chatSignalrService
       .markAllMessagesAsRead(conversationId)
       .catch(err => console.error('markAllMessagesAsRead failed:', err));
 
     this.cdr.detectChanges();
   }
+
   async selectUser(user: any): Promise<void> {
     this.isSwitchingUser = true;
     this.conversationSwitch$.next();
@@ -744,12 +760,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.hasMoreMessages = true;
     this.isLoading = false;
 
-    // â”€â”€ FIX: Clear unread badge immediately when user opens conversation â”€â”€
     if (user.unreadCount > 0) {
       user.unreadCount = 0;
       this.totalUnreadCount = this.users.reduce((s, u) => s + (u.unreadCount || 0), 0);
       this.users = [...this.users];
-      this.sortUsersByLastMessage();
     }
 
     if (user.conversationId) {
@@ -768,17 +782,18 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         .subscribe({
           next: async (res) => {
             if (res.success && res.data) {
-              user.conversationId = res.data?.toString();
-              this.selectedConversation = { id: user.conversationId };
+              const convId = res.data?.toString();
+              user.conversationId = convId;
+              this.selectedConversation = { id: convId };
               try {
-                await this.chatSignalrService.joinConversation(user.conversationId);
-                this.loadMessages(user.conversationId);
+                await this.chatSignalrService.joinConversation(convId);
+                this.loadMessages(convId);
               } catch (err) {
                 console.error('Failed to join conversation:', err);
-                this.isSwitchingUser = false;
               }
             }
             this.isLoading = false;
+            this.isSwitchingUser = false;
           },
           error: () => {
             this.isLoading = false;
@@ -788,11 +803,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }
   }
 
-  // â”€â”€ TEAMS & CHANNELS LOGIC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
   selectTeam(team: any): void {
     this.activeTeam = team.name;
-    // For now, default to the 'General' channel of the selected team
     this.selectChannel('General');
   }
 
@@ -802,20 +814,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.currentPage = 1;
     this.hasMoreMessages = true;
 
-    // Find the 'Group' conversation that represents this channel
-    // In a real app, channels would have their own IDs. 
-    // Here we'll search conversations where type is 'Group' 
-    // or just use a fallback if not found.
     const groupConv = this.users.find(u => u.name === this.activeTeam && u.isGroup);
     
     if (groupConv && groupConv.conversationId) {
       this.selectedConversation = { id: groupConv.conversationId };
       this.loadMessages(groupConv.conversationId);
     } else {
-      // Fallback: If no real backend group conversation exists, 
-      // we show a descriptive message or the previous mock logic
-      console.log(`No API conversation found for ${this.activeTeam} - ${this.activeChannel}`);
-      this.messages = []; // Clear for now
+      console.log(`No active conversation found for ${this.activeTeam}`);
     }
   }
 

@@ -35,6 +35,7 @@ export class ChatSignalrService {
   private userOnlineSubject = new BehaviorSubject<string | null>(null);
   private userOfflineSubject = new BehaviorSubject<string | null>(null);
   private messageDeletedSubject = new BehaviorSubject<string | null>(null);
+  private messageUpdatedSubject = new BehaviorSubject<any>(null);
   private messagesReadSubject = new BehaviorSubject<any>(null);
   private newConversationSubject = new BehaviorSubject<any>(null);
   private activeUsersListSubject = new BehaviorSubject<string[]>([]);
@@ -53,6 +54,7 @@ export class ChatSignalrService {
   userOnline$ = this.userOnlineSubject.asObservable();
   userOffline$ = this.userOfflineSubject.asObservable();
   messageDeleted$ = this.messageDeletedSubject.asObservable();
+  messageUpdated$ = this.messageUpdatedSubject.asObservable();
   messagesRead$ = this.messagesReadSubject.asObservable();
   newConversation$ = this.newConversationSubject.asObservable();
   activeUsersList$ = this.activeUsersListSubject.asObservable();
@@ -125,6 +127,7 @@ export class ChatSignalrService {
     this.hubConnection.off('UserOffline');
     this.hubConnection.off('ActiveUsersList');
     this.hubConnection.off('MessageDeleted');
+    this.hubConnection.off('MessageUpdated');
     this.hubConnection.off('MessagesRead');
     this.hubConnection.off('NewConversation');
 
@@ -166,6 +169,11 @@ export class ChatSignalrService {
     // Handle deleted messages
     this.hubConnection.on('MessageDeleted', (messageId: string) => {
       this.messageDeletedSubject.next(messageId);
+    });
+
+    // Handle updated messages
+    this.hubConnection.on('MessageUpdated', (message: any) => {
+      this.messageUpdatedSubject.next(message);
     });
 
     // Handle messages read receipts
