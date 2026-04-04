@@ -8,7 +8,7 @@
   </header>
 
   <div class="feed-list">
-    <article class="feed-item" *ngFor="let file of files">
+    <article class="feed-item cursor-pointer" *ngFor="let file of files" (click)="openPreview(file)">
       <div class="feed-badge">F</div>
       <div class="feed-content">
         <div class="feed-title">{{ file.title }}</div>

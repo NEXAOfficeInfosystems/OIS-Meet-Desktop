@@ -30,6 +30,7 @@ import { SafeHtmlPipe } from '../../shared/pipes/safe-html.pipe';
 import { CallService, CallType, IncomingCall } from '../../core/services/call.service';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { SettingsService, UserSettings } from '../../core/services/settings.service';
+import { PreviewService } from '../../core/services/preview.service';
 
 
 declare var bootstrap: any;
@@ -180,7 +181,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private cdr: ChangeDetectorRef,
     private router: Router,
     private store: Store,
-    private settingsService: SettingsService
+    private settingsService: SettingsService,
+    private previewService: PreviewService
   ) {
     this.currentUserId = this.sessionService.getOISMeetUserId();
   }
@@ -691,6 +693,22 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // COMPANY CHANGE
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+  openPreview(file: any): void {
+    const url = this.fileService.getFileUrl(file.fileUrl || file.FileUrl || file.url);
+    const name = file.fileName || file.FileName || file.name;
+    const type = name.split('.').pop()?.toLowerCase() || '';
+    const isOffice = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(type);
+    
+    this.previewService.open({
+      fileName: name,
+      fileUrl: url,
+      fileType: type,
+      uploader: file.senderName || file.owner || 'System',
+      timestamp: file.sentAt ? new Date(file.sentAt).toLocaleString() : file.date || 'Recently',
+      allowEdit: isOffice // Demonstrate editing for office files
+    });
+  }
 
   private handleCompanyChange(): void {
     this.users = [];

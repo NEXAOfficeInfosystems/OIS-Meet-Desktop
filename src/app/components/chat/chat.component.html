@@ -288,14 +288,15 @@
             <!-- Legacy Attachments -->
             <div class="msg-attachments"
               *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
-              <div class="file-chip" *ngFor="let file of (msg.attachments || msg.Attachments)">
-                <i class="bi bi-file-earmark-fill text-primary fs-4"></i>
+              <div class="file-chip animate-fade-in" *ngFor="let file of (msg.attachments || msg.Attachments)" (click)="openPreview(file)">
+                <i class="bi fs-4" [class]="getFileIcon(file.fileName || file.FileName)"></i>
                 <div class="file-info">
-                  <span class="file-name">{{ file.fileName || file.FileName }}</span>
+                  <span class="file-name text-truncate" style="max-width: 150px;">{{ file.fileName || file.FileName }}</span>
                 </div>
                 <button class="btn-download"
-                  (click)="downloadFile(file.fileUrl || file.FileUrl, file.fileName || file.FileName)"><i
-                    class="bi bi-download"></i></button>
+                  (click)="downloadFile(file.fileUrl || file.FileUrl, file.fileName || file.FileName); $event.stopPropagation()">
+                  <i class="bi bi-download"></i>
+                </button>
               </div>
             </div>
             <div class="msg-attachments-hidden mt-1"
@@ -497,7 +498,7 @@
         </div>
 
         <div class="attachment-item-card d-flex align-items-center gap-2 p-2 rounded mb-2 border cursor-pointer hover-bg-light animate-fade-in" 
-             *ngFor="let file of filteredSharedFiles" (click)="downloadFile(file.url, file.name)">
+             *ngFor="let file of filteredSharedFiles" (click)="openPreview(file)">
           <div class="file-icon-square p-2 bg-light rounded d-flex align-items-center justify-content-center">
             <i class="bi fs-5" [class]="getFileIcon(file.type)"></i>
           </div>

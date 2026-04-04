@@ -43,6 +43,7 @@ export interface ActivityDto {
   entityType?: string | null;
   entityId?: string | null;
   createdAt: string;
+  metadata?: any;
 }
 
 export interface CallParticipantDto {
