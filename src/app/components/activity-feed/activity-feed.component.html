@@ -1,36 +1,36 @@
-<div class="activity-page-container">
-  
-  <!-- Left Panel: List & Filters -->
-  <div class="list-panel">
-    <app-activity-list
-      [items]="filteredItems"
-      [loading]="loading"
-      [unreadCount]="unreadCount"
-      [activeFilter]="activeFilter"
-      [selectedId]="selectedActivity?.id || null"
-      (filterChange)="applyFilter($event)"
-      (select)="selectActivity($event)"
-      (refresh)="loadActivities()">
-    </app-activity-list>
-  </div>
+<div class="activity-feed-layout">
+  <!-- Left Panel: Activity List -->
+  <aside class="activity-list-panel">
+    <app-activity-header></app-activity-header>
+    <app-activity-filter-tabs></app-activity-filter-tabs>
+    <app-activity-list></app-activity-list>
+  </aside>
 
-  <!-- Right Panel: Context Detail -->
-  <div class="detail-panel">
-    <app-activity-detail
-      [activity]="selectedActivity"
-      [messages]="contextMessages"
-      [currentUserId]="session.getOISMeetUserId()"
-      [loadingContext]="loadingContext"
-      [isSending]="isSendingReply"
-      [isUploading]="isUploadingFile"
-      [replyTo]="replyToMessage"
-      [sharedFiles]="sharedFiles"
-      (refresh)="loadActivities()"
-      (sendReply)="handleSendReply($event)"
-      (fileSelect)="handleFileSelect($event)"
-      (cancelReply)="replyToMessage = null"
-      (loadMore)="selectedActivity && loadContext(selectedActivity, true)">
-    </app-activity-detail>
-  </div>
+  <!-- Right Panel: Activity Detail -->
+  <main class="activity-detail-panel">
+    @if (selectedActivity()) {
+      <app-activity-detail-header [activity]="selectedActivity()"></app-activity-detail-header>
+      <app-activity-detail-tabs [(activeTab)]="activeDetailTab"></app-activity-detail-tabs>
+      
+      <div class="detail-content">
+        @if (activeDetailTab === 'chat') {
+          <app-chat-thread [contextId]="selectedActivity()!.contextId"></app-chat-thread>
+        } @else {
+          <!-- Shared files would go here -->
+          <div class="shared-files-stub">Shared files loading is coming soon!</div>
+        }
+      </div>
 
+      <app-reply-bar 
+        [activityName]="selectedActivity()?.senderName || ''"
+        (sendReply)="onSendReply($event)">
+      </app-reply-bar>
+    } @else {
+      <div class="no-selection">
+        <i class="bi bi-bell"></i>
+        <h3>Select an activity to view details</h3>
+        <p>Catch up on mentions, shared files, and more.</p>
+      </div>
+    }
+  </main>
 </div>

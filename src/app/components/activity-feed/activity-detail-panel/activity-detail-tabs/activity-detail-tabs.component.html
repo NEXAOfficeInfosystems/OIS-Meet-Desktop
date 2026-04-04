@@ -1,0 +1,8 @@
+<div class="tabs-container">
+  <button class="tab-btn" [class.is-active]="activeTab() === 'chat'" (click)="setTab('chat')">
+    Chat
+  </button>
+  <button class="tab-btn" [class.is-active]="activeTab() === 'shared'" (click)="setTab('shared')">
+    Shared
+  </button>
+</div>

@@ -1,0 +1,8 @@
+@if (isVisible()) {
+  <button class="scroll-to-bottom" (click)="onClick()" aria-label="Scroll to bottom">
+    <i class="bi bi-arrow-down"></i>
+    @if (unreadCount() > 0) {
+      <div class="badge">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</div>
+    }
+  </button>
+}

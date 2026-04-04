@@ -1,0 +1,128 @@
+﻿.chat-thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at top, rgba(79, 124, 255, 0.04), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.94));
+
+  .loader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 220px;
+    color: #64748b;
+
+    .spinner-border {
+      width: 40px;
+      height: 40px;
+    }
+  }
+
+  .message-row {
+    display: flex;
+    gap: 12px;
+    max-width: min(84%, 720px);
+    align-self: flex-start;
+
+    &.is-self {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+
+      .message-bubble {
+        background: linear-gradient(135deg, var(--color-primary), #6ea8ff);
+        border-color: rgba(79, 124, 255, 0.18);
+        color: #fff;
+        border-radius: 14px 14px 4px 14px;
+      }
+    }
+
+    .avatar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #eef2ff, #e2e8f0);
+      color: #475569;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .message-bubble {
+      position: relative;
+      padding: 12px 14px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 14px 14px 14px 4px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+
+        .sender {
+          color: #0f172a;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .time {
+          color: #94a3b8;
+          font-size: 10px;
+          font-weight: 600;
+        }
+      }
+
+      .content {
+        color: #334155;
+        font-size: 13.5px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .status {
+        position: absolute;
+        right: 6px;
+        bottom: -18px;
+        color: #94a3b8;
+        font-size: 12px;
+      }
+    }
+  }
+
+  .empty-thread {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 240px;
+    padding: 48px 24px;
+    color: #94a3b8;
+    text-align: center;
+
+    i {
+      margin-bottom: 12px;
+      opacity: 0.18;
+      color: var(--color-primary);
+      font-size: 42px;
+    }
+
+    p {
+      margin: 0;
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1.6;
+      max-width: 320px;
+    }
+  }
+}

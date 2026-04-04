@@ -1,0 +1,24 @@
+<div class="activity-row" [class.is-unread]="!activity().isRead" [class.is-selected]="isSelected()">
+  <div class="avatar">
+    {{ activity().senderName?.charAt(0)?.toUpperCase() || 'S' }}
+    @if (!activity().isRead) {
+      <div class="unread-dot"></div>
+    }
+  </div>
+  
+  <div class="content">
+    <div class="header">
+      <span class="sender">{{ activity().senderName || 'System' }}</span>
+      <span class="time">{{ activity().createdAt | date:'shortTime' }}</span>
+    </div>
+    
+    <div class="body">
+      <i class="bi" [ngClass]="getIconClass()"></i>
+      <span class="preview">{{ getDisplayText() }}</span>
+    </div>
+    
+    <div class="footer">
+      <span class="context">{{ activity().context || 'Meeting' }}</span>
+    </div>
+  </div>
+</div>

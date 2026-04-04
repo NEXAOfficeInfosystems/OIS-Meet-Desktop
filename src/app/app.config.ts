@@ -1,6 +1,6 @@
 import { ApplicationConfig } from '@angular/core';
 import { provideRouter, withHashLocation } from '@angular/router';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideStore, provideState } from '@ngrx/store';
 import { provideEffects } from '@ngrx/effects';
@@ -16,6 +16,7 @@ import { MessagesEffects } from './core/state/messages/messages.effects';
 import { NotificationsEffects } from './core/state/notifications/notifications.effects';
 import { CallsEffects } from './core/state/calls/calls.effects';
 import { PresenceEffects } from './core/state/presence/presence.effects';
+import { authInterceptor } from './core/interceptors/auth.interceptor';
 
 export const appConfig: ApplicationConfig = {
   // withHashLocation() is required for the Electron EXE (file:// context).
@@ -24,7 +25,7 @@ export const appConfig: ApplicationConfig = {
   // Angular's HTML5 router ignores the fragment and always lands on login.
   providers: [
     provideRouter(routes, withHashLocation()),
-    provideHttpClient(),
+    provideHttpClient(withInterceptors([authInterceptor])),
     provideAnimations(),
     provideStore(),
     provideState(messagesFeature),

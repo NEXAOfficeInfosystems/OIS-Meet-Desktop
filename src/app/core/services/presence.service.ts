@@ -22,15 +22,15 @@ export class PresenceService {
     this.fetchActiveUsers();
 
     // 2. Subscribe to SignalR events
-    this.chatSignalrService.userOnline$.subscribe(userId => {
+    this.chatSignalrService.userOnline$.subscribe((userId: string) => {
       if (userId) this.addUser(userId);
     });
 
-    this.chatSignalrService.userOffline$.subscribe(userId => {
+    this.chatSignalrService.userOffline$.subscribe((userId: string) => {
       if (userId) this.removeUser(userId);
     });
 
-    this.chatSignalrService.activeUsersList$?.subscribe(userIds => {
+    this.chatSignalrService.activeUsersList$.subscribe((userIds: string[]) => {
       if (userIds) this.onlineUsersSubject.next(userIds);
     });
 

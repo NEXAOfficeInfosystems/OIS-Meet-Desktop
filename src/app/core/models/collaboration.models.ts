@@ -91,6 +91,7 @@ export interface CreateChannelRequest {
   name: string;
   description?: string | null;
   channelType: string;
+  createdBy?: string;
 }
 
 export interface StartCallRequest {

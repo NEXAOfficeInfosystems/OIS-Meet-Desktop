@@ -1,0 +1,23 @@
+@if (activity()) {
+  <div class="detail-header">
+    <div class="sender-info">
+      <div class="avatar">{{ getAvatarLetter() }}</div>
+      <div class="text">
+        <h2 class="name">{{ activity()?.sender?.fullName || 'System' }}</h2>
+        <span class="context">{{ activity()?.context || 'Meeting' }}</span>
+      </div>
+    </div>
+    
+    <div class="actions">
+      <button class="btn-action" aria-label="Start audio call">
+        <i class="bi bi-telephone"></i>
+      </button>
+      <button class="btn-action" aria-label="Start video call">
+        <i class="bi bi-camera-video"></i>
+      </button>
+      <button class="btn-action" aria-label="More options">
+        <i class="bi bi-three-dots"></i>
+      </button>
+    </div>
+  </div>
+}

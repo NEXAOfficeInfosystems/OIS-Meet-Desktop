@@ -12,21 +12,21 @@ export class PresenceEffects {
 
   syncOnlineUsers$ = createEffect(() =>
     this.chatSignalr.activeUsersList$.pipe(
-      map(userIds => PresenceActions.syncOnlineUsers({ onlineUserIds: userIds ?? [] }))
+      map((userIds: string[]) => PresenceActions.syncOnlineUsers({ onlineUserIds: userIds ?? [] }))
     )
   );
 
   userOnline$ = createEffect(() =>
     this.chatSignalr.userOnline$.pipe(
       filter(Boolean),
-      map(userId => PresenceActions.userStatusChanged({ userId, status: 'online' }))
+      map((userId: string) => PresenceActions.userStatusChanged({ userId, status: 'online' }))
     )
   );
 
   userOffline$ = createEffect(() =>
     this.chatSignalr.userOffline$.pipe(
       filter(Boolean),
-      map(userId => PresenceActions.userStatusChanged({ userId, status: 'offline' }))
+      map((userId: string) => PresenceActions.userStatusChanged({ userId, status: 'offline' }))
     )
   );
 

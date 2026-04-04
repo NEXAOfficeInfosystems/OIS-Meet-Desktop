@@ -1,82 +1,124 @@
-:host {
-  display: block;
-  height: 100%;
-  overflow: hidden;
-}
-
-.activity-page-container {
+﻿.activity-feed-layout {
   display: flex;
-  height: calc(100vh - var(--app-header-offset, 0px));
+  gap: 0;
   width: 100%;
-  background: #ffffff;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
-  position: relative;
-}
+  padding: 0;
+  background:
+    radial-gradient(circle at top left, rgba(82, 117, 255, 0.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.06), transparent 24%),
+    linear-gradient(180deg, #f8fbff 0%, #f5f7fb 100%);
 
-.list-panel {
-  width: 320px;
-  min-width: 300px;
-  max-width: 400px;
-  height: 100%;
-  flex-shrink: 0;
-  border-right: 1px solid #f0f1f4;
-  z-index: 2;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.detail-panel {
-  flex: 1;
-  height: 100%;
-  min-width: 0;
-  background: #ffffff;
-  display: flex;
-  flex-direction: column;
-  z-index: 1;
-}
-
-// Mobile Responsive
-@media (max-width: 768px) {
-  .activity-page-container {
+  .activity-list-panel {
+    width: 340px;
+    display: flex;
     flex-direction: column;
+    min-height: 0;
+    flex-shrink: 0;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow:
+      0 12px 32px rgba(15, 23, 42, 0.06),
+      0 2px 8px rgba(15, 23, 42, 0.03);
+    overflow: hidden;
+    backdrop-filter: blur(12px);
   }
-  
-  .list-panel {
-    width: 100% !important;
-    max-width: none !important;
-    height: 100%;
-    
-    // Hide list panel when activity is selected on mobile
-    &.has-selection {
-        display: none;
+
+  .activity-detail-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow:
+      0 12px 32px rgba(15, 23, 42, 0.05),
+      0 2px 8px rgba(15, 23, 42, 0.03);
+    position: relative;
+    overflow: hidden;
+
+    .detail-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.4), rgba(255, 255, 255, 0.05));
+    }
+
+    .no-selection {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      color: #94a3b8;
+      text-align: center;
+      background:
+        radial-gradient(circle at center, rgba(96, 165, 250, 0.06), transparent 28%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(248, 250, 252, 0.9));
+
+      i {
+        font-size: 68px;
+        margin-bottom: 22px;
+        opacity: 0.14;
+        color: var(--color-primary);
+      }
+
+      h3 {
+        margin: 0 0 10px;
+        color: #1f2937;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      p {
+        max-width: 320px;
+        margin: 0;
+        color: #64748b;
+        font-size: 14px;
+        line-height: 1.6;
+      }
     }
   }
-  
-  .detail-panel {
-    width: 100%;
-    height: 100%;
-    
-    // Show only when there is a selection
-    &:not(.has-selection) {
-        display: none;
+
+  .shared-files-stub {
+    margin: 24px;
+    padding: 32px;
+    text-align: center;
+    color: #475569;
+    background: rgba(248, 250, 252, 0.9);
+    border: 1px dashed rgba(148, 163, 184, 0.35);
+    border-radius: 20px;
+    font-style: normal;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+}
+
+@media (max-width: 1100px) {
+  .activity-feed-layout {
+    gap: 12px;
+    padding: 12px;
+
+    .activity-list-panel {
+      width: 320px;
     }
   }
 }
 
-// Fade in animations for incoming items
-::ng-deep .activity-item {
-  animation: slideIn 0.3s ease-out;
-}
+@media (max-width: 900px) {
+  .activity-feed-layout {
+    flex-direction: column;
+    overflow: auto;
 
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-// Premium Glow effects
-.list-panel {
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.02);
-}
-
-.detail-panel {
-  background: radial-gradient(circle at top right, rgba(0, 102, 255, 0.02), transparent 400px);
+    .activity-list-panel {
+      width: 100%;
+    }
+  }
 }

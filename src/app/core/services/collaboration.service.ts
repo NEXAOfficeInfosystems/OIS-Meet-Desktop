@@ -57,7 +57,11 @@ export class CollaborationService {
   }
 
   createChannel(request: CreateChannelRequest): Observable<any> {
-    return this.http.post(`${this.apiUrl}/channels`, request);
+    const createdBy = request.createdBy || this.userId;
+    return this.http.post(`${this.apiUrl}/channels`, {
+      ...request,
+      createdBy
+    });
   }
 
   getNotifications(): Observable<{ success: boolean; data: NotificationDto[]; unreadCount: number }> {

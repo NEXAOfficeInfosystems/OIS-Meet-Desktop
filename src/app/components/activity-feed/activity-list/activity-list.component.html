@@ -1,0 +1,27 @@
+<div class="list-container">
+  @if (activities().length > 50) {
+    <cdk-virtual-scroll-viewport itemSize="72" class="viewport">
+      <app-activity-item 
+        *cdkVirtualFor="let item of activities()" 
+        [activity]="item" 
+        [isSelected]="selectedActivity()?.id === item.id"
+        (click)="select(item)">
+      </app-activity-item>
+    </cdk-virtual-scroll-viewport>
+  } @else {
+    <div class="regular-list">
+      @for (item of activities(); track item.id) {
+        <app-activity-item 
+          [activity]="item" 
+          [isSelected]="selectedActivity()?.id === item.id"
+          (click)="select(item)">
+        </app-activity-item>
+      } @empty {
+        <div class="empty-state">
+          <i class="bi bi-bell-slash"></i>
+          <p>No activities yet</p>
+        </div>
+      }
+    </div>
+  }
+</div>

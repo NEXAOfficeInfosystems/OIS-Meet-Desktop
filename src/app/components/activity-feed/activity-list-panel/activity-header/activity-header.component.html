@@ -1,0 +1,14 @@
+<div class="activity-header">
+  <div class="title-group">
+    <h1>Feed</h1>
+    @if (unreadCount() > 0) {
+      <div class="unread-badge">{{ unreadCount() }}</div>
+    }
+  </div>
+  
+  <div class="actions">
+    <button class="btn-icon" (click)="refresh()" aria-label="Refresh activity feed">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+  </div>
+</div>

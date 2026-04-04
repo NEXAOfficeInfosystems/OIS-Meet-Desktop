@@ -1,6 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal, computed, NgZone } from '@angular/core';
 import * as signalR from '@microsoft/signalr';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Subject, Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 export interface SendMessageRequest {
@@ -17,395 +17,157 @@ export interface SendMessageRequest {
   }[];
 }
 
-export interface QueuedMessage {
-  request: SendMessageRequest;
-  resolve: (value: void | PromiseLike<void>) => void;
-  reject: (reason?: any) => void;
-  retryCount: number;
-}
-
 @Injectable({
   providedIn: 'root'
 })
 export class ChatSignalrService {
   private hubConnection!: signalR.HubConnection;
-  private messageReceivedSubject = new BehaviorSubject<any>(null);
-  private userTypingSubject = new BehaviorSubject<{ userId: string, isTyping: boolean } | null>(null);
-  private messageStatusSubject = new BehaviorSubject<{ messageId: string, status: string } | null>(null);
-  private userOnlineSubject = new BehaviorSubject<string | null>(null);
-  private userOfflineSubject = new BehaviorSubject<string | null>(null);
-  private messageDeletedSubject = new BehaviorSubject<string | null>(null);
-  private messageUpdatedSubject = new BehaviorSubject<any>(null);
-  private messagesReadSubject = new BehaviorSubject<any>(null);
-  private newConversationSubject = new BehaviorSubject<any>(null);
-  private reactionAddedSubject = new BehaviorSubject<any>(null);
-  private reactionRemovedSubject = new BehaviorSubject<any>(null);
+  
+  // Connection State
+  private connectionStateSubject = new BehaviorSubject<signalR.HubConnectionState>(signalR.HubConnectionState.Disconnected);
+  connectionState$ = this.connectionStateSubject.asObservable();
+  connectionState = signal<signalR.HubConnectionState>(signalR.HubConnectionState.Disconnected);
+
+  // Core Events
+  private messageReceivedSubject = new Subject<any>();
+  private messageUpdatedSubject = new Subject<any>();
+  private messageDeletedSubject = new Subject<string>();
+  private messageStatusSubject = new Subject<any>();
+  
+  // Presence & Activity
+  private userOnlineSubject = new Subject<string>();
+  private userOfflineSubject = new Subject<string>();
   private activeUsersListSubject = new BehaviorSubject<string[]>([]);
-  private memberAddedSubject = new BehaviorSubject<string | null>(null);
-  private groupInfoUpdatedSubject = new BehaviorSubject<any>(null);
-  private connectionStateSubject = new BehaviorSubject<signalR.HubConnectionState>(
-    signalR.HubConnectionState.Disconnected
-  );
+  private userTypingSubject = new Subject<any>();
+  private newActivitySubject = new Subject<any>();
 
-  // Message queue for when connection is reconnecting
-  private messageQueue: QueuedMessage[] = [];
-  private isProcessingQueue = false;
-  private maxRetryCount = 3;
+  // Conversation Management
+  private newConversationSubject = new Subject<any>();
+  private memberAddedSubject = new Subject<string>();
+  private groupInfoUpdatedSubject = new Subject<any>();
 
+  // Reactions
+  private reactionAddedSubject = new Subject<any>();
+  private reactionRemovedSubject = new Subject<any>();
+
+  // Public Observables
   messageReceived$ = this.messageReceivedSubject.asObservable();
-  userTyping$ = this.userTypingSubject.asObservable();
+  messageUpdated$ = this.messageUpdatedSubject.asObservable();
+  messageDeleted$ = this.messageDeletedSubject.asObservable();
   messageStatus$ = this.messageStatusSubject.asObservable();
+  
   userOnline$ = this.userOnlineSubject.asObservable();
   userOffline$ = this.userOfflineSubject.asObservable();
-  messageDeleted$ = this.messageDeletedSubject.asObservable();
-  messageUpdated$ = this.messageUpdatedSubject.asObservable();
-  messagesRead$ = this.messagesReadSubject.asObservable();
-  newConversation$ = this.newConversationSubject.asObservable();
-  reactionAdded$ = this.reactionAddedSubject.asObservable();
-  reactionRemoved$ = this.reactionRemovedSubject.asObservable();
   activeUsersList$ = this.activeUsersListSubject.asObservable();
+  userTyping$ = this.userTypingSubject.asObservable();
+  newActivity$ = this.newActivitySubject.asObservable();
+
+  newConversation$ = this.newConversationSubject.asObservable();
   memberAdded$ = this.memberAddedSubject.asObservable();
   groupInfoUpdated$ = this.groupInfoUpdatedSubject.asObservable();
-  connectionState$ = this.connectionStateSubject.asObservable();
+
+  reactionAdded$ = this.reactionAddedSubject.asObservable();
+  reactionRemoved$ = this.reactionRemovedSubject.asObservable();
+
+  constructor(private ngZone: NgZone) {}
 
   startConnection(userId: string | null): void {
-    if (!userId) {
-      console.error('Cannot start connection: No userId provided');
-      return;
-    }
+    if (!userId) return;
 
-    // Don't start if already connecting/connected
-    if (this.hubConnection &&
-        (this.hubConnection.state === signalR.HubConnectionState.Connected ||
-         this.hubConnection.state === signalR.HubConnectionState.Connecting)) {
-      console.log('Connection already exists in state:', this.hubConnection.state);
-      return;
-    }
+    if (this.hubConnection && (
+      this.hubConnection.state === signalR.HubConnectionState.Connected ||
+      this.hubConnection.state === signalR.HubConnectionState.Connecting
+    )) return;
 
     const baseUrl = environment.apiBaseUrl.replace('/api', '');
     const url = `${baseUrl}/hubs/chat?userId=${userId}`;
 
     this.hubConnection = new signalR.HubConnectionBuilder()
       .withUrl(url)
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 20000]) // Custom retry intervals
+      .withAutomaticReconnect()
       .configureLogging(signalR.LogLevel.Information)
       .build();
 
-    // Monitor connection state changes
-    this.hubConnection.onreconnecting((error) => {
-      console.log('Connection reconnecting...', error);
-      this.connectionStateSubject.next(signalR.HubConnectionState.Reconnecting);
-    });
+    this.registerEvents();
 
-    this.hubConnection.onreconnected((connectionId) => {
-      console.log('Connection reconnected', connectionId);
-      this.connectionStateSubject.next(signalR.HubConnectionState.Connected);
-      this.registerChatEvents(); // Re-register events after reconnection
-      this.processMessageQueue(); // Process any queued messages
-    });
-
-    this.hubConnection.onclose((error) => {
-      console.log('Connection closed', error);
-      this.connectionStateSubject.next(signalR.HubConnectionState.Disconnected);
-
-      // Reject all queued messages when connection closes permanently
-      this.rejectAllQueuedMessages('Connection closed permanently');
-    });
-
-    this.hubConnection
-      .start()
+    this.hubConnection.start()
       .then(() => {
-        console.log("✅ SignalR Connected");
-        this.connectionStateSubject.next(signalR.HubConnectionState.Connected);
-        this.registerChatEvents();
+        console.log('✅ Chat SignalR Connected');
+        this.updateState(signalR.HubConnectionState.Connected);
       })
       .catch(err => {
-        console.error("Connection Error:", err);
-        this.connectionStateSubject.next(signalR.HubConnectionState.Disconnected);
-      });
-  }
-
-  private registerChatEvents(): void {
-    // Remove all existing handlers first to avoid duplicates
-    this.hubConnection.off('MessageReceived');
-    this.hubConnection.off('ReceiveMessage');
-    this.hubConnection.off('UserTyping');
-    this.hubConnection.off('MessageStatus');
-    this.hubConnection.off('UserOnline');
-    this.hubConnection.off('UserOffline');
-    this.hubConnection.off('ActiveUsersList');
-    this.hubConnection.off('MessageDeleted');
-    this.hubConnection.off('MessageUpdated');
-    this.hubConnection.off('MessagesRead');
-    this.hubConnection.off('NewConversation');
-    this.hubConnection.off('MemberAdded');
-    this.hubConnection.off('GroupInfoUpdated');
-    this.hubConnection.off('userStatusChanged');
-    this.hubConnection.off('userstatuschanged');
-
-    // Handle new messages
-    const messageHandler = (message: any) => {
-      console.log('📨 Message received:', message);
-      this.messageReceivedSubject.next(message);
-    };
-    this.hubConnection.on('MessageReceived', messageHandler);
-    this.hubConnection.on('ReceiveMessage', messageHandler);
-
-    // Handle typing indicators
-    this.hubConnection.on('UserTyping', (data: { userId: string, isTyping: boolean }) => {
-      console.log('👤 User typing:', data);
-      this.userTypingSubject.next(data);
-    });
-
-    // Handle message status updates
-    this.hubConnection.on('MessageStatus', (data: { messageId: string, status: string }) => {
-      this.messageStatusSubject.next(data);
-    });
-
-    // Handle user online status
-    this.hubConnection.on('UserOnline', (userId: string) => {
-      console.log('🟢 User online:', userId);
-      this.userOnlineSubject.next(userId);
-    });
-
-    this.hubConnection.on('UserOffline', (userId: string) => {
-      console.log('🔴 User offline:', userId);
-      this.userOfflineSubject.next(userId);
-    });
-
-    this.hubConnection.on('ActiveUsersList', (userIds: string[]) => {
-      console.log('👥 Active users list received:', userIds);
-      this.activeUsersListSubject.next(userIds);
-    });
-
-    // Handle deleted messages
-    this.hubConnection.on('MessageDeleted', (messageId: string) => {
-      this.messageDeletedSubject.next(messageId);
-    });
-
-    // Handle updated messages
-    this.hubConnection.on('MessageUpdated', (message: any) => {
-      this.messageUpdatedSubject.next(message);
-    });
-
-    // Handle messages read receipts
-    this.hubConnection.on('MessagesRead', (data: any) => {
-      this.messagesReadSubject.next(data);
-    });
-
-    // Handle new conversation
-    this.hubConnection.on('NewConversation', (conversation: any) => {
-      this.newConversationSubject.next(conversation);
-    });
-
-    // Handle member added
-    this.hubConnection.on('MemberAdded', (conversationId: string) => {
-      console.log('👥 Member added to conversation:', conversationId);
-      this.memberAddedSubject.next(conversationId);
-    });
-
-    // Handle group info updated
-    this.hubConnection.on('GroupInfoUpdated', (data: any) => {
-      console.log('🔄 Group info updated:', data);
-      this.groupInfoUpdatedSubject.next(data);
-    });
-
-    // Handle reactions
-    this.hubConnection.on('ReactionAdded', (data: any) => {
-      this.reactionAddedSubject.next(data);
-    });
-
-    this.hubConnection.on('ReactionRemoved', (data: any) => {
-      console.log('😀 Reaction removed:', data);
-      this.reactionRemovedSubject.next(data);
-    });
-
-    // Handle user status changes (case-sensitive variants for compatibility)
-    const statusHandler = (userId: string, status: string) => {
-      console.log(`👤 User status changed: ${userId} -> ${status}`);
-    };
-    this.hubConnection.on('userStatusChanged', statusHandler);
-    this.hubConnection.on('userstatuschanged', statusHandler);
-  }
-
-  // Chat methods with queue support
-  async sendMessage(message: SendMessageRequest): Promise<void> {
-    // Check connection state
-    const state = this.hubConnection?.state;
-
-    if (state === signalR.HubConnectionState.Connected) {
-      // Connected - send immediately
-      try {
-        console.log('📤 Sending message:', message);  // DEBUG: Log sending
-        await this.hubConnection.invoke("SendMessage", message);
-        console.log('✅ Message sent successfully');
-      } catch (err) {
-        console.error('❌ Error sending message:', err);
-        throw err;
-      }
-    } else if (state === signalR.HubConnectionState.Reconnecting) {
-      // Reconnecting - queue the message
-      console.log('Connection reconnecting, queuing message');
-      return this.queueMessage(message);
-    } else {
-      // Disconnected or other state - throw error
-      throw new Error(`Cannot send message: Connection is ${state || 'not initialized'}`);
-    }
-  }
-
-  private queueMessage(request: SendMessageRequest): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.messageQueue.push({
-        request,
-        resolve,
-        reject,
-        retryCount: 0
+        console.error('❌ Chat SignalR Connection Error:', err);
+        this.updateState(signalR.HubConnectionState.Disconnected);
       });
 
-      // Start processing queue if not already processing
-      if (!this.isProcessingQueue) {
-        this.processMessageQueue();
-      }
+    this.hubConnection.onreconnecting(() => this.updateState(signalR.HubConnectionState.Reconnecting));
+    this.hubConnection.onreconnected(() => this.updateState(signalR.HubConnectionState.Connected));
+    this.hubConnection.onclose(() => this.updateState(signalR.HubConnectionState.Disconnected));
+  }
+
+  private updateState(state: signalR.HubConnectionState): void {
+    this.ngZone.run(() => {
+      this.connectionState.set(state);
+      this.connectionStateSubject.next(state);
     });
   }
 
-  private async processMessageQueue(): Promise<void> {
-    if (this.isProcessingQueue || this.messageQueue.length === 0) {
-      return;
-    }
+  private registerEvents(): void {
+    const hub = this.hubConnection;
 
-    this.isProcessingQueue = true;
+    hub.on('ReceiveMessage', (msg: any) => this.ngZone.run(() => this.messageReceivedSubject.next(msg)));
+    hub.on('MessageReceived', (msg: any) => this.ngZone.run(() => this.messageReceivedSubject.next(msg)));
+    hub.on('MessageUpdated', (msg: any) => this.ngZone.run(() => this.messageUpdatedSubject.next(msg)));
+    hub.on('MessageDeleted', (id: string) => this.ngZone.run(() => this.messageDeletedSubject.next(id)));
+    hub.on('MessagesRead', (data: any) => this.ngZone.run(() => this.messageStatusSubject.next(data)));
+    hub.on('MessagesReadAll', (data: any) => this.ngZone.run(() => this.messageStatusSubject.next(data)));
 
-    while (this.messageQueue.length > 0) {
-      // Check if connection is still reconnecting
-      if (this.hubConnection?.state !== signalR.HubConnectionState.Connected) {
-        console.log('Connection not ready, will retry later');
-        break;
-      }
+    hub.on('UserOnline', (userId: string) => this.ngZone.run(() => this.userOnlineSubject.next(userId)));
+    hub.on('UserOffline', (userId: string) => this.ngZone.run(() => this.userOfflineSubject.next(userId)));
+    hub.on('ActiveUsersList', (userIds: string[]) => this.ngZone.run(() => this.activeUsersListSubject.next(userIds)));
+    hub.on('UserTyping', (data: any) => this.ngZone.run(() => this.userTypingSubject.next(data)));
+    hub.on('NewActivity', (activity: any) => this.ngZone.run(() => this.newActivitySubject.next(activity)));
 
-      const queuedMessage = this.messageQueue[0];
+    hub.on('NewConversation', (conv: any) => this.ngZone.run(() => this.newConversationSubject.next(conv)));
+    hub.on('MemberAdded', (convId: string) => this.ngZone.run(() => this.memberAddedSubject.next(convId)));
+    hub.on('GroupInfoUpdated', (data: any) => this.ngZone.run(() => this.groupInfoUpdatedSubject.next(data)));
 
-      try {
-        await this.hubConnection.invoke("SendMessage", queuedMessage.request);
-        console.log('Queued message sent successfully');
-        queuedMessage.resolve();
-        this.messageQueue.shift(); // Remove from queue
-      } catch (err) {
-        console.error('Error sending queued message:', err);
-
-        // Increment retry count
-        queuedMessage.retryCount++;
-
-        if (queuedMessage.retryCount >= this.maxRetryCount) {
-          // Max retries reached - reject and remove from queue
-          console.error('Max retries reached for message, rejecting');
-          queuedMessage.reject(err);
-          this.messageQueue.shift();
-        } else {
-          // Leave in queue and break to retry later
-          console.log(`Retry ${queuedMessage.retryCount}/${this.maxRetryCount} for message`);
-          break;
-        }
-      }
-    }
-
-    this.isProcessingQueue = false;
-
-    // If there are still messages in queue, schedule another processing attempt
-    if (this.messageQueue.length > 0) {
-      setTimeout(() => this.processMessageQueue(), 2000);
-    }
+    hub.on('ReactionAdded', (reaction: any) => this.ngZone.run(() => this.reactionAddedSubject.next(reaction)));
+    hub.on('ReactionRemoved', (reaction: any) => this.ngZone.run(() => this.reactionRemovedSubject.next(reaction)));
   }
 
-  private rejectAllQueuedMessages(error: string): void {
-    while (this.messageQueue.length > 0) {
-      const queuedMessage = this.messageQueue.shift();
-      if (queuedMessage) {
-        queuedMessage.reject(new Error(error));
-      }
-    }
+  // Invocation Methods
+  async joinContext(id: string): Promise<void> {
+    if (this.isConnected()) return this.hubConnection.invoke('JoinContext', id);
   }
 
-  sendTypingIndicator(conversationId: string, isTyping: boolean): void {
-    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-      this.hubConnection.invoke("TypingIndicator", conversationId, isTyping)
-        .catch(err => console.error('Error sending typing indicator:', err));
-    }
+  async leaveContext(id: string): Promise<void> {
+    if (this.isConnected()) return this.hubConnection.invoke('LeaveContext', id);
   }
 
-  async markMessagesAsRead(conversationId: string, messageIds: string[]): Promise<void> {
-    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-      try {
-        await this.hubConnection.invoke('MarkMessagesAsRead', conversationId, messageIds);
-      } catch (err) {
-        console.error('Error marking messages as read:', err);
-        throw err;
-      }
-    }
-  }
-async markAllMessagesAsRead(conversationId: string): Promise<void> {
-  if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-    try {
-      await this.hubConnection.invoke('MarkAllMessagesAsRead', conversationId);
-    } catch (err) {
-      console.error('Error marking all messages as read:', err);
-      throw err;
-    }
-  }
-}
-  async deleteMessage(messageId: string): Promise<void> {
-    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-      try {
-        await this.hubConnection.invoke('DeleteMessage', messageId);
-      } catch (err) {
-        console.error('Error deleting message:', err);
-        throw err;
-      }
-    }
+  async joinConversation(id: string): Promise<void> {
+    if (this.isConnected()) return this.hubConnection.invoke('JoinConversation', id);
   }
 
-  // joinConversation(conversationId: string): void {
-  //   if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-  //     console.log('🔗 Joining conversation:', conversationId);  // DEBUG: Log joining
-  //     this.hubConnection.invoke("JoinConversation", conversationId)
-  //       .catch(err => console.error('Error joining conversation:', err));
-  //   } else {
-  //     console.log('Cannot join conversation: Connection not ready');
-  //   }
-  // }
-
-  joinConversation(conversationId: string): Promise<void> {
-    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-      return this.hubConnection.invoke("JoinConversation", conversationId)
-        .catch(err => console.error('Error joining conversation:', err));
-    }
-    return Promise.resolve();
+  async sendTypingIndicator(conversationId: string, isTyping: boolean): Promise<void> {
+    if (this.isConnected()) return this.hubConnection.invoke('TypingIndicator', conversationId, isTyping);
   }
 
-  leaveConversation(conversationId: string): void {
-    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-      this.hubConnection.invoke("LeaveConversation", conversationId)
-        .catch(err => console.error('Error leaving conversation:', err));
-    }
+  async markAllMessagesAsRead(conversationId: string): Promise<void> {
+    if (this.isConnected()) return this.hubConnection.invoke('MarkAllMessagesAsRead', conversationId);
+  }
+
+  async sendMessage(msg: SendMessageRequest): Promise<void> {
+    if (this.isConnected()) return this.hubConnection.invoke('SendMessage', msg);
   }
 
   isConnected(): boolean {
     return this.hubConnection?.state === signalR.HubConnectionState.Connected;
   }
 
-  isReconnecting(): boolean {
-    return this.hubConnection?.state === signalR.HubConnectionState.Reconnecting;
-  }
-
-  getConnectionState(): signalR.HubConnectionState {
-    return this.hubConnection?.state || signalR.HubConnectionState.Disconnected;
-  }
-
   stopConnection(): void {
     if (this.hubConnection) {
-      this.hubConnection.stop()
-        .then(() => console.log('Connection stopped'))
-        .catch(err => console.error('Error stopping connection:', err));
+      this.hubConnection.stop();
     }
   }
 }

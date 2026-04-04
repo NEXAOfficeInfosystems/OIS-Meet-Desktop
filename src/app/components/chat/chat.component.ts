@@ -769,9 +769,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.loadUsersForCurrentCompany();
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════════════════════
   // USER LOADING
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════════════════════
 
   private loadUsersForCurrentCompany(): void {
     if (this.isCompanyChanging) return;
@@ -872,18 +872,18 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     return user?.fullName || user?.name || 'Unknown';
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════════════════════
   // SIGNALR EVENT SUBSCRIPTIONS
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════════════════════
 
   private setupSignalREvents(): void {
     this.chatSignalrService.messageReceived$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(message => { if (message) this.handleNewMessage(message); });
+      .subscribe((message: any) => { if (message) this.handleNewMessage(message); });
 
     this.chatSignalrService.userTyping$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(data => {
+      .subscribe((data: any) => {
         if (data && this.selectedUser?.userId === data.userId) {
           this.isTyping = data.isTyping;
           setTimeout(() => this.isTyping = false, 3000);
@@ -892,19 +892,19 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     this.chatSignalrService.messageStatus$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(data => { if (data) this.updateMessageStatus(data.messageId, data.status); });
+      .subscribe((data: any) => { if (data) this.updateMessageStatus(data.messageId, data.status); });
 
     this.chatSignalrService.messageDeleted$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(msgId => { if (msgId) this.deleteMessageFromUI(msgId); });
+      .subscribe((msgId: string) => { if (msgId) this.deleteMessageFromUI(msgId); });
 
     this.chatSignalrService.newConversation$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(conv => { if (conv) this.addNewConversation(conv); });
+      .subscribe((conv: any) => { if (conv) this.addNewConversation(conv); });
 
     this.chatSignalrService.memberAdded$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(convId => {
+      .subscribe((convId: string) => {
         if (convId) {
           this.loadConversations();
           if (this.selectedConversation?.id === convId) {
@@ -915,7 +915,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     this.chatSignalrService.groupInfoUpdated$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(data => {
+      .subscribe((data: any) => {
         if (data && data.conversationId) {
           const convId = data.conversationId.toString();
           const user = this.users.find(u => u.conversationId?.toString() === convId);
@@ -938,7 +938,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private setupPresenceTracking(): void {
     this.presenceService.onlineUsers$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(onlineIds => {
+      .subscribe((onlineIds: string[]) => {
         this.users.forEach(u => {
           u.isOnline = onlineIds.map(id => id.toString()).includes(u.id?.toString());
         });
@@ -946,9 +946,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       });
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════════════════════
   // INCOMING MESSAGE HANDLER
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════════════════════
 
   private handleNewMessage(message: any): void {
     if (!message?.conversationId) return;
@@ -1104,9 +1104,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════════════════════
   // NOTIFICATIONS
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════════════════════
 
   showInAppToast(senderName: string, preview: string, avatarColor: string): void {
     const toast: InAppToast = {
@@ -1145,9 +1145,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     } catch { /* ignore */ }
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════════════════════
   // CONVERSATIONS & MESSAGES
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════════════════════
 
   loadConversations(): void {
     this.chatService.getConversations()

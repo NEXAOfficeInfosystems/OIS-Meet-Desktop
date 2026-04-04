@@ -1,0 +1,35 @@
+<div class="chat-thread" #scrollContainer>
+  @if (isLoading() && getThreadMessages().length === 0) {
+    <div class="loader">
+      <div class="spinner-border text-primary" role="status"></div>
+      <span>Loading conversation...</span>
+    </div>
+  } @else {
+    @for (msg of getThreadMessages(); track msg.id) {
+      <div class="message-row" [class.is-self]="msg.senderId === currentUserId()">
+        <div class="avatar" *ngIf="msg.senderId !== currentUserId()">
+          {{ msg.senderName?.charAt(0) }}
+        </div>
+        
+        <div class="message-bubble">
+          <div class="header" *ngIf="msg.senderId !== currentUserId()">
+            <span class="sender">{{ msg.senderName }}</span>
+            <span class="time">{{ msg.sentAt | date:'shortTime' }}</span>
+          </div>
+          
+          <div class="content" [innerHTML]="msg.content"></div>
+          
+          <div class="status" *ngIf="msg.isPending || msg.isFailed">
+            @if (msg.isPending) { <i class="bi bi-clock"></i> }
+            @if (msg.isFailed) { <i class="bi bi-exclamation-circle text-danger"></i> }
+          </div>
+        </div>
+      </div>
+    } @empty {
+      <div class="empty-thread">
+        <i class="bi bi-chat-left-dots"></i>
+        <p>No messages yet. Say hi!</p>
+      </div>
+    }
+  }
+</div>
