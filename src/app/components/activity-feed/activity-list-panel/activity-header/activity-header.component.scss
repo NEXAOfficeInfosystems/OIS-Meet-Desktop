@@ -1,66 +1,43 @@
-﻿@import '../../../../../styles/variables';
+.sidebar-header-v2 {
+  background: #ffffff;
+  border-bottom: 1px solid #e1e9f4;
+  height: 64px;
 
-.activity-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 14px 14px 10px;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.94), rgba(255, 255, 255, 0.9));
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
-  flex-shrink: 0;
-
-  .title-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    h1 {
-      margin: 0;
-      color: #0f172a;
-      font-size: 17px;
-      font-weight: 800;
-      letter-spacing: -0.03em;
-    }
-
-    .unread-badge {
-      min-width: 18px;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, var(--color-primary), #4f7cff);
-      color: #fff;
-      font-size: 10px;
-      font-weight: 700;
-      text-align: center;
-      box-shadow: 0 6px 12px rgba(79, 124, 255, 0.18);
-    }
+  .sidebar-title-v2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #242424;
+    letter-spacing: -0.01em;
   }
 
-  .actions {
-    .btn-icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 34px;
-      height: 34px;
-      padding: 0;
-      border: 1px solid transparent;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.78);
-      color: #475569;
-      cursor: pointer;
-      transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+  .badge-v2 {
+    background: #d93d3d;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(217, 61, 61, 0.2);
+  }
 
-      &:hover {
-        transform: translateY(-1px);
-        background: #fff;
-        color: var(--color-primary);
-        box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
-      }
+  .btn-icon-v2 {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    color: #616161;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    transition: all 0.2s;
+    cursor: pointer;
 
-      i {
-        font-size: 17px;
-      }
+    &:hover {
+      background: #f3f2f1;
+      color: #0047ba;
     }
   }
 }
+

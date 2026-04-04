@@ -1,24 +1,31 @@
-﻿<div class="activity-row" [class.is-unread]="!activity().isRead" [class.is-selected]="isSelected()">
-  <div class="avatar" [class.is-system]="!activity().senderName">
-    <span class="avatar-letter">{{ getAvatarLetter() }}</span>
-    @if (!activity().isRead) {
-      <div class="unread-dot"></div>
-    }
-  </div>
-  
-  <div class="content">
-    <div class="header">
-      <span class="sender">{{ activity().senderName || 'System' }}</span>
-      <span class="time">{{ activity().createdAt | date:'shortTime' }}</span>
+<div class="activity-item-v2" [class.active-v2]="isSelected()" [class.unread-v2]="!activity().isRead">
+  <!-- Left Indicator for active state -->
+  <div class="active-indicator-v2"></div>
+
+  <div class="item-main-v2 d-flex gap-3 px-3 py-3">
+    <div class="item-avatar-v2 position-relative">
+      <div class="avatar-sq-v2 shadow-sm" [class.is-system]="!activity().senderName">
+        {{ getAvatarLetter() }}
+      </div>
+      <div class="status-unread-v2" *ngIf="!activity().isRead"></div>
     </div>
-    
-    <div class="body">
-      <i class="bi" [ngClass]="getIconClass()"></i>
-      <span class="preview">{{ getDisplayText() }}</span>
-    </div>
-    
-    <div class="footer">
-      <span class="context">{{ activity().context || 'Meeting' }}</span>
+
+    <div class="item-content-v2 flex-grow-1 min-w-0">
+      <div class="item-top-v2 d-flex justify-content-between align-items-center mb-1">
+        <span class="item-sender-v2 text-truncate" [class.fw-bold]="!activity().isRead">
+          {{ activity().senderName || 'System Notification' }}
+        </span>
+        <span class="item-time-v2">{{ activity().createdAt | date:'shortTime' }}</span>
+      </div>
+
+      <div class="item-body-v2 d-flex align-items-center gap-2">
+        <i class="bi item-icon-v2" [ngClass]="getIconClass()"></i>
+        <span class="item-preview-v2 text-truncate">{{ getDisplayText() }}</span>
+      </div>
+
+      <div class="item-footer-v2 mt-1">
+        <span class="item-context-v2">{{ activity().context || 'Meeting' }}</span>
+      </div>
     </div>
   </div>
 </div>

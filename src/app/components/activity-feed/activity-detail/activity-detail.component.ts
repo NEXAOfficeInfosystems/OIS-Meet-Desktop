@@ -8,93 +8,97 @@ import { ReplyBarComponent } from '../reply-bar/reply-bar.component';
   standalone: true,
   imports: [CommonModule, SafeHtmlPipe, ReplyBarComponent],
   template: `
-    <main class="activity-detail-container" *ngIf="activity; else noSelection">
+    <main class="activity-detail-container-v2" *ngIf="activity; else noSelection">
       
-      <!-- Sticky Header -->
-      <header class="detail-header">
-        <div class="user-context">
-          <div class="avatar-large" [style.background-color]="activity.avatarColor">
-             {{ activity.avatarLetter }}
+      <!-- Sticky Header V2 -->
+      <header class="detail-header-v2 border-bottom">
+        <div class="user-context-v2 d-flex align-items-center gap-3 px-4 py-3">
+          <div class="avatar-v2 position-relative">
+            <div class="avatar-sq-v2 shadow-sm" [style.background-color]="activity.avatarColor">
+              {{ activity.avatarLetter }}
+            </div>
           </div>
-          <div class="user-info">
-             <div class="name-status">
-               <h1 class="user-name">{{ activity.senderName }}</h1>
-               <span class="action-status">{{ activity.category === 'file' ? 'shared a file' : 'is in a conversation with you' }}</span>
-             </div>
-             <span class="timestamp">{{ activity.timeLabel }}</span>
-             
-             <!-- Tab Bar -->
-             <nav class="tab-bar">
-               <button class="tab-btn" 
-                       [class.active]="activeTab === 'Chat'" 
-                       (click)="activeTab = 'Chat'">Chat</button>
-               <button class="tab-btn" 
-                       [class.active]="activeTab === 'Files'" 
-                       (click)="activeTab = 'Files'">Shared</button>
-             </nav>
+          
+          <div class="user-info-v2 min-w-0">
+            <div class="title-top-v2 d-flex align-items-baseline gap-2">
+              <h1 class="user-name-v2">{{ activity.senderName }}</h1>
+              <span class="action-status-v2">{{ activity.category === 'file' ? 'shared a file' : 'is in a conversation' }}</span>
+            </div>
+            <div class="timestamp-v2">{{ activity.timeLabel }}</div>
+          </div>
+
+          <div class="header-actions-v2 ms-auto d-flex gap-2">
+            <button class="icon-btn-v2" (click)="refresh.emit()" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
+            <button class="icon-btn-v2" title="More options"><i class="bi bi-three-dots"></i></button>
           </div>
         </div>
 
-        <div class="header-actions">
-           <button class="icon-btn" (click)="refresh.emit()" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
-           <button class="icon-btn" title="Search"><i class="bi bi-search"></i></button>
-           <button class="icon-btn" title="More options"><i class="bi bi-three-dots"></i></button>
-        </div>
+        <!-- Tab Bar V2 -->
+        <nav class="tab-bar-v2 d-flex px-4 border-bottom">
+          <button class="tab-btn-v2" [class.active]="activeTab === 'Chat'" (click)="activeTab = 'Chat'">Chat</button>
+          <button class="tab-btn-v2" [class.active]="activeTab === 'Files'" (click)="activeTab = 'Files'">Files</button>
+        </nav>
       </header>
 
-      <!-- Content Area -->
-      <div class="content-viewport" *ngIf="activeTab === 'Chat'">
-         <div class="message-thread" #threadContainer (scroll)="onScroll($event)">
+      <!-- Content Area V2 -->
+      <div class="content-viewport-v2 flex-grow-1 d-flex flex-column" *ngIf="activeTab === 'Chat'">
+         <div class="chat-thread-v2 p-4 flex-grow-1 overflow-auto d-flex flex-column gap-4" #threadContainer (scroll)="onScroll($event)">
            
-           <!-- Infinite Loader -->
-           <div class="top-loader" *ngIf="loadingContext && messages.length > 0">
+           <div class="top-loader-v2 text-center py-2" *ngIf="loadingContext && messages.length > 0">
              <div class="spinner-border spinner-border-sm text-primary"></div>
            </div>
 
-           <!-- Message Items -->
-           <div class="message-item" 
+           <!-- Message Items V2 -->
+           <div class="message-wrapper-v2 d-flex gap-3" 
                 *ngFor="let msg of messages"
-                [class.is-self]="msg.senderId === currentUserId"
+                [class.self-v2]="msg.senderId === currentUserId"
                 [id]="'msg-' + msg.id">
              
-             <div class="msg-avatar" *ngIf="msg.senderId !== currentUserId">
-                {{ (msg.senderName || 'U').charAt(0).toUpperCase() }}
+             <div class="message-avatar-v2 flex-shrink-0" *ngIf="msg.senderId !== currentUserId">
+                <div class="avatar-fallback-v2">
+                  {{ (msg.senderName || 'U').charAt(0).toUpperCase() }}
+                </div>
              </div>
 
-             <div class="msg-bubble-wrap">
-               <div class="msg-meta" *ngIf="msg.senderId !== currentUserId">
-                 <span class="sender">{{ msg.senderName }}</span>
-                 <span class="time">{{ (msg.sentAt || msg.createdAt) | date:'shortTime' }}</span>
+             <div class="message-body-v2 min-w-0 d-flex flex-column gap-1">
+               <div class="message-header-v2 d-flex align-items-baseline gap-2" *ngIf="msg.senderId !== currentUserId">
+                 <span class="sender-v2 text-truncate fw-bold">{{ msg.senderName }}</span>
+                 <span class="time-v2 fs-xs text-muted">{{ (msg.sentAt || msg.createdAt) | date:'shortTime' }}</span>
                </div>
                
-               <div class="msg-bubble">
-                  <div [innerHTML]="msg.content | safeHtml"></div>
+               <div class="bubble-v2 px-3 py-2 rounded-3 border bg-light text-dark shadow-sm" [innerHTML]="msg.content | safeHtml"></div>
+               
+               <div class="status-v2 mt-1" *ngIf="msg.isPending || msg.isFailed">
+                 <i class="bi bi-clock text-muted fs-xs" *ngIf="msg.isPending"></i>
+                 <i class="bi bi-exclamation-circle text-danger fs-xs" *ngIf="msg.isFailed"></i>
                </div>
              </div>
            </div>
 
-           <!-- Empty State / File Card -->
-           <div class="empty-conversation" *ngIf="messages.length === 0 && !loadingContext">
-              <div class="file-shared-card" *ngIf="activity.category === 'file'">
-                 <div class="file-icon-large">
+           <!-- Empty States -->
+           <div class="empty-state-v2 flex-grow-1 d-flex flex-column align-items-center justify-content-center p-5 text-center" *ngIf="messages.length === 0 && !loadingContext">
+              <div class="file-card-v2 p-5 bg-white border rounded-4 shadow-sm" style="max-width: 400px;" *ngIf="activity.category === 'file'">
+                 <div class="shared-icon-v2 mb-4 text-primary fs-1">
                     <i class="bi bi-file-earmark-text-fill"></i>
                  </div>
-                 <h2 class="file-name">{{ activity.body || 'Shared file' }}</h2>
-                 <p class="file-info">Shared by {{ activity.senderName }} • {{ activity.timeLabel }}</p>
-                 <div class="file-actions">
-                    <button class="btn-primary" (click)="fileAction.emit('open')">Open</button>
-                    <button class="btn-outline" (click)="fileAction.emit('download')">Download</button>
+                 <h2 class="h5 fw-bold mb-2">{{ activity.body || 'Shared file' }}</h2>
+                 <p class="text-muted small mb-4">Shared by {{ activity.senderName }} • {{ activity.timeLabel }}</p>
+                 <div class="d-flex gap-2 justify-content-center">
+                    <button class="btn btn-primary btn-sm px-4" (click)="fileAction.emit('open')">Open</button>
+                    <button class="btn btn-outline-secondary btn-sm px-4" (click)="fileAction.emit('download')">Download</button>
                  </div>
               </div>
-              <div class="generic-empty" *ngIf="activity.category !== 'file'">
-                 <i class="bi bi-chat-left-text-fill opacity-25" style="font-size: 3rem;"></i>
-                 <p class="mt-3">Start a conversation with {{ activity.senderName }}</p>
+              
+              <div class="chat-placeholder-v2 opacity-50" *ngIf="activity.category !== 'file'">
+                 <i class="bi bi-chat-dots-fill display-4 mb-3"></i>
+                 <p>Start a conversation with {{ activity.senderName }}</p>
               </div>
            </div>
          </div>
 
-         <!-- Reply Area -->
+         <!-- Reply Bar Area -->
          <app-reply-bar
+           class="border-top"
            [activityName]="activity.senderName"
            [replyTo]="replyTo"
            [isSending]="isSending"
@@ -105,148 +109,53 @@ import { ReplyBarComponent } from '../reply-bar/reply-bar.component';
          </app-reply-bar>
       </div>
 
-      <!-- Shared Files Content -->
-      <div class="content-viewport shared-files" *ngIf="activeTab === 'Files'">
-         <div class="files-header">Shared in this conversation</div>
-         <div class="files-list">
-            <div class="file-row" *ngFor="let file of sharedFiles">
-               <i class="bi bi-file-earmark-text"></i>
-               <span class="file-name-text">{{ file.fileName }}</span>
-               <button class="icon-btn-sm" (click)="fileAction.emit('download')"><i class="bi bi-download"></i></button>
+      <!-- Shared Files V2 -->
+      <div class="content-viewport-v2 p-4" *ngIf="activeTab === 'Files'">
+         <h5 class="fw-bold mb-4">Shared in this conversation</h5>
+         <div class="files-grid d-flex flex-column gap-2">
+            <div class="file-item-v2 d-flex align-items-center gap-3 p-3 bg-white border rounded-3 hover-shadow transition" *ngFor="let file of sharedFiles">
+               <div class="fs-3 text-primary"><i class="bi bi-file-earmark-text"></i></div>
+               <span class="flex-grow-1 text-truncate fw-medium">{{ file.fileName }}</span>
+               <button class="btn btn-icon btn-sm text-muted" (click)="fileAction.emit('download')"><i class="bi bi-download"></i></button>
             </div>
          </div>
       </div>
     </main>
 
     <ng-template #noSelection>
-      <div class="no-selection-view">
-        <div class="ns-art">
+      <div class="no-selection-view-v2 d-flex flex-column align-items-center justify-content-center h-100 p-5 text-center bg-light opacity-50">
+        <div class="ns-icon-v2 bg-white rounded-4 shadow-sm p-4 mb-4 fs-1 text-primary">
            <i class="bi bi-bell-fill"></i>
         </div>
-        <h3>Select an activity to view details</h3>
-        <p>Catch up on mentions, shared files, and more.</p>
+        <h3 class="h5 fw-bold">Select an activity to view details</h3>
+        <p class="text-muted small">Catch up on mentions, shared files, and more.</p>
       </div>
     </ng-template>
   `,
   styles: [`
-    .activity-detail-container {
-      flex: 1;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      background: white;
-      overflow: hidden;
-    }
-
-    .detail-header {
-      padding: 16px 24px 0;
-      border-bottom: 1px solid #f0f1f4;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      background: white;
-    }
-
-    .user-context { display: flex; gap: 16px; flex: 1; }
+    .activity-detail-container-v2 { height: 100%; overflow: hidden; background: #ffffff; }
     
-    .avatar-large {
-      width: 48px; height: 48px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      color: white; font-weight: 700; font-size: 18px; flex-shrink: 0;
-    }
-
-    .user-info { flex: 1; }
-    .name-status { display: flex; align-items: baseline; gap: 8px; }
-    .user-name { font-size: 16px; font-weight: 700; margin: 0; color: #1a1d21; }
-    .action-status { font-size: 13px; color: #64748b; }
-    .timestamp { font-size: 12px; color: #8b949e; display: block; margin-top: 2px; }
-
-    .tab-bar { display: flex; gap: 20px; margin-top: 12px; }
-    .tab-btn {
-      padding: 8px 0; border: none; background: transparent; font-size: 13px;
-      font-weight: 600; color: #64748b; border-bottom: 2px solid transparent;
-      cursor: pointer; transition: all 0.2s;
-      &:hover { color: #1a1d21; }
-      &.active { color: #0066FF; border-color: #0066FF; }
-    }
-
-    .header-actions { display: flex; gap: 8px; padding-top: 4px; }
-    .icon-btn {
-      width: 34px; height: 34px; border: none; background: transparent;
-      color: #64748b; border-radius: 6px; font-size: 16px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; &:hover { background: #f1f5f9; color: #1a1d21; }
-    }
-
-    .content-viewport { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .detail-header-v2 { background: #ffffff; }
+    .avatar-sq-v2 { width: 42px; height: 42px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.1rem; }
+    .user-name-v2 { font-size: 1.1rem; font-weight: 700; color: #242424; margin: 0; }
+    .action-status-v2 { font-size: 0.85rem; color: #616161; }
+    .timestamp-v2 { font-size: 0.75rem; color: #8b949e; }
     
-    .message-thread {
-      flex: 1; overflow-y: auto; padding: 24px;
-      display: flex; flex-direction: column; gap: 12px;
-      &::-webkit-scrollbar { width: 6px; }
-      &::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 3px; }
-    }
-
-    .message-item {
-      display: flex; gap: 12px; max-width: 85%;
-      &.is-self { align-self: flex-end; flex-direction: row-reverse; }
-    }
-
-    .msg-avatar {
-      width: 32px; height: 32px; border-radius: 50%; background: #f0f1f4;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 700; color: #64748b; flex-shrink: 0;
-    }
-
-    .msg-bubble-wrap { display: flex; flex-direction: column; gap: 4px; }
-    .msg-meta { display: flex; align-items: center; gap: 8px; padding: 0 4px; }
-    .sender { font-size: 12px; font-weight: 700; color: #1a1d21; }
-    .time { font-size: 10px; color: #8b949e; }
-
-    .msg-bubble {
-      padding: 10px 14px; border-radius: 12px; background: #f1f4f8;
-      font-size: 14px; color: #1a1d21; line-height: 1.5;
-    }
-
-    .is-self .msg-bubble { background: #0066FF; color: white; border-radius: 12px 12px 2px 12px; }
-
-    .file-shared-card {
-      align-self: center; margin: 40px auto; padding: 40px; text-align: center;
-      background: white; border: 1px solid #e2e8f0; border-radius: 16px;
-      max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.04);
-    }
-    .file-icon-large { font-size: 64px; color: #0066FF; margin-bottom: 24px; }
-    .file-name { font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #1a1d21; }
-    .file-info { font-size: 14px; color: #64748b; margin-bottom: 32px; }
-    .file-actions { display: flex; gap: 12px; justify-content: center; }
-    .btn-primary { 
-      padding: 10px 24px; background: #0066FF; color: white; border: none; 
-      border-radius: 8px; font-weight: 600; cursor: pointer; &:hover { background: #0052cc; }
-    }
-    .btn-outline {
-      padding: 10px 24px; background: transparent; color: #1a1d21; 
-      border: 1.5px solid #e2e8f0; border-radius: 8px; font-weight: 600; 
-      cursor: pointer; &:hover { background: #f8fafc; }
-    }
-
-    .no-selection-view {
-      flex: 1; display: flex; flex-direction: column; align-items: center;
-      justify-content: center; padding: 40px; text-align: center; color: #64748b;
-    }
-    .ns-art { 
-      font-size: 48px; width: 96px; height: 96px; background: #f8fafc;
-      border-radius: 32px; display: flex; align-items: center; justify-content: center;
-      color: #0066FF; margin-bottom: 24px; opacity: 0.5;
-    }
-
-    .shared-files { padding: 24px; }
-    .files-header { font-weight: 700; margin-bottom: 16px; font-size: 15px; }
-    .file-row {
-      display: flex; align-items: center; gap: 12px; padding: 12px;
-      border-radius: 8px; border: 1px solid #f0f1f4; margin-bottom: 8px;
-      i { font-size: 20px; color: #0066FF; }
-      .file-name-text { flex: 1; font-size: 14px; font-weight: 500; }
-    }
+    .icon-btn-v2 { border: none; background: transparent; width: 34px; height: 34px; border-radius: 4px; color: #616161; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; &:hover { background: #f3f2f1; color: #0047ba; } }
+    
+    .tab-bar-v2 { background: #ffffff; gap: 1.5rem; height: 44px; align-items: center; }
+    .tab-btn-v2 { background: transparent; border: none; padding: 0.75rem 0; font-size: 0.9rem; font-weight: 600; color: #616161; cursor: pointer; position: relative; transition: all 0.2s; &:hover { color: #242424; } &.active { color: #0047ba; &::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: #0047ba; border-radius: 3px 3px 0 0; } } }
+    
+    .chat-thread-v2 { &::-webkit-scrollbar { width: 6px; } &::-webkit-scrollbar-thumb { background: #e1e9f4; border-radius: 10px; } }
+    
+    .message-wrapper-v2 { max-width: 85%; &.self-v2 { align-self: flex-end; flex-direction: row-reverse; .message-body-v2 { align-items: flex-end; } .bubble-v2 { background: #eff6ff; border-color: #dbeafe; color: #1e3a8a; } } }
+    .avatar-fallback-v2 { width: 32px; height: 32px; border-radius: 50%; background: #3b82f6; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.85rem; }
+    
+    .bubble-v2 { line-height: 1.5; font-size: 0.95rem; }
+    
+    .file-item-v2 { transition: all 0.2s; cursor: pointer; &:hover { border-color: #0047ba; box-shadow: 0 4px 12px rgba(0,0,0,0.05); } }
+    .hover-shadow:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .transition { transition: all 0.2s; }
   `]
 })
 export class ActivityDetailComponent implements AfterViewChecked {

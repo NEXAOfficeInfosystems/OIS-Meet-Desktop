@@ -1,14 +1,15 @@
-<div class="activity-header">
-  <div class="title-group">
-    <h1>Feed</h1>
-    @if (unreadCount() > 0) {
-      <div class="unread-badge">{{ unreadCount() }}</div>
-    }
+<header class="sidebar-header-v2 px-3 py-3 d-flex justify-content-between align-items-center">
+  <div class="title-group-v2 d-flex align-items-center gap-2">
+    <h1 class="sidebar-title-v2 mb-0">Activity</h1>
+    <div class="badge-v2" *ngIf="unreadCount() > 0">{{ unreadCount() }}</div>
   </div>
   
-  <div class="actions">
-    <button class="btn-icon" (click)="refresh()" aria-label="Refresh activity feed">
+  <div class="actions-v2 d-flex align-items-center gap-1">
+    <button class="btn-icon-v2" (click)="refresh()" title="Refresh Feed">
       <i class="bi bi-arrow-clockwise"></i>
     </button>
+    <button class="btn-icon-v2" title="Filter Settings">
+      <i class="bi bi-sliders2"></i>
+    </button>
   </div>
-</div>
+</header>
