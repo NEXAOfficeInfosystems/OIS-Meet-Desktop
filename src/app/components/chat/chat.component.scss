@@ -141,94 +141,121 @@
   }
 }
 
-.dm-section {
+.dm-header {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+  border-radius: 4px;
 
-  .dm-header {
-    cursor: default;
+  &:hover {
+    background-color: #f1f5f9;
   }
 
-  .dm-item {
-    transition: all 0.2s;
-    user-select: none;
-    margin-bottom: 2px;
-    border-left: 3px solid transparent;
+  .transition-transform {
+    display: inline-block;
+    transition: transform 0.2s ease-in-out;
+    font-size: 0.75rem;
+    color: #94a3b8;
+  }
 
-    &:hover {
-      background: #f1f5f9;
-      color: #1e293b;
+  .rotate-90 {
+    transform: rotate(90deg);
+    color: #64748b;
+  }
+}
+
+.dm-item {
+  transition: all 0.2s;
+  user-select: none;
+  margin-bottom: 2px;
+  border-left: 3px solid transparent;
+
+  &:hover {
+    background: #f1f5f9;
+    color: #1e293b;
+  }
+
+  &.active {
+    background: #e0e7ff;
+    color: #0047ba;
+    border-left-color: #0047ba;
+  }
+
+  .dm-actions {
+    display: flex;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  &:hover .dm-actions {
+    opacity: 1;
+  }
+
+  .hover-warning:hover {
+    color: #f59e0b !important;
+  }
+
+  .dm-avatar-wrapper {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .dm-avatar-sm {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.75rem;
+  }
+
+  .status-indicator-sm {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    border: 2px solid #f8fafc;
+    border-radius: 50%;
+    background: #94a3b8;
+
+    &.online {
+      background: #10b981;
     }
+  }
 
-    &.active {
-      background: #e0e7ff;
-      color: #0047ba;
-      border-left-color: #0047ba;
-    }
+  .dm-info {
+    min-width: 0;
+    flex-grow: 1;
+    overflow: hidden;
+  }
 
-    .dm-actions {
-      display: flex;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
+  .dm-name {
+    font-size: 0.85rem;
+    color: inherit;
+    width: 100%;
+    display: block;
+  }
 
-    &:hover .dm-actions {
-      opacity: 1;
-    }
+  .dm-last-msg {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    width: 100%;
+    display: block;
+  }
+}
 
-    .hover-warning:hover {
-      color: #f59e0b !important;
-    }
+.dm-section {
+  padding: 0;
 
-    .dm-avatar-wrapper {
-      position: relative;
-      flex-shrink: 0;
-    }
-
-    .dm-avatar-sm {
-      width: 36px;
-      height: 36px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: bold;
-      font-size: 0.75rem;
-    }
-
-    .status-indicator-sm {
-      position: absolute;
-      bottom: -2px;
-      right: -2px;
-      width: 10px;
-      height: 10px;
-      border: 2px solid #f8fafc;
-      border-radius: 50%;
-      background: #94a3b8;
-
-      &.online {
-        background: #10b981;
-      }
-    }
-
-    .dm-info {
-      min-width: 0;
-      flex-grow: 1;
-      overflow: hidden;
-    }
-
-    .dm-name {
-      font-size: 0.85rem;
-      color: inherit;
-      width: 100%;
-      display: block;
-    }
-
-    .dm-last-msg {
-      font-size: 0.75rem;
-      opacity: 0.8;
-      width: 100%;
-      display: block;
-    }
+  .badge {
+    font-size: 0.65rem !important;
+    padding: 0.25rem 0.5rem !important;
+    background-color: #0047ba !important;
+    color: white !important;
   }
 }
 
@@ -1479,7 +1506,6 @@
 .favorite-section {
   .dm-header {
     border-top: none;
-    padding-top: 0.25rem !important;
   }
 
   .dm-avatar-sm {

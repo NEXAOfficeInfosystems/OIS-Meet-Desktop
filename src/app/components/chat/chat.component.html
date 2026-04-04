@@ -27,39 +27,52 @@
     <div class="team-scroll-area">
       <!-- TEAMS SECTION -->
       <div class="dm-section">
-        <div class="dm-header px-3 py-2 d-flex justify-content-between align-items-center">
-          <span class="text-uppercase fs-xs fw-bold text-muted letter-spacing-1">Teams</span>
-          <div class="d-flex gap-1 align-items-center">
+        <div class="dm-header px-3 py-2 d-flex justify-content-between align-items-center cursor-pointer"
+          (click)="toggleSidebarSection('teams')" [attr.aria-expanded]="sidebarSections['teams']">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-chevron-right transition-transform" [class.rotate-90]="sidebarSections['teams']"></i>
+            <span class="text-uppercase fs-xs fw-bold text-muted letter-spacing-1">Teams</span>
+            <span class="badge bg-light text-muted fs-xs" *ngIf="teams.length > 0">{{ teams.length }}</span>
+          </div>
+          <div class="d-flex gap-1 align-items-center" (click)="$event.stopPropagation()">
             <button class="btn btn-icon-sm p-0 text-primary" title="New Group" (click)="openGroupModal()">
               <i class="bi bi-plus-lg"></i>
             </button>
           </div>
         </div>
-        <div class="team-section" *ngFor="let team of teams">
-          <div class="team-header d-flex align-items-center gap-2"
-            [class.active]="activeTeam === team.name && !selectedUser" (click)="selectTeam(team)">
-            <div class="team-icon" [style.background-color]="team.color">
-              <i [class]="team.icon"></i>
+        <ng-container *ngIf="sidebarSections['teams']">
+          <div class="team-section" *ngFor="let team of teams">
+            <div class="team-header d-flex align-items-center gap-2"
+              [class.active]="activeTeam === team.name && !selectedUser" (click)="selectTeam(team)">
+              <div class="team-icon" [style.background-color]="team.color">
+                <i [class]="team.icon"></i>
+              </div>
+              <span class="team-name">{{ team.name }}</span>
             </div>
-            <span class="team-name">{{ team.name }}</span>
-          </div>
 
-          <ul class="channel-list" *ngIf="activeTeam === team.name && !selectedUser">
-            <li *ngFor="let ch of channels" class="channel-item" [class.active]="activeChannel === ch"
-              (click)="selectChannel(ch)">
-              <i class="bi bi-hash"></i> {{ ch }}
-            </li>
-          </ul>
-        </div>
+            <ul class="channel-list" *ngIf="activeTeam === team.name && !selectedUser">
+              <li *ngFor="let ch of channels" class="channel-item" [class.active]="activeChannel === ch"
+                (click)="selectChannel(ch)">
+                <i class="bi bi-hash"></i> {{ ch }}
+              </li>
+            </ul>
+          </div>
+        </ng-container>
       </div>
 
       <!-- FAVORITES SECTION -->
-      <div class="favorite-section mb-2" *ngIf="favoriteUsers.length > 0">
-        <div class="dm-header px-3 py-1">
-          <span class="text-uppercase fs-xs fw-bold text-muted letter-spacing-1">Favorites</span>
+      <div class="favorite-section dm-section" *ngIf="favoriteUsers.length > 0">
+        <div class="dm-header px-3 py-2 d-flex justify-content-between align-items-center cursor-pointer"
+          (click)="toggleSidebarSection('favorites')" [attr.aria-expanded]="sidebarSections['favorites']">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-chevron-right transition-transform" [class.rotate-90]="sidebarSections['favorites']"></i>
+            <span class="text-uppercase fs-xs fw-bold text-muted letter-spacing-1">Favorites</span>
+            <span class="badge bg-light text-muted fs-xs">{{ favoriteUsers.length }}</span>
+          </div>
         </div>
-        <ul class="dm-list list-unstyled px-2">
-          <li *ngFor="let user of favoriteUsers" class="dm-item d-flex align-items-center gap-2 p-2 cursor-pointer"
+        <ul class="dm-list list-unstyled px-2" *ngIf="sidebarSections['favorites']">
+          <li *ngFor="let user of favoriteUsers"
+            class="dm-item d-flex align-items-center rounded gap-2 p-2 cursor-pointer"
             [class.active]="selectedUser?.id === user.id" (click)="selectUser(user)">
             <div class="dm-avatar-wrapper position-relative">
               <img *ngIf="user.avatarUrl" [src]="user.avatarUrl" class="dm-avatar-sm" alt="avatar">
@@ -94,9 +107,14 @@
 
       <!-- DIRECT MESSAGES SECTION -->
       <div class="dm-section">
-        <div class="dm-header px-3 py-2 d-flex justify-content-between align-items-center">
-          <span class="text-uppercase fs-xs fw-bold text-muted letter-spacing-1">Messages</span>
-          <div class="d-flex gap-1 align-items-center">
+        <div class="dm-header px-3 py-2 d-flex justify-content-between align-items-center cursor-pointer"
+          (click)="toggleSidebarSection('messages')" [attr.aria-expanded]="sidebarSections['messages']">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-chevron-right transition-transform" [class.rotate-90]="sidebarSections['messages']"></i>
+            <span class="text-uppercase fs-xs fw-bold text-muted letter-spacing-1">Messages</span>
+            <span class="badge bg-light text-muted fs-xs">{{ regularUsers.length }}</span>
+          </div>
+          <div class="d-flex gap-1 align-items-center" (click)="$event.stopPropagation()">
             <button class="btn btn-icon-sm p-0 text-primary" title="New Group" (click)="openGroupModal()">
               <i class="bi bi-people-fill"></i>
             </button>
@@ -126,7 +144,7 @@
           </div>
         </div>
 
-        <ul class="dm-list list-unstyled px-2">
+        <ul class="dm-list list-unstyled px-2" *ngIf="sidebarSections['messages']">
           <li *ngFor="let user of regularUsers"
             class="dm-item d-flex align-items-center gap-2 p-2 rounded cursor-pointer"
             [class.active]="selectedUser?.id === user.id" (click)="selectUser(user)">

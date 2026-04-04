@@ -1,5 +1,5 @@
 <!-- Left Sidebar -->
-<aside class="d-flex flex-column justify-content-between bg-light border-end vh-100" style="width: 72px;">
+<aside class="d-flex flex-column justify-content-between bg-light border-end" style="width: 72px;">
 
   <!-- TOP -->
   <div class="d-flex flex-column align-items-center gap-2 py-0">
@@ -16,11 +16,11 @@
       <span class="sidebar-label">Chat</span>
     </button>
 
-    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'teams'"
+    <!-- <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'teams'"
       (click)="setActiveTab('teams')" title="Teams">
       <i class="bi bi-people fs-5"></i>
       <span class="sidebar-label">Teams</span>
-    </button>
+    </button> -->
 
     <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'calendar'"
       (click)="setActiveTab('calendar')" title="Calendar">

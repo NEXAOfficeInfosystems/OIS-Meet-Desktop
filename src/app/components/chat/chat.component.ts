@@ -118,6 +118,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   isElectron = !!(window as any).windowAPI;
   settings: UserSettings = { showMessagePreview: true, showMediaPreviews: true, notificationsMentionsOnly: false };
 
+  // Sidebar Section Collapse States
+  sidebarSections: { [key: string]: boolean } = {
+    teams: false,
+    favorites: true,
+    messages: true
+  };
+
 
   // â”€â”€ Teams Workspace State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   activeView: 'chat' | 'teams' = 'teams';
@@ -257,6 +264,24 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.requestNotificationPermission();
     this.loadActivityFeed();
     this.setupCallSignals();
+    this.loadSidebarState();
+  }
+
+  // Sidebar Collapse Logic
+  private loadSidebarState(): void {
+    const saved = localStorage.getItem('ois_sidebar_state');
+    if (saved) {
+      try {
+        this.sidebarSections = JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse sidebar state', e);
+      }
+    }
+  }
+
+  toggleSidebarSection(section: 'teams' | 'favorites' | 'messages'): void {
+    this.sidebarSections[section] = !this.sidebarSections[section];
+    localStorage.setItem('ois_sidebar_state', JSON.stringify(this.sidebarSections));
   }
 
   private autoLoadFirstChat(): void {
