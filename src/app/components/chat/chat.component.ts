@@ -131,9 +131,15 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   searchQuery: string = '';
   isConnected: boolean = false;
   isUploading: boolean = false;
+  isToolbarVisible: boolean = false; // Controls formatting toolbar visibility
   userFilterMode: 'recent' | 'unread' = 'recent';
   isElectron = !!(window as any).windowAPI;
   settings: UserSettings = { showMessagePreview: true, showMediaPreviews: true, notificationsMentionsOnly: false };
+
+  toggleToolbar(): void {
+    this.isToolbarVisible = !this.isToolbarVisible;
+    this.cdr.detectChanges();
+  }
 
   // Sidebar Section Collapse States
   sidebarSections: { [key: string]: boolean } = {
@@ -433,10 +439,55 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       this.sendMessage();
+      return;
+    }
+
+    if (event.key === 'Backspace') {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+
+      // If at start of a node, see if previous node is a mention
+      if (range.collapsed && range.startOffset === 0) {
+        const node = range.startContainer;
+        let prev = node.previousSibling;
+        
+        // Handle nested or adjacent scenarios
+        if (!prev && node.parentNode !== this.messageEditor.nativeElement) {
+          prev = node.parentNode?.previousSibling || null;
+        }
+
+        if (prev && prev instanceof HTMLElement && prev.classList.contains('mention')) {
+          event.preventDefault();
+          this.suppressMentionCheck = true;
+          prev.remove();
+          this.onEditorInput({ target: this.messageEditor.nativeElement });
+          this.suppressMentionCheck = false;
+          this.cdr.detectChanges();
+        }
+      }
     }
   }
 
+  onEditorPaste(event: ClipboardEvent): void {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+       if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+             event.preventDefault();
+             this.uploadFile(file);
+          }
+       }
+    }
+  }
+
+  private suppressMentionCheck = false;
+
   private checkForMentions(event: any): void {
+    if (this.suppressMentionCheck) return;
     const selection = window.getSelection();
     if (!selection?.rangeCount) return;
 
@@ -484,7 +535,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     mentionSpan.setAttribute('data-user-id', user.userId || user.id);
     mentionSpan.innerText = `@${user.fullName || user.name}`;
 
-    const spaceNode = document.createTextNode('\u00A0'); // Non-breaking space
+    const spaceNode = document.createTextNode(' '); // Regular space instead of non-breaking
 
     range.insertNode(spaceNode);
     range.insertNode(mentionSpan);
@@ -496,8 +547,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     selection.removeAllRanges();
     selection.addRange(newRange);
 
+    this.suppressMentionCheck = true;
     this.mentionsVisible = false;
+    this.cdr.detectChanges();
     this.onEditorInput({ target: this.messageEditor.nativeElement });
+    this.suppressMentionCheck = false;
   }
 
   // ——————————————————————————————————————————————————————————————————————————————
@@ -1381,8 +1435,20 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     if (groupConv && groupConv.conversationId) {
       this.selectedConversation = { id: groupConv.conversationId };
       this.loadMessages(groupConv.conversationId);
+
+      // Populate mention list for channels
+      this.mentionList = (groupConv.participants || [])
+        .filter((p: any) => p.userId?.toString() !== this.currentUserId?.toString())
+        .map((p: any) => ({
+          id: p.userId?.toString(),
+          userId: p.userId?.toString(),
+          fullName: p.name || p.fullName,
+          name: p.name || p.fullName,
+          avatarColor: this.getMemberAvatarColor(p.name || p.fullName)
+        }));
     } else {
       console.log(`No active conversation found for ${this.activeTeam}`);
+      this.mentionList = [];
     }
   }
 

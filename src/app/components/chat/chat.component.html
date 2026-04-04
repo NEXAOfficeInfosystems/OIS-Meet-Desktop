@@ -342,23 +342,44 @@
 
           <!-- Message Input -->
           <footer class="workspace-input-area">
-            <div class="input-card shadow-sm">
-              <div class="toolbar">
-                <button class="tool-btn" (click)="formatDoc('bold')"><i class="bi bi-type-bold"></i></button>
-                <button class="tool-btn" (click)="formatDoc('italic')"><i class="bi bi-type-italic"></i></button>
-                <button class="tool-btn" (click)="formatDoc('underline')"><i class="bi bi-type-underline"></i></button>
-                <button class="tool-btn" (click)="formatDoc('insertUnorderedList')"><i
-                    class="bi bi-list-ul"></i></button>
-                <button class="tool-btn" (click)="formatDoc('insertOrderedList')"><i class="bi bi-list-ol"></i></button>
-                <span class="v-divider"></span>
-                <button class="tool-btn" (click)="formatDoc('formatBlock', 'pre')"><i
-                    class="bi bi-code-slash"></i></button>
-                <button class="tool-btn" (click)="formatDoc('createLink', 'https://')"><i
-                    class="bi bi-link-45deg"></i></button>
-                <span class="v-divider"></span>
-                <!-- Emoji picker trigger — placed here so the popup can escape overflow:hidden via fixed positioning -->
+            <!-- Reply Preview -->
+            <div class="reply-preview-v2 mb-2 animate-slide-up" *ngIf="replyToMessage">
+              <div class="reply-border"></div>
+              <div class="reply-content-wrapper">
+                <div class="reply-header">
+                  <span class="reply-to-label">Replying to</span>
+                  <span class="reply-user">{{ replyToMessage.senderName || 'User' }}</span>
+                </div>
+                <div class="reply-text text-truncate">{{ replyToMessage.content || 'Attachment' }}</div>
+              </div>
+              <button class="btn-close-reply" (click)="cancelReply()">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+              <div class="toolbar-v2" *ngIf="isToolbarVisible">
+                <button class="tool-btn-v2" (click)="formatDoc('bold')" title="Bold (Ctrl+B)">B</button>
+                <button class="tool-btn-v2" (click)="formatDoc('italic')" title="Italic (Ctrl+I)">I</button>
+                <button class="tool-btn-v2" (click)="formatDoc('underline')" title="Underline (Ctrl+U)">U</button>
+                <button class="tool-btn-v2" (click)="formatDoc('strikeThrough')" title="Strikethrough">S</button>
+                <span class="v-divider-v2"></span>
+                <button class="tool-btn-v2" (click)="formatDoc('insertUnorderedList')" title="Bulleted List">
+                  <i class="bi bi-list-ul"></i>
+                </button>
+                <button class="tool-btn-v2" (click)="formatDoc('insertOrderedList')" title="Numbered List">
+                  <i class="bi bi-list-ol"></i>
+                </button>
+                <span class="v-divider-v2"></span>
+                <button class="tool-btn-v2" (click)="formatDoc('formatBlock', 'pre')" title="Code Block">
+                  <i class="bi bi-code-slash"></i>
+                </button>
+                <button class="tool-btn-v2" (click)="formatDoc('createLink', 'https://')" title="Add Link">
+                  <i class="bi bi-link-45deg"></i>
+                </button>
+                <span class="v-divider-v2"></span>
+                
                 <div class="emoji-picker-container" style="position: relative;">
-                  <button class="tool-btn" id="emojiPickerBtn" (click)="showEmojiPicker($event)" title="Emoji">
+                  <button class="tool-btn-v2" id="emojiPickerBtn" (click)="showEmojiPicker($event)" title="Emoji">
                     <i class="bi bi-emoji-smile"></i>
                   </button>
                   <div class="emoji-picker-popover shadow border rounded-3 p-2 bg-white" *ngIf="isEmojiPickerVisible"
@@ -368,43 +389,72 @@
                   </div>
                 </div>
               </div>
-              <div class="message-field-wrapper position-relative">
-                <!-- Mentions Popover -->
-                <div class="mention-popover shadow border rounded-3 p-1 bg-white"
-                  *ngIf="mentionsVisible && filteredMentionList.length > 0">
-                  <div class="mention-item d-flex align-items-center gap-2 p-2 rounded cursor-pointer"
-                    *ngFor="let m of filteredMentionList; let i = index" [class.active]="i === mentionSelectedIndex"
-                    (click)="insertMention(m)">
-                    <div class="dm-avatar-xs" [style.background-color]="m.avatarColor || '#3b82f6'">
-                      {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+
+              <div class="message-input-wrapper-v2">
+                <div class="message-field-container-v2">
+                  <!-- Mentions Popover -->
+                  <div class="mention-popover shadow border rounded-3 p-1 bg-white"
+                    *ngIf="mentionsVisible && filteredMentionList.length > 0">
+                    <div class="mention-item d-flex align-items-center gap-2 p-2 rounded cursor-pointer"
+                      *ngFor="let m of filteredMentionList; let i = index" [class.active]="i === mentionSelectedIndex"
+                      (click)="insertMention(m); $event.stopPropagation()">
+                      <div class="dm-avatar-xs" [style.background-color]="m.avatarColor || '#3b82f6'">
+                        {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+                      </div>
+                      <span class="fs-xs fw-medium">{{ m.fullName || m.name }}</span>
                     </div>
-                    <span class="fs-xs fw-medium">{{ m.fullName || m.name }}</span>
+                  </div>
+
+                  <!-- Rich Text ContentEditable Area -->
+                  <div #messageEditor class="message-editor-v2" 
+                    contenteditable="true" 
+                    (input)="onEditorInput($event)"
+                    (keydown)="onEditorKeydown($event)"
+                    (paste)="onEditorPaste($event)"
+                    [attr.placeholder]="'Reply to ' + (selectedUser ? (selectedUser.fullName || selectedUser.name) : (activeChannel ? '#' + activeChannel : 'QA Team'))">
+                  </div>
+
+                  <!-- Bottom Actions Area (Teams Style) -->
+                  <div class="editor-actions-footer">
+                    <div class="actions-left">
+                      <button class="action-btn-v2" (click)="toggleToolbar()" title="Format options">
+                        <i class="bi bi-type"></i>
+                      </button>
+                      
+                      <div class="emoji-picker-container">
+                        <button class="action-btn-v2" id="emojiPickerBtn" (click)="showEmojiPicker($event)" title="Emoji">
+                          <i class="bi bi-emoji-smile"></i>
+                        </button>
+                        <div class="emoji-picker-popover shadow border rounded-3 p-2 bg-white" *ngIf="isEmojiPickerVisible"
+                        style="position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; min-width: 190px;">
+                          <button class="btn btn-light emoji-btn p-1" *ngFor="let e of commonEmojis" (click)="addEmoji(e)"
+                            (mousedown)="$event.preventDefault()">{{ e }}</button>
+                        </div>
+                      </div>
+
+                      <button class="action-btn-v2" title="Stickers">
+                        <i class="bi bi-sticky"></i>
+                      </button>
+
+                      <input type="file" #fileInput style="display: none" (change)='onFileSelected($event)'>
+                      <button class="action-btn-v2" (click)="fileInput.click()" title="Attach file">
+                        <i class="bi bi-plus-lg"></i>
+                      </button>
+                    </div>
+
+                    <div class="actions-right">
+                      <span class="v-separator"></span>
+                      <button class="action-btn-v2 send-icon-only" (click)="sendMessage()"
+                        [disabled]="isSendingMessage || (!newMessage.trim() && !isUploading)">
+                        <i class="bi bi-send" *ngIf="!isSendingMessage"></i>
+                        <div class="spinner-border spinner-border-sm" *ngIf="isSendingMessage"></div>
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                <!-- Rich Text ContentEditable Area -->
-                <div #messageEditor class="message-editor" contenteditable="true" (input)="onEditorInput($event)"
-                  (keydown)="onEditorKeydown($event)"
-                  [attr.placeholder]="selectedUser ? 'Message @' + (selectedUser.fullName || selectedUser.name) : 'Message #' + activeChannel">
-                </div>
               </div>
-              <div class="input-footer">
-                <div class="left-actions">
-                  <!-- Hidden file input -->
-                  <input type="file" #fileInput style="display: none" (change)='onFileSelected($event)'>
-                  <button class="action-icon" (click)="fileInput.click()"><i class="bi bi-plus-circle"></i></button>
-                  <button class="action-icon"><i class="bi bi-emoji-smile"></i></button>
-                  <button class="action-icon"><i class="bi bi-mention"></i></button>
-                </div>
-                <button class="send-btn-primary" (click)="sendMessage()"
-                  [disabled]="isSendingMessage || (!newMessage.trim() && !isUploading)">
-                  <i class="bi bi-send-fill" *ngIf="!isSendingMessage"></i>
-                  <div class="spinner-border spinner-border-sm" *ngIf="isSendingMessage"></div>
-                </button>
-              </div>
-            </div>
-          </footer>
-        </div>
+            </footer>
+          </div>
 
         <!-- ATTACHMENTS TAB CONTENT (MAIN TABLE VIEW) -->
         <div class="main-tab-content flex-grow-1 bg-light p-4"
