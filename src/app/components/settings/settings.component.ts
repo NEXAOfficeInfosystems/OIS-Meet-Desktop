@@ -45,10 +45,29 @@ export class SettingsComponent implements OnInit {
     this.loadDevices();
   }
 
+  get isElectron(): boolean {
+    return (window as any).oisMeet?.isElectron === true;
+  }
+
   async loadDevices(): Promise<void> {
     try {
-      // Request permissions first to get labels
-      await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      // In Electron, permissions are handled by main.js (granted automatically)
+      // In Web UI, we need to request them to get labels
+      if (!this.isElectron) {
+        console.log('Web environment detected: Requesting media permissions...');
+      }
+
+      // Request permissions first to get labels (necessary for browser UX)
+      await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+        .then(stream => {
+          // Immediately stop the initial stream as we only need the permission
+          stream.getTracks().forEach(track => track.stop());
+        })
+        .catch(err => {
+          console.warn('Media permissions not granted in Web UI:', err);
+          // Don't alert here yet, as we might still want to list what we can
+        });
+
       const devices = await navigator.mediaDevices.enumerateDevices();
       
       this.audioInputs = devices.filter(d => d.kind === 'audioinput');
@@ -83,8 +102,8 @@ export class SettingsComponent implements OnInit {
   async startPreview(): Promise<void> {
     try {
       const constraints = {
-        audio: { deviceId: this.settings.preferredAudioInputId ? { exact: this.settings.preferredAudioInputId } : undefined },
-        video: { deviceId: this.settings.preferredVideoInputId ? { exact: this.settings.preferredVideoInputId } : undefined }
+        audio: { deviceId: this.settings.preferredAudioInputId && this.settings.preferredAudioInputId !== 'default' ? { exact: this.settings.preferredAudioInputId } : undefined },
+        video: { deviceId: this.settings.preferredVideoInputId && this.settings.preferredVideoInputId !== 'default' ? { exact: this.settings.preferredVideoInputId } : undefined }
       };
 
       this.previewStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -96,7 +115,12 @@ export class SettingsComponent implements OnInit {
       this.cdr.detectChanges();
     } catch (err) {
       console.error('Error starting preview:', err);
-      alert('Could not access camera/microphone. Please check permissions.');
+      
+      if (!this.isElectron) {
+        alert('Could not access camera/microphone. Please ensure you have granted permissions in your browser and that no other application is using them.');
+      } else {
+        alert('Could not access camera/microphone. Please ensure your devices are connected and not in use by another application.');
+      }
     }
   }
 

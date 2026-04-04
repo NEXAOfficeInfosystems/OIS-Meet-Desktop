@@ -15,7 +15,7 @@
 </div>
 
 <div class="workspace-wrapper" [class.hWrap]="isElectron" [class.h100]="!isElectron"
-  [style.grid-template-columns]="showInfoPanel ? '280px 1fr 300px' : '280px 1fr'">
+  [style.grid-template-columns]="showRightPanel ? '280px 1fr 300px' : '280px 1fr'">
 
   <!-- TEAM/CHANNEL SIDEBAR (Secondary Sidebar) -->
   <div class="secondary-sidebar">
@@ -230,8 +230,14 @@
             <i class="bi bi-camera-video" *ngIf="!isCalling"></i>
             <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Video'"></div>
           </button>
-          <button class="action-btn" title="More info" (click)="showInfoPanel = !showInfoPanel"><i
-              class="bi bi-info-circle"></i></button>
+          <button class="action-btn" [class.active]="showRightPanel && rightPanelMode === 'attachments'" 
+            title="View Attachments" (click)="toggleRightPanel('attachments')">
+            <i class="bi bi-paperclip"></i>
+          </button>
+          <button class="action-btn" [class.active]="showRightPanel && rightPanelMode === 'info'" 
+            title="More info" (click)="toggleRightPanel('info')">
+            <i class="bi bi-info-circle"></i>
+          </button>
         </div>
       </div>
     </header>
@@ -392,127 +398,121 @@
   </div>
 
   <!-- RIGHT PANEL (Info / Activity / Files) -->
-  <aside class="workspace-right-panel" *ngIf="showInfoPanel">
+  <aside class="workspace-right-panel" *ngIf="showRightPanel">
+    
+    <!-- Panel Header (Shared) -->
+    <div class="panel-header-sticky d-flex align-items-center justify-content-between mb-4">
+      <h6 class="fw-bold mb-0">{{ rightPanelMode === 'info' ? 'Info' : 'Attachments' }}</h6>
+      <button class="btn btn-icon-sm" (click)="showRightPanel = false"><i class="bi bi-x-lg"></i></button>
+    </div>
 
-    <!-- User Profile Widget (Slack Style) -->
-    <section class="panel-section profile-widget" *ngIf="selectedUser && !selectedUser.isGroup">
-      <div class="profile-card border rounded-3 p-3 text-center mb-2">
-        <div class="avatar-large mx-auto mb-2" [style.background-color]="selectedUser.avatarColor || '#3b82f6'">
-          {{ (selectedUser.fullName || selectedUser.name || 'U').charAt(0).toUpperCase() }}
+    <!-- INFO MODE -->
+    <div class="info-view-container" *ngIf="rightPanelMode === 'info'">
+      <!-- User Profile Widget (Slack Style) -->
+      <section class="panel-section profile-widget" *ngIf="selectedUser && !selectedUser.isGroup">
+        <div class="profile-card border rounded-3 p-3 text-center mb-2">
+          <div class="avatar-large mx-auto mb-2" [style.background-color]="selectedUser.avatarColor || '#3b82f6'">
+            {{ (selectedUser.fullName || selectedUser.name || 'U').charAt(0).toUpperCase() }}
+          </div>
+          <h6 class="mb-1">{{ selectedUser.fullName || selectedUser.name }}</h6>
+          <p class="text-muted small mb-0">{{ selectedUser.email }}</p>
+          <div class="mt-2">
+            <span class="badge rounded-pill"
+              [ngClass]="selectedUser.isOnline ? 'bg-success-soft text-success' : 'bg-secondary-soft text-muted'">
+              ● {{ selectedUser.isOnline ? 'Online' : 'Away' }}
+            </span>
+          </div>
         </div>
-        <h6 class="mb-1">{{ selectedUser.fullName || selectedUser.name }}</h6>
-        <p class="text-muted small mb-0">{{ selectedUser.email }}</p>
-        <div class="mt-2">
-          <span class="badge rounded-pill"
-            [ngClass]="selectedUser.isOnline ? 'bg-success-soft text-success' : 'bg-secondary-soft text-muted'">
-            ● {{ selectedUser.isOnline ? 'Online' : 'Away' }}
-          </span>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- Group Members Column (Teams Style) -->
-    <section class="panel-section" *ngIf="selectedUser?.isGroup">
-      <div class="section-header d-flex justify-content-between align-items-center mb-2">
-        <h6 class="fw-bold fs-7 mb-0">Group Members</h6>
-        <div class="d-flex gap-1 align-items-center">
-          <button class="btn btn-icon-xs text-primary" (click)="openAddMemberModal()" title="Add Member">
-            <i class="bi bi-person-plus-fill"></i>
-          </button>
-          <span class="badge bg-light text-muted border fs-xs">{{ selectedUser.participants?.length || 0 }}</span>
+      <!-- Group Members Column (Teams Style) -->
+      <section class="panel-section" *ngIf="selectedUser?.isGroup">
+        <div class="section-header d-flex justify-content-between align-items-center mb-2">
+          <h6 class="fw-bold fs-7 mb-0">Group Members</h6>
+          <div class="d-flex gap-1 align-items-center">
+            <button class="btn btn-icon-xs text-primary" (click)="openAddMemberModal()" title="Add Member">
+              <i class="bi bi-person-plus-fill"></i>
+            </button>
+            <span class="badge bg-light text-muted border fs-xs">{{ selectedUser.participants?.length || 0 }}</span>
+          </div>
         </div>
-      </div>
 
-      <!-- Search within members -->
-      <div class="search-input-wrapper position-relative mb-2">
+        <div class="search-input-wrapper position-relative mb-2">
+          <i class="bi bi-search search-icon me-2 position-absolute"
+            style="left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; opacity: 0.5;"></i>
+          <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="groupMembersSearchQuery"
+            placeholder="Find a member..." />
+        </div>
+
+        <div class="group-members-list list-unstyled">
+          <div class="member-item d-flex align-items-center gap-2 mb-2 p-2 rounded cursor-pointer"
+            *ngFor="let member of filteredGroupMembers">
+            <div class="member-avatar-wrapper position-relative">
+              <img *ngIf="member.avatarUrl" [src]="member.avatarUrl" class="member-avatar rounded-circle" alt="avatar">
+              <div *ngIf="!member.avatarUrl" class="member-avatar"
+                [style.background-color]="getMemberAvatarColor(member.name)">
+                {{ (member.name || 'U').charAt(0).toUpperCase() }}
+              </div>
+              <span class="status-indicator-xs" [class.online]="presenceService.isOnline(member.userId)"></span>
+            </div>
+            <div class="member-info min-w-0 flex-grow-1">
+              <div class="member-name text-truncate fs-small fw-medium">{{ member.name }}</div>
+              <div class="member-role fs-xs text-muted">{{ member.userId === currentUserId ? 'You' : 'Member' }}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Activity Feed -->
+      <section class="panel-section">
+        <div class="section-header d-flex justify-content-between mb-2">
+          <h6 class="fw-bold fs-7 mb-0">Team Activity</h6>
+          <a href="#" class="text-primary fs-small text-decoration-none">View all</a>
+        </div>
+        <div class="activity-list">
+          <div class="activity-item d-flex gap-2 mb-2" *ngFor="let act of activityFeed">
+            <div class="activity-dot mt-1"></div>
+            <div class="activity-content">
+              <p class="mb-0 fs-small"><strong>{{ act.user }}</strong> {{ act.action }}</p>
+              <span class="text-muted fs-xs">{{ act.time }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ATTACHMENTS MODE -->
+    <div class="attachments-view-container" *ngIf="rightPanelMode === 'attachments'">
+      <div class="search-input-wrapper position-relative mb-3">
         <i class="bi bi-search search-icon me-2 position-absolute"
           style="left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; opacity: 0.5;"></i>
-        <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="groupMembersSearchQuery"
-          placeholder="Find a member..." />
+        <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="attachmentsSearchQuery"
+          placeholder="Filter attachments..." />
       </div>
 
-      <div class="group-members-list list-unstyled">
-        <div class="member-item d-flex align-items-center gap-2 mb-2 p-2 rounded cursor-pointer"
-          *ngFor="let member of filteredGroupMembers">
-          <div class="member-avatar-wrapper position-relative">
-            <img *ngIf="member.avatarUrl" [src]="member.avatarUrl" class="member-avatar rounded-circle" alt="avatar">
-            <div *ngIf="!member.avatarUrl" class="member-avatar"
-              [style.background-color]="getMemberAvatarColor(member.name)">
-              {{ (member.name || 'U').charAt(0).toUpperCase() }}
+      <div class="attachments-list h-100 overflow-auto">
+        <div *ngIf="filteredSharedFiles.length === 0" class="text-center py-5 text-muted">
+          <i class="bi bi-folder2-open d-block mb-2 fs-2 opacity-50"></i>
+          <p class="fs-xs mb-0">No attachments found</p>
+        </div>
+
+        <div class="attachment-item-card d-flex align-items-center gap-2 p-2 rounded mb-2 border cursor-pointer hover-bg-light animate-fade-in" 
+             *ngFor="let file of filteredSharedFiles" (click)="downloadFile(file.url, file.name)">
+          <div class="file-icon-square p-2 bg-light rounded d-flex align-items-center justify-content-center">
+            <i class="bi fs-5" [class]="getFileIcon(file.type)"></i>
+          </div>
+          <div class="file-info min-w-0 flex-grow-1">
+            <div class="file-name text-truncate fs-xs fw-bold">{{ file.name }}</div>
+            <div class="file-meta fs-xs text-muted mt-1">
+              {{ file.owner }} • {{ file.date }}
             </div>
-            <span class="status-indicator-xs" [class.online]="presenceService.isOnline(member.userId)"></span>
           </div>
-          <div class="member-info min-w-0 flex-grow-1">
-            <div class="member-name text-truncate fs-small fw-medium">{{ member.name }}</div>
-            <div class="member-role fs-xs text-muted">{{ member.userId === currentUserId ? 'You' : 'Member' }}</div>
-          </div>
-        </div>
-        <div *ngIf="filteredGroupMembers.length === 0" class="text-center py-4 text-muted fs-xs">
-          No members found
-        </div>
-      </div>
-    </section>
-
-    <!-- Activity Feed -->
-    <section class="panel-section">
-      <div class="section-header d-flex justify-content-between mb-2">
-        <h6 class="fw-bold fs-7 mb-0">Team Activity</h6>
-        <a href="#" class="text-primary fs-small text-decoration-none">View all</a>
-      </div>
-      <div class="activity-list">
-        <div class="activity-item d-flex gap-2 mb-2" *ngFor="let act of activityFeed">
-          <div class="activity-dot mt-1"></div>
-          <div class="activity-content">
-            <p class="mb-0 fs-small"><strong>{{ act.user }}</strong> {{ act.action }}</p>
-            <span class="text-muted fs-xs">{{ act.time }}</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <hr class="section-divider">
-
-    <!-- Shared Files Section -->
-    <section class="panel-section">
-      <div class="section-header d-flex justify-content-between mb-2">
-        <h6 class="fw-bold fs-7 mb-0">Shared Files</h6>
-        <i class="bi bi-files text-muted"></i>
-      </div>
-      <div class="file-list-small">
-        <!-- Empty state -->
-        <div *ngIf="sharedFiles.length === 0" class="text-center text-muted py-3">
-          <i class="bi bi-folder2-open d-block mb-1" style="font-size: 1.5rem; opacity: 0.4;"></i>
-          <span class="fs-xs">No files shared yet</span>
-        </div>
-        <!-- File items -->
-        <div class="file-item-mini d-flex align-items-center gap-2 p-2 rounded mb-1" *ngFor="let file of sharedFiles"
-          (click)="downloadFile(file.url, file.name)" style="cursor:pointer;">
-          <div class="file-icon-bg bg-light rounded p-2">
-            <i class="bi"
-              [class.bi-file-earmark-image-fill]="file.type === 'png' || file.type === 'jpg' || file.type === 'jpeg' || file.type === 'gif'"
-              [class.bi-file-earmark-pdf-fill]="file.type === 'pdf'"
-              [class.bi-file-earmark-spreadsheet-fill]="file.type === 'xls' || file.type === 'xlsx' || file.type === 'csv'"
-              [class.bi-file-earmark-ppt-fill]="file.type === 'ppt' || file.type === 'pptx'"
-              [class.bi-file-earmark-zip-fill]="file.type === 'zip' || file.type === 'rar'"
-              [class.bi-file-earmark-fill]="!['png','jpg','jpeg','gif','pdf','xls','xlsx','csv','ppt','pptx','zip','rar'].includes(file.type || '')"
-              [class.text-danger]="file.type === 'pdf'"
-              [class.text-success]="file.type === 'xls' || file.type === 'xlsx' || file.type === 'csv'"
-              [class.text-warning]="file.type === 'ppt' || file.type === 'pptx'"
-              [class.text-info]="file.type === 'png' || file.type === 'jpg' || file.type === 'jpeg' || file.type === 'gif'"
-              [class.text-primary]="!file.type"></i>
-          </div>
-          <div class="file-details-mini flex-grow-1 min-w-0">
-            <div class="file-name-mini text-truncate fs-xs fw-semibold" [title]="file.name">{{ file.name }}</div>
-            <div class="file-meta-mini fs-xs opacity-50">{{ file.date }} • {{ file.owner }}</div>
-          </div>
-          <button class="btn btn-sm text-secondary p-0" title="Download"
-            (click)="downloadFile(file.url, file.name); $event.stopPropagation()">
+          <button class="btn btn-icon-xs text-muted" (click)="downloadFile(file.url, file.name); $event.stopPropagation()">
             <i class="bi bi-download"></i>
           </button>
         </div>
       </div>
-      <button class="btn btn-outline-secondary w-100 btn-sm mt-3">Browse all files</button>
-    </section>
+    </div>
 
   </aside>
 

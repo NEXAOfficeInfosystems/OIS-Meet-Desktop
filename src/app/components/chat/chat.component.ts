@@ -63,7 +63,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   currentUserId: string | null = null;
   isEmojiPickerVisible = false;
   commonEmojis = ['👍', '❤️', '😄', '😮', '😢', '🔥', '👏', '✅'];
-  showInfoPanel: boolean = false;
+  showRightPanel: boolean = true;
+  rightPanelMode: 'info' | 'attachments' = 'info';
+  attachmentsSearchQuery: string = '';
   groupMembersSearchQuery: string = '';
   // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   messages: any[] = [];
@@ -223,13 +225,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       if (convId && byConv[convId]) {
         const unique = this.getUniqueMessages(byConv[convId]);
         this.messages = this.decorateMessagesWithDates(unique);
-        
+
         // Ensure displayedMessageIds is in sync
         unique.forEach(m => {
           const id = String(m?.id ?? m?.Id ?? '');
           if (id) this.displayedMessageIds.add(id);
         });
-        
+
         this.updateSharedFiles();
         this.shouldScroll = true;
       }
@@ -265,6 +267,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.loadActivityFeed();
     this.setupCallSignals();
     this.loadSidebarState();
+    this.loadRightPanelState();
   }
 
   // Sidebar Collapse Logic
@@ -305,6 +308,46 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }
   }
 
+  toggleRightPanel(mode: 'info' | 'attachments'): void {
+    if (this.showRightPanel && this.rightPanelMode === mode) {
+      this.showRightPanel = false;
+    } else {
+      this.showRightPanel = true;
+      this.rightPanelMode = mode;
+    }
+    this.saveRightPanelState();
+  }
+
+  private saveRightPanelState(): void {
+    localStorage.setItem('ois_right_panel_state', JSON.stringify({
+      show: this.showRightPanel,
+      mode: this.rightPanelMode
+    }));
+  }
+
+  private loadRightPanelState(): void {
+    const saved = localStorage.getItem('ois_right_panel_state');
+    if (saved) {
+      try {
+        const state = JSON.parse(saved);
+        this.showRightPanel = state.show;
+        this.rightPanelMode = state.mode || 'info';
+      } catch (e) {
+        console.error('Failed to parse right panel state', e);
+      }
+    }
+  }
+
+  get filteredSharedFiles(): any[] {
+    const query = this.attachmentsSearchQuery?.toLowerCase().trim() || '';
+    if (!query) return this.sharedFiles;
+    return this.sharedFiles.filter(f =>
+      f.name.toLowerCase().includes(query) ||
+      f.owner.toLowerCase().includes(query) ||
+      f.type.toLowerCase().includes(query)
+    );
+  }
+
   @ViewChild('messageEditor') messageEditor!: ElementRef;
 
   // ——————————————————————————————————————————————————————————————————————————————
@@ -321,6 +364,18 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.formattedMessage = html;
     this.newMessage = event.target.innerText;
     this.checkForMentions(event);
+  }
+
+  getFileIcon(type: string): string {
+    const t = type?.toLowerCase();
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(t)) return 'bi-file-earmark-image-fill text-info';
+    if (['pdf'].includes(t)) return 'bi-file-earmark-pdf-fill text-danger';
+    if (['xls', 'xlsx', 'csv'].includes(t)) return 'bi-file-earmark-spreadsheet-fill text-success';
+    if (['ppt', 'pptx'].includes(t)) return 'bi-file-earmark-ppt-fill text-warning';
+    if (['doc', 'docx'].includes(t)) return 'bi-file-earmark-word-fill text-primary';
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(t)) return 'bi-file-earmark-zip-fill text-secondary';
+    if (['txt', 'md'].includes(t)) return 'bi-file-earmark-text-fill text-muted';
+    return 'bi-file-earmark-fill text-primary';
   }
 
   onEditorKeydown(event: KeyboardEvent): void {
@@ -1631,22 +1686,40 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   private updateSharedFiles() {
-    this.sharedFiles = this.messages
-      .filter(m => m.fileUrl || m.FileUrl || (m.attachments && m.attachments.length > 0) || (m.Attachments && m.Attachments.length > 0))
-      .map(m => {
-        const fileUrl = m.fileUrl || m.FileUrl || m.attachments?.[0]?.fileUrl || m.Attachments?.[0]?.fileUrl || m.attachments?.[0]?.FileUrl || m.Attachments?.[0]?.FileUrl;
-        const fileName = m.fileName || m.FileName || m.attachments?.[0]?.fileName || m.Attachments?.[0]?.fileName || m.attachments?.[0]?.FileName || m.Attachments?.[0]?.FileName || 'Unnamed File';
-        return {
-          name: fileName,
+    const allFiles: any[] = [];
+    this.messages.forEach(m => {
+      const msgFiles: any[] = [];
+      const fileUrl = m.fileUrl || m.FileUrl;
+      if (fileUrl) {
+        msgFiles.push({
+          name: m.fileName || m.FileName || 'Unnamed File',
+          url: fileUrl,
+          sentAt: m.sentAt || m.SentAt,
+          sender: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown')
+        });
+      }
+      const attachments = m.attachments || m.Attachments || [];
+      attachments.forEach((a: any) => {
+        msgFiles.push({
+          name: a.fileName || a.FileName || 'Unnamed File',
+          url: a.fileUrl || a.FileUrl,
+          sentAt: m.sentAt || m.SentAt,
+          sender: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown')
+        });
+      });
+
+      msgFiles.forEach(f => {
+        allFiles.push({
+          name: f.name,
           size: 'View',
-          type: fileName.split('.').pop()?.toLowerCase() || 'file',
-          date: this.formatMessageTime(m.sentAt || m.SentAt),
-          owner: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown'),
-          url: fileUrl
-        };
-      })
-      .reverse()
-      .slice(0, 10);
+          type: f.name.split('.').pop()?.toLowerCase() || 'file',
+          date: this.formatMessageTime(f.sentAt),
+          owner: f.sender,
+          url: f.url
+        });
+      });
+    });
+    this.sharedFiles = allFiles.reverse();
   }
 
   private getUniqueMessages(msgs: any[]): any[] {

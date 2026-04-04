@@ -383,12 +383,55 @@
     background: transparent;
     color: #64748b;
     transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
     &:hover {
       background: #f1f5f9;
       color: #1e293b;
     }
+
+    &.active {
+      background: #e0e7ff;
+      color: #0047ba;
+      border-color: #0047ba;
+    }
   }
+}
+
+.panel-header-sticky {
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 5;
+}
+
+.attachment-item-card {
+  transition: all 0.2s ease;
+  background: white;
+
+  &:hover {
+    border-color: #0047ba !important;
+    background-color: #f8fafc;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+
+  .file-icon-square {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* =====================================================

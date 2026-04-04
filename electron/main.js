@@ -176,6 +176,22 @@ function createTray() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  // Automatically grant camera/microphone permissions in Electron
+  const { session } = require('electron');
+  
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    if (permission === 'media') return true;
+    return false;
+  });
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
+
   createMainWindow();
   createTray();
 

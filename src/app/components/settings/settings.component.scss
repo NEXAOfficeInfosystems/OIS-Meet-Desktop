@@ -1,69 +1,77 @@
 .settings-container {
-  padding: 32px;
+  padding: 24px;
   max-width: 1200px;
   margin: 0 auto;
-  min-height: 100vh;
+  height: 100%;
   background-color: var(--bg-primary, #f8f9fa);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .settings-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 40px;
+  margin-bottom: 24px;
+  flex-shrink: 0;
 }
 
 .settings-icon-wrapper {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   background-color: var(--primary-color, #3b82f6);
-  border-radius: 12px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 24px;
+  font-size: 20px;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
 .settings-title {
   margin: 0;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary, #1e293b);
 }
 
 .settings-subtitle {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary, #64748b);
 }
 
 .settings-grid {
   display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 32px;
+  grid-template-columns: 200px 1fr;
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
 }
 
 .settings-nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  overflow-y: auto;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 10px 14px;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   color: var(--text-secondary, #64748b);
   font-weight: 500;
+  font-size: 14px;
 
   i {
-    font-size: 18px;
+    font-size: 16px;
   }
 
   &:hover {
@@ -81,16 +89,18 @@
 .settings-content {
   background-color: #fff;
   border-radius: 16px;
-  padding: 32px;
+  padding: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
   border: 1px solid rgba(0,0,0,0.05);
+  overflow-y: auto;
+  height: 100%;
 }
 
 .section-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
-  margin-bottom: 24px;
-  padding-bottom: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
   border-bottom: 1px solid rgba(0,0,0,0.05);
 }
 
@@ -98,7 +108,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 20px 0;
+  padding: 16px 0;
   border-bottom: 1px solid rgba(0,0,0,0.05);
 
   &:last-child {
