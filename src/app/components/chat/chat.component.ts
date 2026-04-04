@@ -1,6 +1,6 @@
 import {
   Component, OnInit, ViewChild, ElementRef,
-  AfterViewChecked, OnDestroy, ChangeDetectorRef
+  AfterViewChecked, OnDestroy, ChangeDetectorRef, HostListener
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -61,7 +61,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   currentUserId: string | null = null;
   isEmojiPickerVisible = false;
   commonEmojis = ['👍', '❤️', '😄', '😮', '😢', '🔥', '👏', '✅'];
-
+  showInfoPanel: boolean = false;
   // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   messages: any[] = [];
   newMessage: string = '';
@@ -75,6 +75,16 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   isCalling: boolean = false;
   activeCallUserId: string | null = null;
   callType: CallType = 'Audio';
+  isCallHubConnected: boolean = false;
+  callHubStatusMessage: string = 'Connecting...';
+
+  // Group creation state
+  isGroupModalOpen: boolean = false;
+  newGroupName: string = '';
+  newGroupSearchQuery: string = '';
+  selectedGroupMembers: any[] = [];
+  isCreatingGroup: boolean = false;
+  groupCreationError: string = '';
 
   // â”€â”€ UI flags â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   isLoading: boolean = false;
@@ -256,6 +266,17 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     if (!this.currentUserId) return;
     this.callService.startConnection(this.currentUserId);
 
+    // Track call hub connection state
+    this.callService.connectionState$.pipe(takeUntil(this.destroy$)).subscribe(state => {
+      this.isCallHubConnected = state === signalR.HubConnectionState.Connected;
+      this.callHubStatusMessage = state === signalR.HubConnectionState.Connected
+        ? 'Connected'
+        : state === signalR.HubConnectionState.Reconnecting
+          ? 'Reconnecting... Please wait'
+          : 'Connecting... Please wait';
+      this.cdr.detectChanges();
+    });
+
     this.callService.incomingCall$.pipe(takeUntil(this.destroy$)).subscribe(call => {
       this.incomingCall = call;
       this.cdr.detectChanges();
@@ -276,10 +297,20 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   startCall(type: CallType): void {
     if (!this.selectedUser) return;
+    if (!this.isCallHubConnected) {
+      alert(this.callHubStatusMessage);
+      return;
+    }
     this.callType = type;
     this.isCalling = true;
     const name = this.sessionService.getFullName() || 'User';
-    this.callService.startCall(this.selectedUser.userId, name, type);
+    this.callService.startCall(this.selectedUser.userId, name, type)
+      .catch(err => {
+        console.error('Failed to start call:', err);
+        this.isCalling = false;
+        alert('Could not start call. Please ensure you are connected.');
+        this.cdr.detectChanges();
+      });
   }
 
   acceptIncomingCall(): void {
@@ -636,7 +667,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       const sender = this.findUserByConversationOrSender(conversationId, message.senderId?.toString());
       const senderName = sender ? this.getUserDisplayName(sender) : 'New message';
       const avatarColor = sender?.avatarColor ?? '#1a73e8';
-      const preview = this.settings.showMessagePreview ? 
+      const preview = this.settings.showMessagePreview ?
         ((message.messageType || message.MessageType) === 'Text' ? ((message.content || message.Content) ?? '').substring(0, 60) :
           (message.messageType || message.MessageType) === 'Image' ? '📷 Image' : '📎 File Shared') : 'New message received';
 
@@ -734,7 +765,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private applySearch(): void {
     this.sortUsersByLastMessage();
     const q = (this.searchQuery || '').toLowerCase().trim();
-    
+
     // First, filter by mode if needed
     let result = [...this.users];
     if (this.userFilterMode === 'unread') {
@@ -744,9 +775,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     // Then, filter by search query
     this.filteredUsers = q
       ? result.filter(u =>
-          (u.fullName || u.name || '').toLowerCase().includes(q) ||
-          (u.email || '').toLowerCase().includes(q)
-        )
+        (u.fullName || u.name || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q)
+      )
       : result;
 
     this.cdr.detectChanges();
@@ -819,12 +850,12 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
               user.isGroup = isGroup;
               const lastMsg = conv.lastMessage;
               const type = lastMsg?.messageType || lastMsg?.MessageType || '';
-              user.lastMessage = (type === 'File') ? '📎 File Shared' : 
-                                 (type === 'Image') ? '📷 Image' : 
-                                 (lastMsg?.content || lastMsg?.Content || '');
-              user.lastMessageTime = lastMsg?.sentAt? this.formatMessageTime(this.parseDate(lastMsg.sentAt)) : '';
+              user.lastMessage = (type === 'File') ? '📎 File Shared' :
+                (type === 'Image') ? '📷 Image' :
+                  (lastMsg?.content || lastMsg?.Content || '');
+              user.lastMessageTime = lastMsg?.sentAt ? this.formatMessageTime(this.parseDate(lastMsg.sentAt)) : '';
               user.lastMessageType = type;
-              user.lastMessageAt = lastMsg?.sentAt? this.parseDate(lastMsg.sentAt) : null;
+              user.lastMessageAt = lastMsg?.sentAt ? this.parseDate(lastMsg.sentAt) : null;
               user.unreadCount = conv.unreadCount || 0;
             } else {
               this.users.push({
@@ -834,9 +865,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
                 fullName: isGroup ? (conv.name || 'Marketing Team') : (other.name || other.fullName || 'User'),
                 email: other.email || '',
                 isOnline: isGroup ? true : (other.isOnline || false),
-                lastMessage: (conv.lastMessage?.messageType || conv.lastMessage?.MessageType) === 'File' ? '📎 File Shared' : 
-                             (conv.lastMessage?.messageType || conv.lastMessage?.MessageType) === 'Image' ? '📷 Image' : 
-                             (conv.lastMessage?.content || conv.lastMessage?.Content || ''),
+                lastMessage: (conv.lastMessage?.messageType || conv.lastMessage?.MessageType) === 'File' ? '📎 File Shared' :
+                  (conv.lastMessage?.messageType || conv.lastMessage?.MessageType) === 'Image' ? '📷 Image' :
+                    (conv.lastMessage?.content || conv.lastMessage?.Content || ''),
                 lastMessageTime: conv.lastMessage?.sentAt
                   ? this.formatMessageTime(this.parseDate(conv.lastMessage.sentAt)) : '',
                 lastMessageType: conv.lastMessage?.messageType || conv.lastMessage?.MessageType || '',
@@ -1269,15 +1300,31 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .join(', ');
   }
 
-  showEmojiPicker(): void {
-    // Basic implementation for now - could show a dropdown
+  showEmojiPicker(event: MouseEvent): void {
+    event.stopPropagation();
     this.isEmojiPickerVisible = !this.isEmojiPickerVisible;
   }
 
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (this.isEmojiPickerVisible) {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.emoji-picker-container')) {
+        this.isEmojiPickerVisible = false;
+        this.cdr.detectChanges();
+      }
+    }
+  }
+
   addEmoji(emoji: string): void {
-    document.execCommand('insertText', false, emoji);
+    if (this.messageEditor?.nativeElement) {
+      this.messageEditor.nativeElement.focus();
+      document.execCommand('insertText', false, emoji);
+      // Update bound model
+      this.newMessage = this.messageEditor.nativeElement.innerText;
+      this.formattedMessage = this.messageEditor.nativeElement.innerHTML;
+    }
     this.isEmojiPickerVisible = false;
-    this.messageEditor.nativeElement.focus();
   }
 
   formatTime(value: any): string {
@@ -1422,5 +1469,99 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         this.activityFeed = [];
       }
     });
+  }
+
+  // ——————————————————————————————————————————————————————————————————————————————
+  // GROUP CREATION
+  // ——————————————————————————————————————————————————————————————————————————————
+
+  openGroupModal(): void {
+    this.isGroupModalOpen = true;
+    this.newGroupName = '';
+    this.newGroupSearchQuery = '';
+    this.selectedGroupMembers = [];
+    this.groupCreationError = '';
+  }
+
+  closeGroupModal(): void {
+    this.isGroupModalOpen = false;
+    this.groupCreationError = '';
+  }
+
+  get groupModalFilteredUsers(): any[] {
+    const q = this.newGroupSearchQuery.toLowerCase().trim();
+    return this.users.filter(u =>
+      !u.isGroup &&
+      !u.isSelf &&
+      (q === '' || (u.fullName || u.name || '').toLowerCase().includes(q))
+    );
+  }
+
+  isGroupMemberSelected(user: any): boolean {
+    return this.selectedGroupMembers.some(m => m.id === user.id);
+  }
+
+  toggleGroupMember(user: any): void {
+    if (this.isGroupMemberSelected(user)) {
+      this.selectedGroupMembers = this.selectedGroupMembers.filter(m => m.id !== user.id);
+    } else {
+      this.selectedGroupMembers = [...this.selectedGroupMembers, user];
+    }
+  }
+
+  createGroup(): void {
+    this.groupCreationError = '';
+
+    // Validate
+    if (!this.newGroupName.trim()) {
+      this.groupCreationError = 'Please enter a group name.';
+      return;
+    }
+    if (this.selectedGroupMembers.length < 2) {
+      this.groupCreationError = 'Please select at least 2 participants.';
+      return;
+    }
+
+    this.isCreatingGroup = true;
+    const participantIds = this.selectedGroupMembers.map(u => u.id);
+
+    this.chatService.createGroupConversation(this.newGroupName.trim(), participantIds)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          this.isCreatingGroup = false;
+          if (res.success && res.data) {
+            const convId = res.data.id?.toString() || res.data?.toString();
+            const newGroup: any = {
+              id: convId,
+              userId: null,
+              name: this.newGroupName.trim(),
+              fullName: this.newGroupName.trim(),
+              email: '',
+              isOnline: true,
+              lastMessage: '',
+              lastMessageTime: '',
+              lastMessageType: '',
+              lastMessageAt: null,
+              unreadCount: 0,
+              conversationId: convId,
+              avatarColor: this.commonService.getRandomColor(),
+              isGroup: true
+            };
+            this.users = [newGroup, ...this.users];
+            this.updateTeamsList();
+            this.applySearch();
+            this.closeGroupModal();
+            this.selectUser(newGroup);
+          } else {
+            this.groupCreationError = res.message || 'Failed to create group. Please try again.';
+          }
+        },
+        error: (err) => {
+          this.isCreatingGroup = false;
+          this.groupCreationError = 'An error occurred. Please check your connection and try again.';
+          console.error('Group creation failed:', err);
+        }
+      });
   }
 }

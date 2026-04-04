@@ -14,7 +14,8 @@
   </div>
 </div>
 
-<div class="workspace-wrapper" [class.hWrap]="isElectron" [class.h100]="!isElectron">
+<div class="workspace-wrapper" [class.hWrap]="isElectron" [class.h100]="!isElectron"
+  [style.grid-template-columns]="showInfoPanel ? '280px 1fr 300px' : '280px 1fr'">
 
   <!-- TEAM/CHANNEL SIDEBAR (Secondary Sidebar) -->
   <div class="secondary-sidebar">
@@ -46,28 +47,33 @@
       <div class="dm-section">
         <div class="dm-header px-3 py-2 d-flex justify-content-between align-items-center">
           <span class="text-uppercase fs-xs fw-bold text-muted letter-spacing-1">Messages</span>
-          <div class="dropdown">
-            <button class="btn btn-icon-sm p-0 text-muted" type="button" data-bs-toggle="dropdown"
-              aria-expanded="false">
-              <i class="bi bi-three-dots-vertical"></i>
+          <div class="d-flex gap-1 align-items-center">
+            <button class="btn btn-icon-sm p-0 text-primary" title="New Group" (click)="openGroupModal()">
+              <i class="bi bi-people-fill"></i>
             </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-1"
-              style="min-width: 140px; font-size: 0.85rem;">
-              <li>
-                <button class="dropdown-item d-flex align-items-center gap-2 py-2"
-                  [class.active]="userFilterMode === 'recent'" (click)="setUserFilterMode('recent')">
-                  <i class="bi bi-clock-history"></i> Most Recent
-                  <i class="bi bi-check ms-auto" *ngIf="userFilterMode === 'recent'"></i>
-                </button>
-              </li>
-              <li>
-                <button class="dropdown-item d-flex align-items-center gap-2 py-2"
-                  [class.active]="userFilterMode === 'unread'" (click)="setUserFilterMode('unread')">
-                  <i class="bi bi-chat-left-dots"></i> Unread Only
-                  <i class="bi bi-check ms-auto" *ngIf="userFilterMode === 'unread'"></i>
-                </button>
-              </li>
-            </ul>
+            <div class="dropdown">
+              <button class="btn btn-icon-sm p-0 text-muted" type="button" data-bs-toggle="dropdown"
+                aria-expanded="false">
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-1"
+                style="min-width: 140px; font-size: 0.85rem;">
+                <li>
+                  <button class="dropdown-item d-flex align-items-center gap-2 py-2"
+                    [class.active]="userFilterMode === 'recent'" (click)="setUserFilterMode('recent')">
+                    <i class="bi bi-clock-history"></i> Most Recent
+                    <i class="bi bi-check ms-auto" *ngIf="userFilterMode === 'recent'"></i>
+                  </button>
+                </li>
+                <li>
+                  <button class="dropdown-item d-flex align-items-center gap-2 py-2"
+                    [class.active]="userFilterMode === 'unread'" (click)="setUserFilterMode('unread')">
+                    <i class="bi bi-chat-left-dots"></i> Unread Only
+                    <i class="bi bi-check ms-auto" *ngIf="userFilterMode === 'unread'"></i>
+                  </button>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
 
@@ -84,9 +90,14 @@
             <div class="dm-info min-w-0 flex-grow-1">
               <div class="dm-name text-truncate" [class.fw-bold]="user.unreadCount > 0">{{ user.fullName || user.name }}
               </div>
-              <div class="dm-last-msg text-truncate fs-xs text-muted" *ngIf="user.lastMessage">
-                <ng-container *ngIf="settings.showMessagePreview">{{ user.lastMessage }}</ng-container>
-                <ng-container *ngIf="!settings.showMessagePreview"><i class="bi bi-eye-slash-fill me-1"></i> Message hidden</ng-container>
+              <!-- Last message preview: always shown, with fallback -->
+              <div class="dm-last-msg text-truncate fs-xs text-muted">
+                <ng-container *ngIf="user.lastMessage; else noMsg">
+                  <ng-container *ngIf="settings.showMessagePreview">{{ user.lastMessage }}</ng-container>
+                  <ng-container *ngIf="!settings.showMessagePreview"><i class="bi bi-eye-slash-fill me-1"></i>Message
+                    hidden</ng-container>
+                </ng-container>
+                <ng-template #noMsg><span class="opacity-50">No messages yet</span></ng-template>
               </div>
             </div>
             <span class="badge bg-primary rounded-pill fs-xs" *ngIf="user.unreadCount > 0">{{ user.unreadCount }}</span>
@@ -124,11 +135,18 @@
       </div>
       <div class="header-right">
         <div class="header-actions">
-          <button class="action-btn" (click)="startCall('Audio')" [disabled]="!selectedUser"><i
-              class="bi bi-telephone"></i></button>
-          <button class="action-btn" (click)="startCall('Video')" [disabled]="!selectedUser"><i
-              class="bi bi-camera-video"></i></button>
-          <button class="action-btn"><i class="bi bi-info-circle"></i></button>
+          <button class="action-btn" (click)="startCall('Audio')" [disabled]="!selectedUser || !isCallHubConnected"
+            [title]="isCallHubConnected ? 'Voice call' : callHubStatusMessage">
+            <i class="bi bi-telephone" *ngIf="!isCalling"></i>
+            <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Audio'"></div>
+          </button>
+          <button class="action-btn" (click)="startCall('Video')" [disabled]="!selectedUser || !isCallHubConnected"
+            [title]="isCallHubConnected ? 'Video call' : callHubStatusMessage">
+            <i class="bi bi-camera-video" *ngIf="!isCalling"></i>
+            <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Video'"></div>
+          </button>
+          <button class="action-btn" title="More info" (click)="showInfoPanel = !showInfoPanel"><i
+              class="bi bi-info-circle"></i></button>
         </div>
       </div>
     </header>
@@ -175,7 +193,8 @@
             </div> -->
 
             <!-- Legacy Attachments -->
-            <div class="msg-attachments" *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
+            <div class="msg-attachments"
+              *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
               <div class="file-chip" *ngFor="let file of (msg.attachments || msg.Attachments)">
                 <i class="bi bi-file-earmark-fill text-primary fs-4"></i>
                 <div class="file-info">
@@ -186,9 +205,11 @@
                     class="bi bi-download"></i></button>
               </div>
             </div>
-            <div class="msg-attachments-hidden mt-1" *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
+            <div class="msg-attachments-hidden mt-1"
+              *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
               <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
-                <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}} Attachment(s) hidden
+                <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}} Attachment(s)
+                hidden
               </span>
             </div>
           </div> <!-- end msg-content -->
@@ -233,12 +254,15 @@
           <button class="tool-btn" (click)="formatDoc('createLink', 'https://')"><i
               class="bi bi-link-45deg"></i></button>
           <span class="v-divider"></span>
+          <!-- Emoji picker trigger — placed here so the popup can escape overflow:hidden via fixed positioning -->
           <div class="emoji-picker-container" style="position: relative;">
-            <button class="tool-btn" (click)="showEmojiPicker()"><i class="bi bi-emoji-smile"></i></button>
+            <button class="tool-btn" id="emojiPickerBtn" (click)="showEmojiPicker($event)" title="Emoji">
+              <i class="bi bi-emoji-smile"></i>
+            </button>
             <div class="emoji-picker-popover shadow border rounded-3 p-2 bg-white" *ngIf="isEmojiPickerVisible"
-              style="position: absolute; bottom: 40px; left: 0; z-index: 1000; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;">
-              <button class="btn btn-light emoji-btn p-1" *ngFor="let e of commonEmojis" (click)="addEmoji(e)">{{ e
-                }}</button>
+              style="position: fixed; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; min-width: 190px;">
+              <button class="btn btn-light emoji-btn p-1" *ngFor="let e of commonEmojis" (click)="addEmoji(e)"
+                (mousedown)="$event.preventDefault()">{{ e }}</button>
             </div>
           </div>
         </div>
@@ -268,7 +292,7 @@
   </div>
 
   <!-- RIGHT PANEL (Info / Activity / Files) -->
-  <aside class="workspace-right-panel">
+  <aside class="workspace-right-panel" *ngIf="showInfoPanel">
 
     <!-- User Profile Widget (Slack Style) -->
     <section class="panel-section profile-widget" *ngIf="selectedUser">
@@ -391,5 +415,118 @@
       <button class="btn-reject" (click)="rejectIncomingCall()"><i class="bi bi-telephone-x-fill"></i></button>
       <button class="btn-accept" (click)="acceptIncomingCall()"><i class="bi bi-telephone-fill"></i></button>
     </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     NEW GROUP CREATION MODAL (Angular-native, no Bootstrap)
+     ═══════════════════════════════════════════════════════ -->
+<div class="group-modal-overlay" *ngIf="isGroupModalOpen" (click)="closeGroupModal()">
+  <div class="group-modal-card shadow-lg" (click)="$event.stopPropagation()" (keydown.escape)="closeGroupModal()">
+
+    <div class="group-modal-header">
+      <div class="header-title-section">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-people-fill me-2 text-primary"></i>Create New Group</h5>
+        <p class="text-muted fs-xs mb-0 mt-1">Chat collectively with your team members</p>
+      </div>
+      <button class="btn-close" (click)="closeGroupModal()"></button>
+    </div>
+
+    <div class="group-modal-body">
+      <!-- Group name -->
+      <div class="form-group mb-4">
+        <label class="form-label d-flex justify-content-between align-items-center">
+          <span class="fw-semibold fs-small">Group Name <span class="text-danger">*</span></span>
+          <span class="text-muted fs-xs">{{ newGroupName.length }}/80</span>
+        </label>
+        <input type="text" class="form-control form-control-md group-name-input" [(ngModel)]="newGroupName"
+          placeholder="e.g. Q4 Marketing Campaign" maxlength="80" autofocus (keydown.enter)="createGroup()"
+          [class.is-invalid]="groupCreationError && !newGroupName.trim()" />
+        <div class="invalid-feedback d-block" *ngIf="groupCreationError && !newGroupName.trim()">
+          Group name is required
+        </div>
+      </div>
+
+      <!-- Member search -->
+      <div class="form-group mb-0">
+        <label class="form-label d-flex justify-content-between align-items-center mb-2">
+          <span class="fw-semibold fs-small">Add Members <span class="text-danger">*</span></span>
+          <span class="badge" [class.bg-success-soft]="selectedGroupMembers.length >= 2"
+            [class.text-success]="selectedGroupMembers.length >= 2" [class.bg-light]="selectedGroupMembers.length < 2">
+            {{ selectedGroupMembers.length }} selected
+          </span>
+        </label>
+
+        <div class="search-input-wrapper position-relative mb-3">
+          <i class="bi bi-search search-icon"></i>
+          <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="newGroupSearchQuery"
+            placeholder="Search colleagues by name or email..." />
+        </div>
+
+        <!-- Selected chips (Horizontal Scrollable) -->
+        <div class="selected-members-chips d-flex flex-wrap gap-2 mb-3" *ngIf="selectedGroupMembers.length > 0">
+          <div class="member-chip animate-fade-in" *ngFor="let m of selectedGroupMembers">
+            <div class="chip-avatar" [style.background-color]="m.avatarColor || '#3b82f6'">
+              {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+            </div>
+            <span class="chip-label">{{ m.fullName || m.name }}</span>
+            <button type="button" class="chip-remove" (click)="toggleGroupMember(m)" title="Remove">
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- User list container -->
+        <div class="group-member-list-wrapper">
+          <div class="group-member-list">
+            <div *ngFor="let user of groupModalFilteredUsers"
+              class="group-member-item d-flex align-items-center gap-2 p-2 rounded"
+              [class.selected]="isGroupMemberSelected(user)" (click)="toggleGroupMember(user)">
+
+              <div class="dm-avatar-sm flex-shrink-0" [style.background-color]="user.avatarColor || '#3b82f6'">
+                {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
+              </div>
+
+              <div class="member-info flex-grow-1 min-w-0">
+                <div class="member-name fs-small text-truncate fw-medium">{{ user.fullName || user.name }}</div>
+                <div class="member-email fs-xs text-muted text-truncate">{{ user.email }}</div>
+              </div>
+
+              <div class="selection-status">
+                <i class="bi bi-check-circle-fill text-primary" *ngIf="isGroupMemberSelected(user)"></i>
+                <i class="bi bi-circle text-muted opacity-25" *ngIf="!isGroupMemberSelected(user)"></i>
+              </div>
+            </div>
+
+            <div class="text-center text-muted fs-xs py-4" *ngIf="groupModalFilteredUsers.length === 0">
+              <i class="bi bi-person-x fs-4 d-block mb-1 opacity-50"></i>
+              No colleagues found matching "{{ newGroupSearchQuery }}"
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- General error display -->
+      <div class="alert alert-danger-soft d-flex align-items-start gap-2 mt-4 animate-shake"
+        *ngIf="groupCreationError && (newGroupName.trim() || selectedGroupMembers.length >= 2)">
+        <i class="bi bi-exclamation-circle-fill mt-1"></i>
+        <div>
+          <div class="fw-bold fs-xs">Creation Failed</div>
+          <div class="fs-xs opacity-75">{{ groupCreationError }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="group-modal-footer">
+      <button class="btn btn-md btn-link text-decoration-none text-muted" (click)="closeGroupModal()"
+        [disabled]="isCreatingGroup">Cancel</button>
+      <button class="btn btn-md btn-primary px-4 d-flex align-items-center gap-2 shadow-sm" (click)="createGroup()"
+        [disabled]="isCreatingGroup || !newGroupName.trim() || selectedGroupMembers.length < 2">
+        <span class="spinner-border spinner-border-sm" *ngIf="isCreatingGroup"></span>
+        <i class="bi bi-plus-lg" *ngIf="!isCreatingGroup"></i>
+        <span>{{ isCreatingGroup ? 'Creating Group...' : 'Create Group' }}</span>
+      </button>
+    </div>
+
   </div>
 </div>

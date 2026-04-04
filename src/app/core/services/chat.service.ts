@@ -96,6 +96,15 @@ export class ChatService {
     );
   }
 
+  createGroupConversation(groupName: string, members: string[]): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    return this.http.post(
+      `${this.apiUrl}/conversations/group`,
+      { groupName, members: [currentUserId, ...members] },
+      { headers: this.getHeaders() }
+    );
+  }
+
   markMessagesAsRead(conversationId: string, messageIds: string[]): Observable<any> {
     const currentUserId = this.getCurrentUserId();
     const requestBody = {
