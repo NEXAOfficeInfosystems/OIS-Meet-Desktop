@@ -26,6 +26,7 @@ export class SidebarComponent {
       calls: '/calls',
       files: '/files',
       notifications: '/notifications',
+      settings: '/settings',
       help: '/coming-soon',
       apps: '/coming-soon'
     };

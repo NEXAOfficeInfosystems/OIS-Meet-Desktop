@@ -29,6 +29,8 @@ import { CollaborationService } from '../../core/services/collaboration.service'
 import { SafeHtmlPipe } from '../../shared/pipes/safe-html.pipe';
 import { CallService, CallType, IncomingCall } from '../../core/services/call.service';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { SettingsService, UserSettings } from '../../core/services/settings.service';
+
 
 declare var bootstrap: any;
 
@@ -87,6 +89,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   isUploading: boolean = false;
   userFilterMode: 'recent' | 'unread' = 'recent';
   isElectron = !!(window as any).windowAPI;
+  settings: UserSettings = { showMessagePreview: true, showMediaPreviews: true, notificationsMentionsOnly: false };
+
 
   // â”€â”€ Teams Workspace State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   activeView: 'chat' | 'teams' = 'teams';
@@ -139,7 +143,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private sanitizer: DomSanitizer,
     private cdr: ChangeDetectorRef,
     private router: Router,
-    private store: Store
+    private store: Store,
+    private settingsService: SettingsService
   ) {
     this.currentUserId = this.sessionService.getOISMeetUserId();
   }
@@ -149,6 +154,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   ngOnInit(): void {
+    this.settingsService.settings$.pipe(takeUntil(this.destroy$)).subscribe(s => {
+      this.settings = s;
+      this.cdr.detectChanges();
+    });
     this.currentUserId = this.sessionService.getOISMeetUserId() || null;
 
     if (this.currentUserId) {
@@ -627,9 +636,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       const sender = this.findUserByConversationOrSender(conversationId, message.senderId?.toString());
       const senderName = sender ? this.getUserDisplayName(sender) : 'New message';
       const avatarColor = sender?.avatarColor ?? '#1a73e8';
-      const preview =
-        (message.messageType || message.MessageType) === 'Text' ? ((message.content || message.Content) ?? '').substring(0, 60) :
-          (message.messageType || message.MessageType) === 'Image' ? '📷 Image' : '📎 File Shared';
+      const preview = this.settings.showMessagePreview ? 
+        ((message.messageType || message.MessageType) === 'Text' ? ((message.content || message.Content) ?? '').substring(0, 60) :
+          (message.messageType || message.MessageType) === 'Image' ? '📷 Image' : '📎 File Shared') : 'New message received';
 
       this.showInAppToast(senderName, preview, avatarColor);
       this.showBrowserNotification(senderName, preview);
@@ -651,9 +660,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       user.conversationId = conversationId.toString();
     }
 
+    const type = message.messageType || message.MessageType || '';
     user.lastMessage =
-      message.messageType === 'Text' ? (message.content ?? '') :
-        message.messageType === 'Image' ? 'ðŸ“· Image' : `ðŸ“Ž ${message.attachments?.[0]?.fileName ?? 'File'}`;
+      type === 'Text' ? (message.content ?? message.Content ?? '') :
+        type === 'Image' ? '📷 Image' : `📎 ${message.attachments?.[0]?.fileName || message.Attachments?.[0]?.FileName || 'File'}`;
     const parsedSent = this.parseDate(message.sentAt ?? Date.now()) ?? new Date();
     user.lastMessageTime = this.formatMessageTime(parsedSent);
     user.lastMessageType = message.messageType;
@@ -796,7 +806,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
           (res.data as any[]).forEach((conv: any) => {
             const isGroup = conv.conversationType === 'Group';
-            const other = conv.participants?.[0] || {};
+            const participants = conv.participants || [];
+            const other = participants.find((p: any) => p.userId?.toString() !== this.currentUserId?.toString()) || (participants.length > 0 ? participants[0] : {});
 
             // For groups, uniquely identify by conversationId. For direct, by other user's id.
             let user = isGroup
@@ -806,12 +817,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
             if (user) {
               user.conversationId = conv.id?.toString();
               user.isGroup = isGroup;
-              user.lastMessage = conv.lastMessage?.content || '';
-              user.lastMessageTime = conv.lastMessage?.sentAt
-                ? this.formatMessageTime(this.parseDate(conv.lastMessage.sentAt)) : '';
-              user.lastMessageType = conv.lastMessage?.messageType || '';
-              user.lastMessageAt = conv.lastMessage?.sentAt
-                ? this.parseDate(conv.lastMessage.sentAt) : null;
+              const lastMsg = conv.lastMessage;
+              const type = lastMsg?.messageType || lastMsg?.MessageType || '';
+              user.lastMessage = (type === 'File') ? '📎 File Shared' : 
+                                 (type === 'Image') ? '📷 Image' : 
+                                 (lastMsg?.content || lastMsg?.Content || '');
+              user.lastMessageTime = lastMsg?.sentAt? this.formatMessageTime(this.parseDate(lastMsg.sentAt)) : '';
+              user.lastMessageType = type;
+              user.lastMessageAt = lastMsg?.sentAt? this.parseDate(lastMsg.sentAt) : null;
               user.unreadCount = conv.unreadCount || 0;
             } else {
               this.users.push({

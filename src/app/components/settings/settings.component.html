@@ -1,0 +1,93 @@
+<div class="settings-container animate-fade-in">
+  <header class="settings-header">
+    <div class="d-flex align-items-center gap-3">
+      <div class="settings-icon-wrapper">
+        <i class="bi bi-gear-fill"></i>
+      </div>
+      <div>
+        <h1 class="settings-title">Settings</h1>
+        <p class="settings-subtitle">Manage your personal preferences and app behavior.</p>
+      </div>
+    </div>
+    <button class="btn btn-outline-danger btn-sm" (click)="resetDefaults()">
+      <i class="bi bi-arrow-counterclockwise me-1"></i> Reset to Defaults
+    </button>
+  </header>
+
+  <div class="settings-grid">
+    <!-- LEFT NAVIGATION (if needed for multiple sections) -->
+    <aside class="settings-nav">
+      <div class="nav-item active">
+        <i class="bi bi-chat-left-text"></i>
+        <span>Chat Preferences</span>
+      </div>
+      <div class="nav-item">
+        <i class="bi bi-bell"></i>
+        <span>Notifications</span>
+      </div>
+      <div class="nav-item">
+        <i class="bi bi-shield-check"></i>
+        <span>Privacy & Security</span>
+      </div>
+      <div class="nav-item">
+        <i class="bi bi-palette"></i>
+        <span>Appearance</span>
+      </div>
+    </aside>
+
+    <!-- SETTINGS CONTENT -->
+    <main class="settings-content">
+      <section class="settings-section">
+        <h3 class="section-title">Chat Preferences</h3>
+        
+        <div class="setting-card">
+          <div class="setting-info">
+            <div class="setting-label">Show Message Preview</div>
+            <div class="setting-description">Display a short snippet of the latest message in chat lists and activity feeds.</div>
+          </div>
+          <div class="setting-control">
+            <div class="form-check form-switch custom-switch">
+              <input class="form-check-input" type="checkbox" id="previewToggle" 
+                     [checked]="settings.showMessagePreview" 
+                     (change)="toggleSetting('showMessagePreview')">
+              <label class="form-check-label sr-only" for="previewToggle">Toggle Preview</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-info">
+            <div class="setting-label">Show Media Previews</div>
+            <div class="setting-description">Automatically show image and video thumbnails in chat threads.</div>
+          </div>
+          <div class="setting-control">
+            <div class="form-check form-switch custom-switch">
+              <input class="form-check-input" type="checkbox" id="mediaToggle" 
+                     [checked]="settings.showMediaPreviews" 
+                     (change)="toggleSetting('showMediaPreviews')">
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-info">
+            <div class="setting-label">Notifications for Mentions Only</div>
+            <div class="setting-description">Only receive alerts when someone &#64;mentions you, instead of every message.</div>
+          </div>
+          <div class="setting-control">
+            <div class="form-check form-switch custom-switch">
+              <input class="form-check-input" type="checkbox" id="notifToggle" 
+                     [checked]="settings.notificationsMentionsOnly" 
+                     (change)="toggleSetting('notificationsMentionsOnly')">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="alert alert-info border-0 shadow-sm mt-4">
+        <i class="bi bi-info-circle-fill me-2 text-primary"></i>
+        <small>Changes are saved automatically and synced across your current session.</small>
+      </div>
+    </main>
+  </div>
+</div>

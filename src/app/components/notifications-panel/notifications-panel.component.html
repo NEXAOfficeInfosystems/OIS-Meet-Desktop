@@ -13,7 +13,10 @@
       <div class="notice-dot"></div>
       <div>
         <div class="notice-title">{{ n.title }}</div>
-        <div class="notice-body">{{ n.body }}</div>
+        <div class="notice-body" *ngIf="settings.showMessagePreview">{{ n.body }}</div>
+        <div class="notice-body text-muted italic" *ngIf="!settings.showMessagePreview">
+          <i class="bi bi-eye-slash me-1"></i> Content hidden
+        </div>
         <div class="notice-time">{{ n.createdAt | date:'short' }}</div>
       </div>
     </article>

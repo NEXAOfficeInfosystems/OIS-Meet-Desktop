@@ -13,6 +13,8 @@ import { NotificationsPanelComponent } from './components/notifications-panel/no
 import { CallsCenterComponent } from './components/calls-center/calls-center.component';
 import { TeamsPanelComponent } from './components/teams-panel/teams-panel.component';
 import { FilesPanelComponent } from './components/files-panel/files-panel.component';
+import { SettingsComponent } from './components/settings/settings.component';
+
 
 export const routes: Routes = [
 
@@ -34,6 +36,8 @@ export const routes: Routes = [
       { path: 'teams', component: TeamsPanelComponent },
       { path: 'files', component: FilesPanelComponent },
       { path: 'coming-soon', component: ComingSoonComponent },
+      { path: 'settings', component: SettingsComponent },
+
 
     ]
   },

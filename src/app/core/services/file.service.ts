@@ -38,4 +38,15 @@ export class FileService {
     const cleanPath = relativeUrl.startsWith('/') ? relativeUrl.substring(1) : relativeUrl;
     return `${environment.apiBaseUrl.replace('/api', '')}/${cleanPath}`;
   }
+
+  downloadFile(fileUrl: string, fileName: string): void {
+    const fullUrl = this.getFileUrl(fileUrl);
+    const link = document.createElement('a');
+    link.href = fullUrl;
+    link.download = fileName;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 }

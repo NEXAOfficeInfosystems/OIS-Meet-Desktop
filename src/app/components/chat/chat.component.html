@@ -84,7 +84,9 @@
             <div class="dm-info min-w-0 flex-grow-1">
               <div class="dm-name text-truncate" [class.fw-bold]="user.unreadCount > 0">{{ user.fullName || user.name }}
               </div>
-              <div class="dm-last-msg text-truncate fs-xs text-muted" *ngIf="user.lastMessage">{{ user.lastMessage }}
+              <div class="dm-last-msg text-truncate fs-xs text-muted" *ngIf="user.lastMessage">
+                <ng-container *ngIf="settings.showMessagePreview">{{ user.lastMessage }}</ng-container>
+                <ng-container *ngIf="!settings.showMessagePreview"><i class="bi bi-eye-slash-fill me-1"></i> Message hidden</ng-container>
               </div>
             </div>
             <span class="badge bg-primary rounded-pill fs-xs" *ngIf="user.unreadCount > 0">{{ user.unreadCount }}</span>
@@ -173,7 +175,7 @@
             </div> -->
 
             <!-- Legacy Attachments -->
-            <div class="msg-attachments" *ngIf="(msg.attachments || msg.Attachments)?.length > 0">
+            <div class="msg-attachments" *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
               <div class="file-chip" *ngFor="let file of (msg.attachments || msg.Attachments)">
                 <i class="bi bi-file-earmark-fill text-primary fs-4"></i>
                 <div class="file-info">
@@ -183,6 +185,11 @@
                   (click)="downloadFile(file.fileUrl || file.FileUrl, file.fileName || file.FileName)"><i
                     class="bi bi-download"></i></button>
               </div>
+            </div>
+            <div class="msg-attachments-hidden mt-1" *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
+              <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
+                <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}} Attachment(s) hidden
+              </span>
             </div>
           </div> <!-- end msg-content -->
 

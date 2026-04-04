@@ -1,26 +1,361 @@
-<section class="collab-page">
-  <header class="page-hero">
-    <div>
-      <p class="eyebrow">Workspace</p>
-      <h1>Activity Feed</h1>
-      <p class="subtitle">Recent messages, uploads, mentions, and call events.</p>
-    </div>
-  </header>
+<div class="activity-container">
 
-  <div class="feed-card" *ngIf="loading">Loading activity...</div>
-
-  <div class="feed-list" *ngIf="!loading">
-    <article class="feed-item" *ngFor="let item of items">
-      <div class="feed-badge">{{ item.activityType?.charAt(0)?.toUpperCase() || 'A' }}</div>
-      <div class="feed-content">
-        <div class="feed-title">{{ item.title }}</div>
-        <div class="feed-body">{{ item.body }}</div>
-        <div class="feed-time">{{ item.createdAt | date:'short' }}</div>
+  <!-- ░░ LEFT PANEL: Activity Feed ░░ -->
+  <aside class="activity-sidebar">
+    <header class="sidebar-header">
+      <div class="sidebar-title-row">
+        <div class="d-flex align-items-center gap-2">
+          <h2 class="sidebar-title">Activity</h2>
+          <span class="unread-badge" *ngIf="unreadCount > 0">{{ unreadCount }}</span>
+        </div>
+        <div class="header-actions">
+          <button class="btn-icon-sm" (click)="loadActivities()" title="Refresh">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
       </div>
-    </article>
 
-    <div class="empty-state" *ngIf="items.length === 0">
-      Nothing to show yet.
+      <div class="filter-pills">
+        <button class="filter-pill" [class.active]="activeFilter === 'All'" (click)="applyFilter('All')">All</button>
+        <button class="filter-pill" [class.active]="activeFilter === 'Unread'" (click)="applyFilter('Unread')">Unread</button>
+        <button class="filter-pill" [class.active]="activeFilter === 'Mentions'" (click)="applyFilter('Mentions')">&#64;Mentions</button>
+      </div>
+    </header>
+
+    <div class="activity-list-container">
+      <!-- Skeleton Loaders -->
+      <div *ngIf="loading" class="placeholder-loader">
+        <div class="skeleton-item" *ngFor="let i of [1,2,3,4,5,6]"></div>
+      </div>
+
+      <!-- Activity Items -->
+      <div *ngIf="!loading" class="activity-list">
+        <article *ngFor="let item of filteredItems"
+                 class="activity-item"
+                 [class.active]="selectedActivity?.id === item.id"
+                 [class.unread]="!item.isRead"
+                 (click)="selectActivity(item)">
+
+          <div class="item-visual">
+            <div class="avatar" [style.background-color]="item.avatarColor">
+              {{ item.avatarLetter }}
+              <div class="category-icon-badge">
+                <i class="bi" [ngClass]="getCategoryIcon(item.category)"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="item-content">
+            <div class="item-header">
+              <span class="item-title">
+                <strong>{{ item.senderName }}</strong>
+                <span class="item-action-text"> {{ getActivityTypeText(item) }}</span>
+              </span>
+              <span class="item-time">{{ item.timeLabel }}</span>
+            </div>
+
+            <p class="item-preview" *ngIf="settings.showMessagePreview && item.body">
+              {{ item.body }}
+            </p>
+            <p class="item-preview item-preview--hidden" *ngIf="!settings.showMessagePreview">
+              <i class="bi bi-eye-slash me-1"></i> Message hidden
+            </p>
+
+            <div class="item-origin">
+              <i class="bi bi-chat-dots me-1 opacity-50"></i>
+              {{ item.entityName || 'In chat with you' }}
+            </div>
+          </div>
+
+          <div class="unread-dot" *ngIf="!item.isRead"></div>
+        </article>
+
+        <!-- Empty State -->
+        <div class="empty-state" *ngIf="filteredItems.length === 0">
+          <div class="empty-icon"><i class="bi bi-bell-slash"></i></div>
+          <p class="fw-semibold mb-1">You're all caught up!</p>
+          <p class="opacity-50 fs-xs">No {{ activeFilter !== 'All' ? activeFilter.toLowerCase() : '' }} activity to show.</p>
+        </div>
+      </div>
     </div>
-  </div>
-</section>
+  </aside>
+
+  <!-- ░░ RIGHT PANEL: Contextual Message Window ░░ -->
+  <main class="activity-detail">
+
+    <!-- No Selection State -->
+    <div *ngIf="!selectedActivity" class="no-selection">
+      <div class="no-selection-inner">
+        <div class="ns-icon"><i class="bi bi-bell-fill"></i></div>
+        <h3 class="ns-title">Stay in the loop</h3>
+        <p class="ns-subtitle">Select an activity from the left to view its conversation, files, and context.</p>
+      </div>
+    </div>
+
+    <!-- ── SELECTED ACTIVITY ── -->
+    <ng-container *ngIf="selectedActivity">
+
+      <!-- HEADER -->
+      <header class="detail-header">
+        <div class="context-group">
+          <div class="context-avatar" [style.background-color]="selectedActivity.avatarColor + '22'">
+            <i class="bi" [ngClass]="getDisplayIcon(selectedActivity)" [style.color]="selectedActivity.avatarColor"></i>
+          </div>
+          <div class="context-info">
+            <div class="context-name-row">
+              <h1 class="context-name">{{ getDisplayTitle(selectedActivity) }}</h1>
+              <span class="context-subtitle">{{ getDisplaySubtitle(selectedActivity) }}</span>
+            </div>
+            <nav class="detail-tabs">
+              <button class="detail-tab" [class.active]="activeTab === 'chat'" (click)="setActiveTab('chat')">
+                <i class="bi bi-chat-dots me-1"></i> Chat
+              </button>
+              <button class="detail-tab" [class.active]="activeTab === 'shared'" (click)="setActiveTab('shared')">
+                <i class="bi bi-paperclip me-1"></i> Shared
+                <span class="badge-mini ms-1" *ngIf="sharedFiles.length > 0">{{ sharedFiles.length }}</span>
+              </button>
+            </nav>
+          </div>
+        </div>
+        <div class="header-toolbar">
+          <button class="btn-hdr" title="Reload" (click)="loadActivities()">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+          <button class="btn-hdr" title="Search">
+            <i class="bi bi-search"></i>
+          </button>
+          <button class="btn-hdr" title="More">
+            <i class="bi bi-three-dots"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- CHAT TAB -->
+      <div class="detail-body" *ngIf="activeTab === 'chat'">
+
+        <!-- Thread Area -->
+        <div class="thread-container" #threadContainer (scroll)="onThreadScroll($event)">
+
+          <!-- Top: Infinite Scroll Loader -->
+          <div class="top-loader" *ngIf="loadingContext && contextMessages.length > 0">
+            <div class="spinner-border spinner-border-sm text-primary"></div>
+            <span class="ms-2 fs-xs opacity-60">Loading more…</span>
+          </div>
+
+          <!-- Full-screen loader (first load) -->
+          <div class="thread-skeleton" *ngIf="loadingContext && contextMessages.length === 0">
+            <div class="thread-skeleton-item" *ngFor="let i of [1,2,3]">
+              <div class="sk-avatar"></div>
+              <div class="sk-body">
+                <div class="sk-line sk-line--short"></div>
+                <div class="sk-line"></div>
+                <div class="sk-line sk-line--medium"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- === Message Items === -->
+          <ng-container *ngIf="!loadingContext || contextMessages.length > 0">
+            <div class="thread-item"
+                 *ngFor="let msg of contextMessages"
+                 [id]="'act-msg-' + msg.id"
+                 [class.is-self]="isCurrentUser(msg)"
+                 [class.highlighted]="msg.id?.toString() === highlightedMessageId?.toString()">
+
+              <div class="thread-avatar-col" *ngIf="!isCurrentUser(msg)">
+                <div class="thread-avatar" [style.background-color]="getFixedColor(msg.senderName || 'U')">
+                  {{ (msg.senderName || 'U').charAt(0).toUpperCase() }}
+                </div>
+              </div>
+
+              <div class="thread-content-col">
+                <div class="thread-meta">
+                  <span class="thread-sender">{{ isCurrentUser(msg) ? 'You' : (msg.senderName || 'User') }}</span>
+                  <span class="thread-time">{{ (msg.sentAt || msg.createdAt) | date:'shortTime' }}</span>
+                </div>
+
+                <!-- Message Bubble -->
+                <div class="thread-bubble">
+                  <!-- Reply-to indicator -->
+                  <div class="reply-context" *ngIf="msg.replyToMessage">
+                    <i class="bi bi-reply-fill me-1 opacity-50"></i>
+                    <span class="opacity-60 fs-xs text-truncate">{{ msg.replyToMessage?.content || 'View replied message' }}</span>
+                  </div>
+
+                  <!-- Text content -->
+                  <div [innerHTML]="getMessageText(msg) | safeHtml" *ngIf="getMessageText(msg)"></div>
+
+                  <!-- Attachments -->
+                  <div class="bubble-attachments" *ngIf="getAttachments(msg).length > 0">
+                    <ng-container *ngFor="let att of getAttachments(msg)">
+                      <div class="attachment-card" *ngIf="!isImageType(att.fileName || att.FileName)">
+                        <div class="att-icon">
+                          <i class="bi" [ngClass]="getFileIcon(att.fileName || att.FileName)"></i>
+                        </div>
+                        <div class="att-info">
+                          <span class="att-name text-truncate">{{ att.fileName || att.FileName }}</span>
+                        </div>
+                        <button class="att-download" (click)="downloadAttachment(att.fileUrl || att.FileUrl, att.fileName || att.FileName)">
+                          <i class="bi bi-download"></i>
+                        </button>
+                      </div>
+                      <div class="attachment-image" *ngIf="isImageType(att.fileName || att.FileName) && settings.showMediaPreviews">
+                        <img [src]="getFileFullUrl(att.fileUrl || att.FileUrl)" [alt]="att.fileName || att.FileName" class="img-preview" loading="lazy">
+                        <button class="att-download att-download--img" (click)="downloadAttachment(att.fileUrl || att.FileUrl, att.fileName || att.FileName)">
+                          <i class="bi bi-download"></i>
+                        </button>
+                      </div>
+                      <div class="attachment-hidden" *ngIf="isImageType(att.fileName || att.FileName) && !settings.showMediaPreviews">
+                        <i class="bi bi-image me-1 opacity-50"></i>
+                        <span class="fs-xs opacity-60">Image hidden ({{ att.fileName || att.FileName }})</span>
+                      </div>
+                    </ng-container>
+                  </div>
+
+                  <!-- Reactions -->
+                  <div class="bubble-reactions" *ngIf="getReactedEmojis(msg).length > 0">
+                    <ng-container *ngFor="let emoji of getReactedEmojis(msg)">
+                      <button class="reaction-pill" [class.reacted]="hasReacted(msg, emoji)" (click)="toggleReaction(msg, emoji)">
+                        {{ emoji }} <span class="reaction-count">{{ getReactionCount(msg, emoji) }}</span>
+                      </button>
+                    </ng-container>
+                  </div>
+
+                  <!-- Hover actions -->
+                  <div class="bubble-actions">
+                    <ng-container *ngFor="let emoji of ['👍','❤️','😄']">
+                      <button class="bubble-action-btn" (click)="toggleReaction(msg, emoji)" [title]="emoji">
+                        {{ emoji }}
+                      </button>
+                    </ng-container>
+                    <button class="bubble-action-btn" (click)="setReplyTo(msg)" title="Reply">
+                      <i class="bi bi-reply-fill"></i>
+                    </button>
+                    <button class="bubble-action-btn" (click)="toggleMessageMenu(msg.id)" title="More">
+                      <i class="bi bi-three-dots"></i>
+                    </button>
+                    <!-- Message context menu -->
+                    <div class="msg-menu" *ngIf="activeMessageMenu === msg.id">
+                      <button (click)="toggleReaction(msg, '👍'); toggleMessageMenu(msg.id)">👍 React</button>
+                      <button (click)="setReplyTo(msg); toggleMessageMenu(msg.id)">Reply</button>
+                      <hr>
+                      <button class="text-muted" (click)="toggleMessageMenu(msg.id)">Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Empty conversation -->
+            <div class="empty-thread" *ngIf="contextMessages.length === 0 && !loadingContext">
+              <ng-container [ngSwitch]="selectedActivity?.category">
+                <!-- File card -->
+                <div class="file-preview-card" *ngSwitchCase="'file'">
+                  <div class="fpc-icon">
+                    <i class="bi" [ngClass]="getFileIcon(selectedActivity!.body || '')"></i>
+                  </div>
+                  <h3 class="fpc-name">{{ selectedActivity!.body }}</h3>
+                  <p class="fpc-meta">Shared by {{ selectedActivity!.senderName }} &bull; {{ selectedActivity!.timeLabel }}</p>
+                  <div class="fpc-actions">
+                    <button class="btn btn-primary btn-sm" (click)="handleFileAction('open')">
+                      <i class="bi bi-eye me-1"></i> Open
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" (click)="handleFileAction('download')">
+                      <i class="bi bi-download me-1"></i> Download
+                    </button>
+                  </div>
+                </div>
+                <!-- Generic -->
+                <div class="empty-conv-state" *ngSwitchDefault>
+                  <div class="ec-icon"><i class="bi bi-chat-left-text"></i></div>
+                  <p class="fw-semibold mb-1">Start the conversation</p>
+                  <p class="opacity-50 fs-xs">No messages found for this activity. Be the first to reply!</p>
+                </div>
+              </ng-container>
+            </div>
+          </ng-container>
+        </div>
+
+        <!-- ── REPLY INPUT AREA ── -->
+        <footer class="reply-footer">
+          <!-- Reply-to bar -->
+          <div class="reply-to-bar" *ngIf="replyToMessage">
+            <div class="reply-to-content">
+              <i class="bi bi-reply-fill me-2 text-primary"></i>
+              <span class="fs-xs text-muted">Replying to <strong>{{ isCurrentUser(replyToMessage) ? 'yourself' : replyToMessage.senderName }}</strong>:</span>
+              <span class="fs-xs ms-1 text-truncate opacity-70">{{ replyToMessage.content || replyToMessage.formattedContent }}</span>
+            </div>
+            <button class="btn-icon-xs" (click)="cancelReply()"><i class="bi bi-x"></i></button>
+          </div>
+
+          <!-- Toolbar -->
+          <div class="reply-toolbar">
+            <div class="toolbar-format">
+              <button class="tool-btn" (click)="formatDoc('bold')" title="Bold"><i class="bi bi-type-bold"></i></button>
+              <button class="tool-btn" (click)="formatDoc('italic')" title="Italic"><i class="bi bi-type-italic"></i></button>
+              <button class="tool-btn" (click)="formatDoc('underline')" title="Underline"><i class="bi bi-type-underline"></i></button>
+              <span class="v-sep"></span>
+              <div class="emoji-wrapper">
+                <button class="tool-btn" (click)="toggleEmojiPicker()" title="Emoji"><i class="bi bi-emoji-smile"></i></button>
+                <div class="emoji-popover" *ngIf="isEmojiPickerOpen">
+                  <button *ngFor="let e of commonEmojis" (click)="insertEmoji(e)" class="emoji-item">{{ e }}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Editable Input -->
+          <div class="reply-input-wrap">
+            <div
+              #replyEditor
+              class="reply-editor"
+              contenteditable="true"
+              [attr.placeholder]="'Reply to ' + getDisplayTitle(selectedActivity)"
+              (input)="onReplyEditorInput($event)"
+              (keydown)="onReplyEditorKeydown($event)">
+            </div>
+            <div class="reply-input-actions">
+              <input type="file" #fileUploadInput style="display:none" (change)="onFileSelected($event)">
+              <button class="input-action-btn" (click)="fileUploadInput.click()" title="Attach file" [disabled]="isUploadingFile">
+                <i class="bi bi-paperclip" *ngIf="!isUploadingFile"></i>
+                <div class="spinner-border spinner-border-sm" *ngIf="isUploadingFile"></div>
+              </button>
+              <button class="btn-send-primary" (click)="sendReply()" [disabled]="isSendingReply || (!replyText.trim() && !isUploadingFile)">
+                <i class="bi bi-send-fill" *ngIf="!isSendingReply"></i>
+                <div class="spinner-border spinner-border-sm" *ngIf="isSendingReply"></div>
+              </button>
+            </div>
+          </div>
+        </footer>
+
+      </div><!-- /chat tab -->
+
+      <!-- SHARED FILES TAB -->
+      <div class="shared-files-tab" *ngIf="activeTab === 'shared'">
+        <div class="shared-files-list" *ngIf="sharedFiles.length > 0">
+          <div class="shared-file-row" *ngFor="let msg of sharedFiles">
+            <ng-container *ngFor="let att of getAttachments(msg)">
+              <div class="sfr-icon">
+                <i class="bi" [ngClass]="getFileIcon(att.fileName || att.FileName)"></i>
+              </div>
+              <div class="sfr-info flex-grow-1 min-w-0">
+                <div class="sfr-name text-truncate">{{ att.fileName || att.FileName }}</div>
+                <div class="sfr-meta">Shared {{ msg.sentAt | date:'mediumDate' }}</div>
+              </div>
+              <button class="sfr-download" (click)="downloadAttachment(att.fileUrl || att.FileUrl, att.fileName || att.FileName)">
+                <i class="bi bi-download"></i>
+              </button>
+            </ng-container>
+          </div>
+        </div>
+        <div class="empty-files" *ngIf="sharedFiles.length === 0">
+          <div class="ec-icon"><i class="bi bi-folder2-open"></i></div>
+          <p class="fw-semibold mb-1">No files shared yet</p>
+          <p class="opacity-50 fs-xs">Files shared in this conversation will appear here.</p>
+        </div>
+      </div>
+
+    </ng-container>
+  </main>
+
+</div>
