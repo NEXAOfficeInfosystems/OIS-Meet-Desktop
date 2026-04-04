@@ -140,6 +140,8 @@ export class ChatSignalrService {
     this.hubConnection.off('NewConversation');
     this.hubConnection.off('MemberAdded');
     this.hubConnection.off('GroupInfoUpdated');
+    this.hubConnection.off('userStatusChanged');
+    this.hubConnection.off('userstatuschanged');
 
     // Handle new messages
     const messageHandler = (message: any) => {
@@ -214,8 +216,16 @@ export class ChatSignalrService {
     });
 
     this.hubConnection.on('ReactionRemoved', (data: any) => {
+      console.log('😀 Reaction removed:', data);
       this.reactionRemovedSubject.next(data);
     });
+
+    // Handle user status changes (case-sensitive variants for compatibility)
+    const statusHandler = (userId: string, status: string) => {
+      console.log(`👤 User status changed: ${userId} -> ${status}`);
+    };
+    this.hubConnection.on('userStatusChanged', statusHandler);
+    this.hubConnection.on('userstatuschanged', statusHandler);
   }
 
   // Chat methods with queue support

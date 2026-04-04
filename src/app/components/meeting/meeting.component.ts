@@ -1038,16 +1038,32 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         audioConstraints.deviceId = { exact: settings.preferredAudioInputId };
       }
 
+      const videoConstraints: any = !this.isVideoOff ? {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 }
+      } : false;
+
+      if (videoConstraints && settings.preferredVideoInputId && settings.preferredVideoInputId !== 'default') {
+        videoConstraints.deviceId = { exact: settings.preferredVideoInputId };
+      }
+
+      console.log('Requesting getUserMedia with constaints:', { audio: audioConstraints, video: videoConstraints });
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
-        video: false
+        video: videoConstraints
       });
-      console.log('Got initial audio stream with device:', settings.preferredAudioInputId);
+      console.log('Got media stream with tracks:', this.mediaStream.getTracks().length);
 
-      const startWithAudio = !this.isMuted; // derived from query params
-      const audioTracks = this.mediaStream.getAudioTracks();
-      audioTracks.forEach(track => {
+      const startWithAudio = !this.isMuted;
+      const startWithVideo = !this.isVideoOff;
+
+      this.mediaStream.getAudioTracks().forEach(track => {
         track.enabled = startWithAudio;
+      });
+
+      this.mediaStream.getVideoTracks().forEach(track => {
+        track.enabled = startWithVideo;
       });
 
       // Bind to local video element (muted so it does not echo).
@@ -1061,12 +1077,13 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         this.meetingId,
         this.oisMeetUserId,
         this.userFullName,
-        startWithAudio, // isAudioEnabled
-        false           // isVideoEnabled
+        startWithAudio,
+        startWithVideo
       );
       this.connectionId = this.signalRService.getConnectionId();
     } catch (err) {
       console.error('Error initializing media:', err);
+      // Fallback join with no media
       await this.signalRService.joinMeeting(
         this.meetingId,
         this.oisMeetUserId,

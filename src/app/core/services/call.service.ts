@@ -63,36 +63,52 @@ export class CallService {
     });
 
     this.hubConnection.onclose(() => {
+      console.log('🔌 Call Hub Connection Closed');
       this.connectionStateSubject.next(signalR.HubConnectionState.Disconnected);
     });
 
+    // Logging & Implementation of Hub Events
     this.hubConnection.on('IncomingCall', (fromUserId, fromUserName, callType) => {
+      console.log(`📞 Incoming Call: From ${fromUserName} (${fromUserId}) Type: ${callType}`);
       this.incomingCallSubject.next({ fromUserId, fromUserName, callType });
     });
 
     this.hubConnection.on('CallAccepted', (byUserId, peerId) => {
+      console.log(`✅ Call Accepted: By ${byUserId}`);
       this.callAcceptedSubject.next({ byUserId, peerId });
     });
 
     this.hubConnection.on('CallRejected', (byUserId, reason) => {
+      console.log(`❌ Call Rejected: By ${byUserId} Reason: ${reason}`);
       this.callRejectedSubject.next({ byUserId, reason });
     });
 
     this.hubConnection.on('CallEnded', (byUserId) => {
+      console.log(`🏁 Call Ended: By ${byUserId}`);
       this.callEndedSubject.next(byUserId);
     });
 
     this.hubConnection.on('ReceiveOffer', (fromUserId, offer) => {
+      console.log(`📡 Received WebRTC Offer: From ${fromUserId}`);
       this.offerSubject.next({ fromUserId, offer });
     });
 
     this.hubConnection.on('ReceiveAnswer', (fromUserId, answer) => {
+      console.log(`📡 Received WebRTC Answer: From ${fromUserId}`);
       this.answerSubject.next({ fromUserId, answer });
     });
 
     this.hubConnection.on('ReceiveIceCandidate', (fromUserId, candidate) => {
+      console.log(`🧊 Received ICE Candidate: From ${fromUserId}`);
       this.iceCandidateSubject.next({ fromUserId, candidate });
     });
+
+    // Handle user status changes (case-sensitive match required)
+    const statusHandler = (userId: string, status: string) => {
+      console.log(`👤 User status changed (CallsHub): ${userId} -> ${status}`);
+    };
+    this.hubConnection.on('userStatusChanged', statusHandler);
+    this.hubConnection.on('userstatuschanged', statusHandler);
 
     this.hubConnection.start()
       .then(() => {

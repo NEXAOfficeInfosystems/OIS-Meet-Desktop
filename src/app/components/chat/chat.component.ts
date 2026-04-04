@@ -165,6 +165,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   // â”€â”€ Private state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   private typingTimeout: any;
+  private callTimeout: any;
   private shouldScroll: boolean = false;
   private destroy$ = new Subject<void>();
   private isCompanyChanging = false;
@@ -525,11 +526,16 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     });
 
     this.callService.callAccepted$.pipe(takeUntil(this.destroy$)).subscribe(data => {
+      console.log('✅ Call accepted by remote user');
+      if (this.callTimeout) clearTimeout(this.callTimeout);
       this.isCalling = false;
       this.openCallWindow(data.byUserId, this.callType, true);
+      this.cdr.detectChanges();
     });
 
     this.callService.callRejected$.pipe(takeUntil(this.destroy$)).subscribe(data => {
+      console.log('❌ Call rejected by remote user', data.reason);
+      if (this.callTimeout) clearTimeout(this.callTimeout);
       this.isCalling = false;
       alert(`Call rejected: ${data.reason}`);
       this.cdr.detectChanges();
@@ -542,14 +548,32 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       alert(this.callHubStatusMessage);
       return;
     }
+
+    console.log(`🚀 Initiating ${type} call to user:`, this.selectedUser.userId);
     this.callType = type;
     this.isCalling = true;
+
+    // Set a fallback timeout (45 seconds) to prevent infinite loading state
+    if (this.callTimeout) clearTimeout(this.callTimeout);
+    this.callTimeout = setTimeout(() => {
+      if (this.isCalling) {
+        console.log('⚠️ Call invitation timed out (no response from receiver)');
+        this.isCalling = false;
+        alert('The user did not answer the call. Please try again later.');
+        this.cdr.detectChanges();
+      }
+    }, 45000);
+
     const name = this.sessionService.getFullName() || 'User';
     this.callService.startCall(this.selectedUser.userId, name, type)
+      .then(() => {
+        console.log('✅ StartCall request sent to hub');
+      })
       .catch(err => {
-        console.error('Failed to start call:', err);
+        console.error('❌ Failed to start call invocation:', err);
+        if (this.callTimeout) clearTimeout(this.callTimeout);
         this.isCalling = false;
-        alert('Could not start call. Please ensure you are connected.');
+        alert('Could not start call. Please ensure you are connected and try again.');
         this.cdr.detectChanges();
       });
   }
@@ -598,6 +622,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.companySubscription?.unsubscribe();
     this.syncSubscription?.unsubscribe();
     if (this.typingTimeout) clearTimeout(this.typingTimeout);
+    if (this.callTimeout) clearTimeout(this.callTimeout);
     if (this.shareMeetingIdHandler) {
       window.removeEventListener('ois-share-meeting-id', this.shareMeetingIdHandler);
     }
