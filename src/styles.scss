@@ -67,3 +67,14 @@ body.theme-dark {
 .mb-0 {
   margin-bottom: 0px !important;
 }
+
+
+.form-control:focus {
+  border-color: #007bff !important;
+  box-shadow: none !important;
+}
+
+.form-control:focus-visible {
+  border-color: #007bff !important;
+  box-shadow: none !important;
+}

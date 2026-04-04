@@ -26,23 +26,72 @@
 
     <div class="team-scroll-area">
       <!-- TEAMS SECTION -->
-      <div class="team-section" *ngFor="let team of teams">
-        <div class="team-header d-flex align-items-center gap-2"
-          [class.active]="activeTeam === team.name && !selectedUser" (click)="selectTeam(team)">
-          <div class="team-icon" [style.background-color]="team.color">
-            <i [class]="team.icon"></i>
+      <div class="dm-section">
+        <div class="dm-header px-3 py-2 d-flex justify-content-between align-items-center">
+          <span class="text-uppercase fs-xs fw-bold text-muted letter-spacing-1">Teams</span>
+          <div class="d-flex gap-1 align-items-center">
+            <button class="btn btn-icon-sm p-0 text-primary" title="New Group" (click)="openGroupModal()">
+              <i class="bi bi-plus-lg"></i>
+            </button>
           </div>
-          <span class="team-name">{{ team.name }}</span>
         </div>
+        <div class="team-section" *ngFor="let team of teams">
+          <div class="team-header d-flex align-items-center gap-2"
+            [class.active]="activeTeam === team.name && !selectedUser" (click)="selectTeam(team)">
+            <div class="team-icon" [style.background-color]="team.color">
+              <i [class]="team.icon"></i>
+            </div>
+            <span class="team-name">{{ team.name }}</span>
+          </div>
 
-        <ul class="channel-list" *ngIf="activeTeam === team.name && !selectedUser">
-          <li *ngFor="let ch of channels" class="channel-item" [class.active]="activeChannel === ch"
-            (click)="selectChannel(ch)">
-            <i class="bi bi-hash"></i> {{ ch }}
+          <ul class="channel-list" *ngIf="activeTeam === team.name && !selectedUser">
+            <li *ngFor="let ch of channels" class="channel-item" [class.active]="activeChannel === ch"
+              (click)="selectChannel(ch)">
+              <i class="bi bi-hash"></i> {{ ch }}
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- FAVORITES SECTION -->
+      <div class="favorite-section mb-2" *ngIf="favoriteUsers.length > 0">
+        <div class="dm-header px-3 py-1">
+          <span class="text-uppercase fs-xs fw-bold text-muted letter-spacing-1">Favorites</span>
+        </div>
+        <ul class="dm-list list-unstyled px-2">
+          <li *ngFor="let user of favoriteUsers" class="dm-item d-flex align-items-center gap-2 p-2 cursor-pointer"
+            [class.active]="selectedUser?.id === user.id" (click)="selectUser(user)">
+            <div class="dm-avatar-wrapper position-relative">
+              <img *ngIf="user.avatarUrl" [src]="user.avatarUrl" class="dm-avatar-sm" alt="avatar">
+              <div *ngIf="!user.avatarUrl" class="dm-avatar-sm"
+                [style.background-color]="user.avatarColor || '#3b82f6'">
+                {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
+              </div>
+              <span class="status-indicator-sm" [class.online]="user.isOnline"></span>
+            </div>
+            <div class="dm-info min-w-0 flex-grow-1">
+              <div class="dm-name text-truncate" [class.fw-bold]="user.unreadCount > 0">{{ user.fullName ||
+                user.name }}</div>
+              <div class="dm-last-msg text-truncate fs-xs text-muted">
+                <ng-container *ngIf="user.lastMessage; else noMsg">
+                  <ng-container *ngIf="settings.showMessagePreview">{{ user.lastMessage }}</ng-container>
+                </ng-container>
+                <ng-template #noMsg><span class="opacity-50">No messages yet</span></ng-template>
+              </div>
+            </div>
+            <div class="dm-actions d-flex align-items-center gap-1">
+              <button class="btn btn-icon-xs text-warning" (click)="togglePin($event, user)" title="Unpin">
+                <i class="bi bi-pin-fill"></i>
+              </button>
+              <span class="badge bg-primary rounded-pill fs-xs" *ngIf="user.unreadCount > 0">{{ user.unreadCount
+                }}</span>
+            </div>
           </li>
         </ul>
       </div>
-      <hr class="sidebar-divider mx-0 opacity-10" *ngIf="teams.length > 0">
+
+
+
       <!-- DIRECT MESSAGES SECTION -->
       <div class="dm-section">
         <div class="dm-header px-3 py-2 d-flex justify-content-between align-items-center">
@@ -78,17 +127,20 @@
         </div>
 
         <ul class="dm-list list-unstyled px-2">
-          <li *ngFor="let user of filteredUsers"
+          <li *ngFor="let user of regularUsers"
             class="dm-item d-flex align-items-center gap-2 p-2 rounded cursor-pointer"
             [class.active]="selectedUser?.id === user.id" (click)="selectUser(user)">
             <div class="dm-avatar-wrapper position-relative">
-              <div class="dm-avatar-sm" [style.background-color]="user.avatarColor || '#3b82f6'">
+              <img *ngIf="user.avatarUrl" [src]="user.avatarUrl" class="dm-avatar-sm rounded-circle" alt="avatar">
+              <div *ngIf="!user.avatarUrl" class="dm-avatar-sm"
+                [style.background-color]="user.avatarColor || '#3b82f6'">
                 {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
               </div>
               <span class="status-indicator-sm" [class.online]="user.isOnline"></span>
             </div>
             <div class="dm-info min-w-0 flex-grow-1">
-              <div class="dm-name text-truncate" [class.fw-bold]="user.unreadCount > 0">{{ user.fullName || user.name }}
+              <div class="dm-name text-truncate" [class.fw-bold]="user.unreadCount > 0">{{ user.fullName || user.name
+                }}
               </div>
               <!-- Last message preview: always shown, with fallback -->
               <div class="dm-last-msg text-truncate fs-xs text-muted">
@@ -100,7 +152,14 @@
                 <ng-template #noMsg><span class="opacity-50">No messages yet</span></ng-template>
               </div>
             </div>
-            <span class="badge bg-primary rounded-pill fs-xs" *ngIf="user.unreadCount > 0">{{ user.unreadCount }}</span>
+            <div class="dm-actions d-flex align-items-center gap-1">
+              <button class="btn btn-icon-xs text-muted hover-warning" (click)="togglePin($event, user)"
+                title="Pin to Top">
+                <i class="bi bi-pin"></i>
+              </button>
+              <span class="badge bg-primary rounded-pill fs-xs" *ngIf="user.unreadCount > 0">{{ user.unreadCount
+                }}</span>
+            </div>
           </li>
         </ul>
       </div>
@@ -113,6 +172,14 @@
     <!-- Workspace Header -->
     <header class="workspace-header">
       <div class="header-left">
+        <!-- Avatar -->
+        <div class="avatar-wrapper" [style.background-color]="selectedUser?.avatarColor">
+          <img *ngIf="selectedUser?.avatarUrl" [src]="selectedUser?.avatarUrl" class="avatar" alt="avatar">
+          <div *ngIf="!selectedUser?.avatarUrl" class="avatar">
+            {{ (selectedUser?.fullName || selectedUser?.name || 'U').charAt(0).toUpperCase() }}
+          </div>
+          <span class="status-indicator" [class.online]="selectedUser?.isOnline"></span>
+        </div>
         <div class="channel-info">
           <h5 class="channel-title">
             <span *ngIf="selectedUser; else channelTitle">
@@ -154,7 +221,7 @@
     <!-- Chat Conversation Feed -->
     <div class="chat-feed" #chatScrollArea>
       <div *ngIf="messages.length === 0 && !isLoading" class="empty-state text-center py-5 opacity-50">
-        <i class="bi bi-chat-left-text fs-1 mb-3 d-block"></i>
+        <i class="bi bi-chat-left-text fs-1 mb-2 d-block"></i>
         <p *ngIf="!selectedUser">No messages in #{{ activeChannel }} yet. Start the conversation!</p>
         <p *ngIf="selectedUser">No messages with {{ selectedUser.fullName || selectedUser.name }} yet. Start the
           conversation!</p>
@@ -163,7 +230,9 @@
       <div class="message-group" *ngFor="let msg of messages"
         [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
         <div class="message-avatar-col" *ngIf="msg.senderId?.toString() !== currentUserId?.toString()">
-          <div class="msg-avatar" [style.background-color]="getMemberAvatarColor(msg.senderName)">
+          <img *ngIf="msg.senderAvatarUrl" [src]="msg.senderAvatarUrl" class="msg-avatar rounded-circle" alt="avatar">
+          <div *ngIf="!msg.senderAvatarUrl" class="msg-avatar"
+            [style.background-color]="getMemberAvatarColor(msg.senderName)">
             {{ msg.senderName.charAt(0).toUpperCase() }}
           </div>
         </div>
@@ -266,7 +335,20 @@
             </div>
           </div>
         </div>
-        <div class="message-field-wrapper">
+        <div class="message-field-wrapper position-relative">
+          <!-- Mentions Popover -->
+          <div class="mention-popover shadow border rounded-3 p-1 bg-white"
+            *ngIf="mentionsVisible && filteredMentionList.length > 0">
+            <div class="mention-item d-flex align-items-center gap-2 p-2 rounded cursor-pointer"
+              *ngFor="let m of filteredMentionList; let i = index" [class.active]="i === mentionSelectedIndex"
+              (click)="insertMention(m)">
+              <div class="dm-avatar-xs" [style.background-color]="m.avatarColor || '#3b82f6'">
+                {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+              </div>
+              <span class="fs-xs fw-medium">{{ m.fullName || m.name }}</span>
+            </div>
+          </div>
+
           <!-- Rich Text ContentEditable Area -->
           <div #messageEditor class="message-editor" contenteditable="true" (input)="onEditorInput($event)"
             (keydown)="onEditorKeydown($event)"
@@ -295,8 +377,8 @@
   <aside class="workspace-right-panel" *ngIf="showInfoPanel">
 
     <!-- User Profile Widget (Slack Style) -->
-    <section class="panel-section profile-widget" *ngIf="selectedUser">
-      <div class="profile-card border rounded-3 p-3 text-center mb-4">
+    <section class="panel-section profile-widget" *ngIf="selectedUser && !selectedUser.isGroup">
+      <div class="profile-card border rounded-3 p-3 text-center mb-2">
         <div class="avatar-large mx-auto mb-2" [style.background-color]="selectedUser.avatarColor || '#3b82f6'">
           {{ (selectedUser.fullName || selectedUser.name || 'U').charAt(0).toUpperCase() }}
         </div>
@@ -305,20 +387,62 @@
         <div class="mt-2">
           <span class="badge rounded-pill"
             [ngClass]="selectedUser.isOnline ? 'bg-success-soft text-success' : 'bg-secondary-soft text-muted'">
-            ● {{ selectedUser.isOnline ? 'Online' : 'Offline' }}
+            ● {{ selectedUser.isOnline ? 'Online' : 'Away' }}
           </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Group Members Column (Teams Style) -->
+    <section class="panel-section" *ngIf="selectedUser?.isGroup">
+      <div class="section-header d-flex justify-content-between align-items-center mb-2">
+        <h6 class="fw-bold fs-7 mb-0">Group Members</h6>
+        <div class="d-flex gap-1 align-items-center">
+          <button class="btn btn-icon-xs text-primary" (click)="openAddMemberModal()" title="Add Member">
+            <i class="bi bi-person-plus-fill"></i>
+          </button>
+          <span class="badge bg-light text-muted border fs-xs">{{ selectedUser.participants?.length || 0 }}</span>
+        </div>
+      </div>
+
+      <!-- Search within members -->
+      <div class="search-input-wrapper position-relative mb-2">
+        <i class="bi bi-search search-icon me-2 position-absolute"
+          style="left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; opacity: 0.5;"></i>
+        <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="groupMembersSearchQuery"
+          placeholder="Find a member..." />
+      </div>
+
+      <div class="group-members-list list-unstyled">
+        <div class="member-item d-flex align-items-center gap-2 mb-2 p-2 rounded cursor-pointer"
+          *ngFor="let member of filteredGroupMembers">
+          <div class="member-avatar-wrapper position-relative">
+            <img *ngIf="member.avatarUrl" [src]="member.avatarUrl" class="member-avatar rounded-circle" alt="avatar">
+            <div *ngIf="!member.avatarUrl" class="member-avatar"
+              [style.background-color]="getMemberAvatarColor(member.name)">
+              {{ (member.name || 'U').charAt(0).toUpperCase() }}
+            </div>
+            <span class="status-indicator-xs" [class.online]="presenceService.isOnline(member.userId)"></span>
+          </div>
+          <div class="member-info min-w-0 flex-grow-1">
+            <div class="member-name text-truncate fs-small fw-medium">{{ member.name }}</div>
+            <div class="member-role fs-xs text-muted">{{ member.userId === currentUserId ? 'You' : 'Member' }}</div>
+          </div>
+        </div>
+        <div *ngIf="filteredGroupMembers.length === 0" class="text-center py-4 text-muted fs-xs">
+          No members found
         </div>
       </div>
     </section>
 
     <!-- Activity Feed -->
     <section class="panel-section">
-      <div class="section-header d-flex justify-content-between mb-3">
+      <div class="section-header d-flex justify-content-between mb-2">
         <h6 class="fw-bold fs-7 mb-0">Team Activity</h6>
         <a href="#" class="text-primary fs-small text-decoration-none">View all</a>
       </div>
       <div class="activity-list">
-        <div class="activity-item d-flex gap-2 mb-3" *ngFor="let act of activityFeed">
+        <div class="activity-item d-flex gap-2 mb-2" *ngFor="let act of activityFeed">
           <div class="activity-dot mt-1"></div>
           <div class="activity-content">
             <p class="mb-0 fs-small"><strong>{{ act.user }}</strong> {{ act.action }}</p>
@@ -332,7 +456,7 @@
 
     <!-- Shared Files Section -->
     <section class="panel-section">
-      <div class="section-header d-flex justify-content-between mb-3">
+      <div class="section-header d-flex justify-content-between mb-2">
         <h6 class="fw-bold fs-7 mb-0">Shared Files</h6>
         <i class="bi bi-files text-muted"></i>
       </div>
@@ -434,13 +558,13 @@
 
     <div class="group-modal-body">
       <!-- Group name -->
-      <div class="form-group mb-4">
+      <div class="form-group mb-2">
         <label class="form-label d-flex justify-content-between align-items-center">
           <span class="fw-semibold fs-small">Group Name <span class="text-danger">*</span></span>
           <span class="text-muted fs-xs">{{ newGroupName.length }}/80</span>
         </label>
-        <input type="text" class="form-control form-control-md group-name-input" [(ngModel)]="newGroupName"
-          placeholder="e.g. Q4 Marketing Campaign" maxlength="80" autofocus (keydown.enter)="createGroup()"
+        <input type="text" class="form-control form-control-sm group-name-input" [(ngModel)]="newGroupName"
+          placeholder="Enter group name" maxlength="80" autofocus (keydown.enter)="createGroup()"
           [class.is-invalid]="groupCreationError && !newGroupName.trim()" />
         <div class="invalid-feedback d-block" *ngIf="groupCreationError && !newGroupName.trim()">
           Group name is required
@@ -457,15 +581,15 @@
           </span>
         </label>
 
-        <div class="search-input-wrapper position-relative mb-3">
+        <div class="search-input-wrapper position-relative mb-2">
           <i class="bi bi-search search-icon me-2"></i>
-          <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="newGroupSearchQuery"
+          <input type="text" class="form-control form-control-md ps-4" [(ngModel)]="newGroupSearchQuery"
             placeholder="Search colleagues by name or email..." />
           <i class="bi bi-x-circle-fill search-icon me-2" (click)="clearGroupSearch()"></i>
         </div>
 
         <!-- Selected chips (Horizontal Scrollable) -->
-        <div class="selected-members-chips d-flex flex-wrap gap-2 mb-3" *ngIf="selectedGroupMembers.length > 0">
+        <div class="selected-members-chips d-flex flex-wrap gap-2 mb-2" *ngIf="selectedGroupMembers.length > 0">
           <div class="member-chip animate-fade-in" *ngFor="let m of selectedGroupMembers">
             <div class="chip-avatar" [style.background-color]="m.avatarColor || '#3b82f6'">
               {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
@@ -529,5 +653,78 @@
       </button>
     </div>
 
+  </div>
+</div>
+
+<!-- Add Member Modal -->
+<div class="group-modal-overlay" *ngIf="isAddMemberModalOpen" (click)="closeAddMemberModal()">
+  <div class="group-modal-card shadow-lg" (click)="$event.stopPropagation()" (keydown.escape)="closeAddMemberModal()">
+    <div class="group-modal-header">
+      <div class="header-title-section">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-person-plus-fill me-2 text-primary"></i>Add Members</h5>
+        <p class="text-muted fs-xs mb-0 mt-1">Add colleagues to {{ selectedUser?.name || selectedUser?.fullName }}</p>
+      </div>
+      <button class="btn-close" (click)="closeAddMemberModal()"></button>
+    </div>
+
+    <div class="group-modal-body">
+      <div class="search-input-wrapper position-relative mb-2">
+        <i class="bi bi-search search-icon me-2"></i>
+        <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="addMemberSearchQuery"
+          placeholder="Search by name or email..." />
+        <i class="bi bi-x-circle-fill search-icon me-2" (click)="addMemberSearchQuery = ''"></i>
+      </div>
+
+      <!-- Selected chips -->
+      <div class="selected-members-chips d-flex flex-wrap gap-2 mb-2" *ngIf="selectedNewMembers.length > 0">
+        <div class="member-chip animate-fade-in" *ngFor="let m of selectedNewMembers">
+          <div class="chip-avatar" [style.background-color]="m.avatarColor || '#3b82f6'">
+            {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+          </div>
+          <span class="chip-label">{{ m.fullName || m.name }}</span>
+          <button type="button" class="chip-remove" (click)="toggleNewMember(m)" title="Remove">
+            <i class="bi bi-x"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="group-member-list-wrapper">
+        <div class="group-member-list">
+          <div *ngFor="let user of addMemberFilteredUsers"
+            class="group-member-item d-flex align-items-center gap-2 p-2 rounded"
+            [class.selected]="isNewMemberSelected(user)" (click)="toggleNewMember(user)">
+            <div class="dm-avatar-sm flex-shrink-0" [style.background-color]="user.avatarColor || '#3b82f6'">
+              {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
+            </div>
+            <div class="member-info flex-grow-1 min-w-0">
+              <div class="member-name fs-small text-truncate fw-medium">{{ user.fullName || user.name }}</div>
+              <div class="member-email fs-xs text-muted text-truncate">{{ user.email }}</div>
+            </div>
+            <div class="selection-status">
+              <i class="bi bi-check-circle-fill text-primary" *ngIf="isNewMemberSelected(user)"></i>
+              <i class="bi bi-circle text-muted opacity-25" *ngIf="!isNewMemberSelected(user)"></i>
+            </div>
+          </div>
+          <div class="text-center text-muted fs-xs py-4" *ngIf="addMemberFilteredUsers.length === 0">
+            No colleagues found matching "{{ addMemberSearchQuery }}"
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-danger-soft d-flex align-items-start gap-2 mt-4" *ngIf="addMemberError">
+        <i class="bi bi-exclamation-circle-fill mt-1"></i>
+        <div class="fs-xs">{{ addMemberError }}</div>
+      </div>
+    </div>
+
+    <div class="group-modal-footer">
+      <button class="btn btn-link text-muted" (click)="closeAddMemberModal()"
+        [disabled]="isAddingMember">Cancel</button>
+      <button class="btn btn-primary px-4 d-flex align-items-center gap-2" (click)="addMembers()"
+        [disabled]="isAddingMember || selectedNewMembers.length === 0">
+        <span class="spinner-border spinner-border-sm" *ngIf="isAddingMember"></span>
+        <span>{{ isAddingMember ? 'Adding...' : 'Add Members' }}</span>
+      </button>
+    </div>
   </div>
 </div>

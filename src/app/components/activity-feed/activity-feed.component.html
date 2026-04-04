@@ -248,7 +248,7 @@
 
             <!-- Empty conversation -->
             <div class="empty-thread" *ngIf="contextMessages.length === 0 && !loadingContext">
-              <ng-container [ngSwitch]="selectedActivity?.category">
+              <ng-container [ngSwitch]="selectedActivity.category">
                 <!-- File card -->
                 <div class="file-preview-card" *ngSwitchCase="'file'">
                   <div class="fpc-icon">

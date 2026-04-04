@@ -58,10 +58,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   filteredUsers: any[] = [];
   selectedUser: any = null;
   selectedConversation: any = null;
+  favoriteUsers: any[] = [];
+  regularUsers: any[] = [];
   currentUserId: string | null = null;
   isEmojiPickerVisible = false;
   commonEmojis = ['👍', '❤️', '😄', '😮', '😢', '🔥', '👏', '✅'];
   showInfoPanel: boolean = false;
+  groupMembersSearchQuery: string = '';
   // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   messages: any[] = [];
   newMessage: string = '';
@@ -80,11 +83,25 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   // Group creation state
   isGroupModalOpen: boolean = false;
+  isCreatingGroup: boolean = false;
   newGroupName: string = '';
   newGroupSearchQuery: string = '';
   selectedGroupMembers: any[] = [];
-  isCreatingGroup: boolean = false;
   groupCreationError: string = '';
+
+  isAddMemberModalOpen: boolean = false;
+  isAddingMember: boolean = false;
+  addMemberSearchQuery: string = '';
+  selectedNewMembers: any[] = [];
+  addMemberError: string = '';
+
+  // Mentions
+  mentionsVisible: boolean = false;
+  mentionSearchQuery: string = '';
+  mentionList: any[] = [];
+  filteredMentionList: any[] = [];
+  mentionSelectedIndex: number = 0;
+  mentionsMap: { [userId: string]: string } = {};
 
   // â”€â”€ UI flags â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   isLoading: boolean = false;
@@ -147,7 +164,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private fileService: FileService,
     private meetingService: MeetingService,     // ← ADDED for validateMeeting
     private chatSignalrService: ChatSignalrService,
-    private presenceService: PresenceService,
+    public presenceService: PresenceService,
     private collaborationService: CollaborationService,
     private callService: CallService,
     private sanitizer: DomSanitizer,
@@ -197,7 +214,15 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.store.select(messagesFeature.selectByConversation).pipe(takeUntil(this.destroy$)).subscribe(byConv => {
       const convId = this.selectedConversation?.id;
       if (convId && byConv[convId]) {
-        this.messages = this.decorateMessagesWithDates(byConv[convId]);
+        const unique = this.getUniqueMessages(byConv[convId]);
+        this.messages = this.decorateMessagesWithDates(unique);
+        
+        // Ensure displayedMessageIds is in sync
+        unique.forEach(m => {
+          const id = String(m?.id ?? m?.Id ?? '');
+          if (id) this.displayedMessageIds.add(id);
+        });
+        
         this.updateSharedFiles();
         this.shouldScroll = true;
       }
@@ -234,6 +259,27 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.setupCallSignals();
   }
 
+  private autoLoadFirstChat(): void {
+    if (this.selectedUser) return;
+
+    const firstPin = this.users.find(u => u.isPinned);
+    if (firstPin) {
+      this.selectUser(firstPin);
+      return;
+    }
+
+    // Sort users by last message time to find the most recent
+    const sorted = [...this.users].sort((a, b) => {
+      const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return bt - at;
+    });
+
+    if (sorted.length > 0) {
+      this.selectUser(sorted[0]);
+    }
+  }
+
   @ViewChild('messageEditor') messageEditor!: ElementRef;
 
   // ——————————————————————————————————————————————————————————————————————————————
@@ -249,13 +295,108 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const html = event.target.innerHTML;
     this.formattedMessage = html;
     this.newMessage = event.target.innerText;
+    this.checkForMentions(event);
   }
 
   onEditorKeydown(event: KeyboardEvent): void {
+    if (this.mentionsVisible && this.filteredMentionList.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        this.mentionSelectedIndex = (this.mentionSelectedIndex + 1) % this.filteredMentionList.length;
+        this.cdr.detectChanges();
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        this.mentionSelectedIndex = (this.mentionSelectedIndex - 1 + this.filteredMentionList.length) % this.filteredMentionList.length;
+        this.cdr.detectChanges();
+        return;
+      }
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault();
+        const selected = this.filteredMentionList[this.mentionSelectedIndex];
+        if (selected) {
+          this.insertMention(selected);
+        }
+        return;
+      }
+      if (event.key === 'Escape') {
+        this.mentionsVisible = false;
+        return;
+      }
+    } else if (this.mentionsVisible && event.key === 'Escape') {
+      this.mentionsVisible = false;
+      return;
+    }
+
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       this.sendMessage();
     }
+  }
+
+  private checkForMentions(event: any): void {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    const textBefore = range.startContainer.textContent?.substring(0, range.startOffset) || '';
+    const atMatch = textBefore.match(/@(\w*)$/);
+
+    if (atMatch) {
+      this.mentionsVisible = true;
+      this.mentionSearchQuery = atMatch[1].toLowerCase();
+      this.filterMentions();
+    } else {
+      this.mentionsVisible = false;
+    }
+  }
+
+  private filterMentions(): void {
+    this.filteredMentionList = this.mentionList.filter(m =>
+      (m.fullName || m.name || '').toLowerCase().includes(this.mentionSearchQuery)
+    );
+    this.mentionSelectedIndex = 0;
+  }
+
+  insertMention(user: any): void {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    const textNode = range.startContainer;
+    const offset = range.startOffset;
+    const text = textNode.textContent || '';
+
+    const atIndex = text.lastIndexOf('@', offset - 1);
+    if (atIndex === -1) return;
+
+    const before = text.substring(0, atIndex);
+    const after = text.substring(offset);
+
+    // Replace text node content
+    textNode.textContent = before;
+
+    const mentionSpan = document.createElement('span');
+    mentionSpan.className = 'mention';
+    mentionSpan.contentEditable = 'false';
+    mentionSpan.setAttribute('data-user-id', user.userId || user.id);
+    mentionSpan.innerText = `@${user.fullName || user.name}`;
+
+    const spaceNode = document.createTextNode('\u00A0'); // Non-breaking space
+
+    range.insertNode(spaceNode);
+    range.insertNode(mentionSpan);
+
+    // Move cursor after the space
+    const newRange = document.createRange();
+    newRange.setStartAfter(spaceNode);
+    newRange.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(newRange);
+
+    this.mentionsVisible = false;
+    this.onEditorInput({ target: this.messageEditor.nativeElement });
   }
 
   // ——————————————————————————————————————————————————————————————————————————————
@@ -619,6 +760,17 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.chatSignalrService.newConversation$
       .pipe(takeUntil(this.destroy$))
       .subscribe(conv => { if (conv) this.addNewConversation(conv); });
+
+    this.chatSignalrService.memberAdded$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(convId => {
+        if (convId) {
+          this.loadConversations();
+          if (this.selectedConversation?.id === convId) {
+            this.loadMessages(convId);
+          }
+        }
+      });
   }
 
   private setupPresenceTracking(): void {
@@ -648,6 +800,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     if (msgId && this.displayedMessageIds.has(msgId)) return;
     if (msgId) this.displayedMessageIds.add(msgId);
+
+    // One more check against current messages array directly
+    if (msgId && this.messages.some(m => String(m?.id ?? m?.Id ?? '') === msgId)) return;
+
 
     if (isActiveConversation) {
       const updated = [...this.messages, message];
@@ -780,6 +936,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       )
       : result;
 
+    this.favoriteUsers = this.filteredUsers.filter(u => u.isPinned && (u.name || u.fullName));
+    this.regularUsers = this.filteredUsers.filter(u => !u.isPinned && (u.name || u.fullName));
+
     this.cdr.detectChanges();
   }
 
@@ -876,7 +1035,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
                 unreadCount: conv.unreadCount || 0,
                 conversationId: conv.id?.toString(),
                 avatarColor: this.commonService.getRandomColor(),
-                isGroup: isGroup
+                avatarUrl: isGroup ? null : other.avatarUrl,
+                isGroup: isGroup,
+                isPinned: conv.isPinned || false,
+                participants: participants
               });
             }
           });
@@ -898,6 +1060,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           this.updateTeamsList();
           this.sortUsersByLastMessage();
           this.applySearch();
+
+          if (!this.selectedUser) {
+            this.autoLoadFirstChat();
+          }
         },
         error: (err) => console.error('Failed to load conversations', err)
       });
@@ -961,6 +1127,22 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       try {
         await this.chatSignalrService.joinConversation(user.conversationId);
         this.loadMessages(user.conversationId);
+
+        // Load mention list for this conversation
+        if (user.isGroup) {
+          // Use participants list from the conversation object
+          this.mentionList = (user.participants || [])
+            .filter((p: any) => p.userId?.toString() !== this.currentUserId?.toString())
+            .map((p: any) => ({
+              id: p.userId?.toString(),
+              userId: p.userId?.toString(),
+              fullName: p.name || p.fullName,
+              name: p.name || p.fullName,
+              avatarColor: this.getMemberAvatarColor(p.name || p.fullName)
+            }));
+        } else {
+          this.mentionList = [user];
+        }
       } catch (err) {
         console.error('Failed to join conversation:', err);
         this.isSwitchingUser = false;
@@ -978,6 +1160,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
               try {
                 await this.chatSignalrService.joinConversation(convId);
                 this.loadMessages(convId);
+                this.mentionList = [user];
               } catch (err) {
                 console.error('Failed to join conversation:', err);
               }
@@ -993,9 +1176,31 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }
   }
 
+  togglePin(event: MouseEvent, user: any): void {
+    event.stopPropagation();
+    const isPinned = !user.isPinned;
+    user.isPinned = isPinned;
+
+    if (user.conversationId) {
+      this.chatService.togglePinConversation(user.conversationId, isPinned).subscribe({
+        next: () => {
+          this.applySearch();
+        },
+        error: () => {
+          user.isPinned = !isPinned; // revert
+        }
+      });
+    }
+  }
+
   selectTeam(team: any): void {
     this.activeTeam = team.name;
-    this.selectChannel('General');
+    team.avatarColor = team.color;
+    team.icon = team.icon;
+    team.isGroup = true;
+    team.name = team.name;
+    this.selectedUser = team;
+    this.selectChannel(team.channels[0]);
   }
 
   selectChannel(channel: string): void {
@@ -1419,6 +1624,16 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .slice(0, 10);
   }
 
+  private getUniqueMessages(msgs: any[]): any[] {
+    const seen = new Set<string>();
+    return msgs.filter(m => {
+      const id = String(m?.id ?? m?.Id ?? '');
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }
+
   private scrollToBottom(): void {
     try {
       this.chatMessagesContainer.nativeElement.scrollTop = this.chatMessagesContainer.nativeElement.scrollHeight;
@@ -1445,6 +1660,20 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         });
       }
     }
+  }
+
+  get filteredGroupMembers(): any[] {
+    if (!this.selectedUser || !this.selectedUser.isGroup || !this.selectedUser.participants) return [];
+    const q = this.groupMembersSearchQuery.toLowerCase().trim();
+    return this.selectedUser.participants
+      .filter((p: any) =>
+        (p.name || p.fullName || '').toLowerCase().includes(q) ||
+        (p.email || '').toLowerCase().includes(q)
+      )
+      .map((p: any) => ({
+        ...p,
+        isOnline: this.presenceService.isOnline(p.userId)
+      }));
   }
 
   private sendMeetingIdMessage(text: string): void {
@@ -1492,8 +1721,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const q = this.newGroupSearchQuery.toLowerCase().trim();
     return this.users.filter(u =>
       !u.isGroup &&
-      !u.isSelf &&
-      (q === '' || (u.fullName || u.name || '').toLowerCase().includes(q))
+      !u.isSelf && (u.fullName || u.name) &&
+      (q === '' || (u.fullName || u.name).toLowerCase().includes(q))
     );
   }
 
@@ -1567,6 +1796,73 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   clearGroupSearch() {
     this.newGroupSearchQuery = '';
-    this.applySearch();
+  }
+
+  // --- ADD MEMBER TO GROUP ---
+
+  openAddMemberModal(): void {
+    this.isAddMemberModalOpen = true;
+    this.addMemberSearchQuery = '';
+    this.selectedNewMembers = [];
+    this.addMemberError = '';
+  }
+
+  closeAddMemberModal(): void {
+    this.isAddMemberModalOpen = false;
+    this.addMemberError = '';
+  }
+
+  get addMemberFilteredUsers(): any[] {
+    if (!this.selectedUser || !this.selectedUser.isGroup) return [];
+    const q = this.addMemberSearchQuery.toLowerCase().trim();
+    const existingIds = (this.selectedUser.participants || []).map((p: any) => p.userId?.toString());
+
+    return this.users.filter(u =>
+      !u.isGroup &&
+      !u.isSelf &&
+      !existingIds.includes(u.id?.toString()) &&
+      (q === '' || (u.fullName || u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q))
+    );
+  }
+
+  isNewMemberSelected(user: any): boolean {
+    return this.selectedNewMembers.some(m => m.id === user.id);
+  }
+
+  toggleNewMember(user: any): void {
+    if (this.isNewMemberSelected(user)) {
+      this.selectedNewMembers = this.selectedNewMembers.filter(m => m.id !== user.id);
+    } else {
+      this.selectedNewMembers = [...this.selectedNewMembers, user];
+    }
+  }
+
+  addMembers(): void {
+    if (!this.selectedConversation || this.selectedNewMembers.length === 0) return;
+
+    this.isAddingMember = true;
+    this.addMemberError = '';
+    const userIds = this.selectedNewMembers.map(m => m.id?.toString());
+
+    this.chatService.addMemberToConversation(this.selectedConversation.id, userIds)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          this.isAddingMember = false;
+          if (res.success) {
+            this.closeAddMemberModal();
+            // Refresh conversation data to show new members
+            // SignalR should handle the live update if implemented, but we can manually refresh
+            this.loadConversations();
+          } else {
+            this.addMemberError = res.message || 'Failed to add members.';
+          }
+        },
+        error: (err) => {
+          this.isAddingMember = false;
+          this.addMemberError = 'An error occurred. Please try again.';
+          console.error('Add member failed:', err);
+        }
+      });
   }
 }

@@ -6,10 +6,13 @@ import { environment } from '../../../environments/environment';
 
 export interface SendMessageRequest {
   conversationId: string;
+  senderId?: string;
   messageType: 'Text' | 'Image' | 'File' | 'System';
   content: string;
   formattedContent?: string;
   replyToMessageId?: string;
+  fileUrl?: string;
+  fileName?: string;
   attachments?: AttachmentDto[];
 }
 
@@ -189,6 +192,28 @@ export class ChatService {
     return this.http.delete(`${this.apiUrl}/reactions`, {
       headers: this.getHeaders(),
       body: requestBody
+    });
+  }
+
+  togglePinConversation(conversationId: string, isPinned: boolean): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    return this.http.post(`${this.apiUrl}/conversations/pin`, {
+      currentUserId,
+      conversationId,
+      isPinned
+    }, {
+      headers: this.getHeaders()
+    });
+  }
+
+  addMemberToConversation(conversationId: string, userIds: string[]): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    return this.http.post(`${this.apiUrl}/conversations/add-member`, {
+      conversationId,
+      userIds,
+      currentUserId
+    }, {
+      headers: this.getHeaders()
     });
   }
 }

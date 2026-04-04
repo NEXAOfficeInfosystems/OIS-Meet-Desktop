@@ -35,18 +35,37 @@ const reducer = createReducer(
     loading: true,
     error: null,
   })),
-  on(MessagesActions.loadConversationMessagesSuccess, (state, { conversationId, messages, hasMore }) => ({
-    ...state,
-    loading: false,
-    byConversation: {
-      ...state.byConversation,
-      [conversationId]: [...messages],
-    },
-    hasMore: {
-      ...state.hasMore,
-      [conversationId]: hasMore
-    }
-  })),
+  on(MessagesActions.loadConversationMessagesSuccess, (state, { conversationId, messages, hasMore }) => {
+    const current = state.byConversation[conversationId] ?? [];
+    const all = [...current, ...messages];
+    
+    // Ensure uniqueness by ID
+    const unique = all.filter((msg, index, self) =>
+      index === self.findIndex((m) => 
+        String(m?.id ?? m?.Id ?? '') === String(msg?.id ?? msg?.Id ?? '')
+      )
+    );
+
+    // Sort by time
+    unique.sort((a, b) => {
+      const ta = new Date(a.sentAt || a.SentAt || 0).getTime();
+      const tb = new Date(b.sentAt || b.SentAt || 0).getTime();
+      return ta - tb;
+    });
+
+    return {
+      ...state,
+      loading: false,
+      byConversation: {
+        ...state.byConversation,
+        [conversationId]: unique,
+      },
+      hasMore: {
+        ...state.hasMore,
+        [conversationId]: hasMore
+      }
+    };
+  }),
   on(MessagesActions.loadConversationMessagesFailure, (state, { error }) => ({
     ...state,
     loading: false,
