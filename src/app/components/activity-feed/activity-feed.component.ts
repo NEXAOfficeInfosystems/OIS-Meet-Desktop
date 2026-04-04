@@ -1,26 +1,31 @@
 import {
   Component, OnInit, ChangeDetectorRef, OnDestroy,
-  ViewChild, ElementRef, AfterViewChecked
+  ViewChild
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
-import { Subject, takeUntil, forkJoin, map } from 'rxjs';
+import { Subject, takeUntil, forkJoin, map, of } from 'rxjs';
 import { CollaborationService } from '../../core/services/collaboration.service';
 import { ChatService } from '../../core/services/chat.service';
 import { SessionService } from '../../core/services/session.service';
+import { UserService } from '../../core/services/user.service';
 import { ActivityDto, NotificationDto } from '../../core/models/collaboration.models';
 import { SafeHtmlPipe } from '../../shared/pipes/safe-html.pipe';
 import { ChatSignalrService } from '../../core/services/chat-signalr.service';
 import { FileService } from '../../core/services/file.service';
 import { SettingsService, UserSettings } from '../../core/services/settings.service';
 
-interface ExtendedActivity extends ActivityDto {
+// Sub-components
+import { ActivityListComponent } from './activity-list/activity-list.component';
+import { ActivityDetailComponent } from './activity-detail/activity-detail.component';
+
+export interface ExtendedActivity extends ActivityDto {
   isRead: boolean;
   avatarLetter: string;
   avatarColor: string;
   senderName: string;
-  category: 'mention' | 'reply' | 'reaction' | 'missed-call' | 'update' | 'message' | 'file';
+  category: 'mention' | 'reply' | 'reaction' | 'missed-call' | 'update' | 'message' | 'file' | 'meeting';
   timeLabel: string;
   entityName?: string;
   chatId?: string;
@@ -30,13 +35,18 @@ interface ExtendedActivity extends ActivityDto {
 @Component({
   selector: 'app-activity-feed',
   standalone: true,
-  imports: [CommonModule, FormsModule, HttpClientModule, SafeHtmlPipe],
+  imports: [
+    CommonModule, 
+    FormsModule, 
+    HttpClientModule, 
+    ActivityListComponent,
+    ActivityDetailComponent
+  ],
   templateUrl: './activity-feed.component.html',
   styleUrl: './activity-feed.component.scss'
 })
-export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecked {
-  @ViewChild('threadContainer') private threadContainerRef!: ElementRef;
-  @ViewChild('replyEditor') private replyEditorRef!: ElementRef;
+export class ActivityFeedComponent implements OnInit, OnDestroy {
+  @ViewChild(ActivityDetailComponent) detailComponent!: ActivityDetailComponent;
 
   // ─── Activity Feed State ─────────────────────────────────────────────────
   items: ExtendedActivity[] = [];
@@ -44,6 +54,9 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
   selectedActivity: ExtendedActivity | null = null;
   loading = true;
   activeFilter: string = 'All';
+
+  // ─── User Cache ──────────────────────────────────────────────────────────
+  private usersMap = new Map<string, any>();
 
   // ─── Message Thread State ────────────────────────────────────────────────
   contextMessages: any[] = [];
@@ -53,33 +66,24 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
   hasMoreContext = true;
   highlightedMessageId: string | null = null;
   private highlightTimeout: any;
-  private shouldScrollToBottom = false;
-  private shouldScrollToHighlight = false;
 
   // ─── Reply / Send State ──────────────────────────────────────────────────
-  replyText = '';
-  formattedReplyText = '';
   replyToMessage: any = null;
   isSendingReply = false;
   isUploadingFile = false;
-  isEmojiPickerOpen = false;
-  commonEmojis = ['👍', '❤️', '😄', '😮', '😢', '🔥', '👏', '✅', '🎉', '🤔'];
 
   // ─── Context Action State ────────────────────────────────────────────────
-  activeTab: 'chat' | 'shared' = 'chat';
   sharedFiles: any[] = [];
-  activeMessageMenu: string | null = null;
 
   // ─── Settings & Misc ─────────────────────────────────────────────────────
   private destroy$ = new Subject<void>();
   settings: UserSettings = { showMessagePreview: true, showMediaPreviews: true, notificationsMentionsOnly: false };
   private chatCache = new Map<string, any[]>();
 
-  filters = ['All', 'Unread', 'Mentions'];
-
   constructor(
     public readonly collaboration: CollaborationService,
     public readonly chatService: ChatService,
+    public readonly userService: UserService,
     public readonly session: SessionService,
     private readonly fileService: FileService,
     private readonly cdr: ChangeDetectorRef,
@@ -96,20 +100,6 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
     this.setupRealTimeUpdates();
   }
 
-  ngAfterViewChecked(): void {
-    if (this.shouldScrollToBottom) {
-      this.doScrollToBottom();
-      this.shouldScrollToBottom = false;
-    }
-    if (this.shouldScrollToHighlight && this.highlightedMessageId) {
-      const el = document.getElementById(`act-msg-${this.highlightedMessageId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        this.shouldScrollToHighlight = false;
-      }
-    }
-  }
-
   ngOnDestroy(): void {
     if (this.highlightTimeout) clearTimeout(this.highlightTimeout);
     this.destroy$.next();
@@ -121,12 +111,27 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
   loadActivities(): void {
     this.loading = true;
 
+    // First fetch users if not done, then activities
+    const clientId = this.session.getClientId();
+    const companyId = this.session.getCompanyId();
+    const appId = this.session.getMeetAppId();
+
+    const users$ = (clientId && companyId && appId) 
+      ? this.userService.getOisMeetUsers(clientId, companyId.toString(), appId)
+      : of({ success: false, data: [] });
+
     forkJoin({
       activities: this.collaboration.getActivity(50),
-      notifications: this.collaboration.getNotifications()
+      notifications: this.collaboration.getNotifications(),
+      users: users$
     }).pipe(
       takeUntil(this.destroy$),
       map(res => {
+        // Cache users
+        if (res.users?.success && res.users.data) {
+          res.users.data.forEach((u: any) => this.usersMap.set(u.id, u));
+        }
+
         const activities = (res.activities.data ?? []).map((a: any) => this.mapToExtended(a));
         const notifications = (res.notifications.data ?? []).map((n: any) => this.mapToExtended(n));
 
@@ -166,15 +171,9 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
       .subscribe(msg => {
         if (!msg) return;
 
-        // Push new message to thread if it matches the active conversation
         const convId = msg.conversationId?.toString();
-        if (convId && this.selectedActivity?.chatId === convId) {
-          this.contextMessages = [...this.contextMessages, msg];
-          this.shouldScrollToBottom = true;
-          this.cdr.detectChanges();
-        }
-
-        // Also create a new activity item
+        
+        // Map message to activity
         const newActivity = this.mapToExtended({
           id: msg.id || Math.random().toString(),
           userId: msg.senderId || '',
@@ -188,6 +187,13 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
 
         this.items = [newActivity, ...this.items];
         this.applyFilter(this.activeFilter);
+
+        // If it's for currently selected chat, update context
+        if (convId && this.selectedActivity?.chatId === convId) {
+           this.contextMessages = [...this.contextMessages, msg];
+           if (this.detailComponent) this.detailComponent.forceScroll();
+        }
+
         this.cdr.detectChanges();
       });
   }
@@ -203,24 +209,31 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
     const isReply = titleLower.includes('replied') || type === 'Reply';
     const isReaction = titleLower.includes('reacted') || type === 'Reaction';
     const isCall = titleLower.includes('call') || type === 'Call';
+    const isMeeting = titleLower.includes('meeting') || type === 'Meeting';
     const isFile = ['.json', '.png', '.xlsx', '.pdf', '.jpg', '.doc', '.zip'].some(ext =>
       bodyLower.includes(ext) || titleLower.includes(ext)
-    ) || type === 'File';
+    ) || type === 'File' || type === 'file_uploaded';
 
     let category: ExtendedActivity['category'] = 'message';
     if (isMention) category = 'mention';
     else if (isReply) category = 'reply';
     else if (isReaction) category = 'reaction';
     else if (isCall) category = 'missed-call';
+    else if (isMeeting) category = 'meeting';
     else if (isFile) category = 'file';
 
-    const words = (item.title || '').split(' ');
-    let senderName = words[0] || 'System';
-    if (isFile || titleLower.startsWith('new') || titleLower.startsWith('system')) {
-      senderName = 'System';
+    // Get Sender Name from Cache or Heuristic
+    let senderName = 'System';
+    if (item.userId && this.usersMap.has(item.userId)) {
+      senderName = this.usersMap.get(item.userId).fullName;
+    } else {
+      const words = (item.title || '').split(' ');
+      senderName = words[0] || 'System';
+      if (isFile || titleLower.startsWith('new') || titleLower.startsWith('system')) {
+        senderName = 'System';
+      }
     }
 
-    // Resolve chatId from multiple possible sources
     const chatId = item.entityType === 'Conversation' ? item.entityId
       : (item as any).chatId
       || (item as any).conversationId
@@ -287,7 +300,7 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
 
   // ─── CONTEXT LOADING ─────────────────────────────────────────────────────
 
-  private loadContext(item: ExtendedActivity, append = false): void {
+  loadContext(item: ExtendedActivity, append = false): void {
     const chatId = this.resolveChatId(item);
     if (!chatId) {
       this.loadingContext = false;
@@ -295,11 +308,9 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
       return;
     }
 
-    // Check cache for first page
     if (!append && this.chatCache.has(chatId)) {
       this.contextMessages = this.chatCache.get(chatId)!;
-      this.shouldScrollToBottom = !this.highlightedMessageId;
-      this.shouldScrollToHighlight = !!this.highlightedMessageId;
+      if (this.detailComponent) this.detailComponent.forceScroll();
       this.cdr.detectChanges();
       return;
     }
@@ -313,14 +324,11 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
             this.contextMessages = [...newMsgs, ...this.contextMessages];
           } else {
             this.contextMessages = newMsgs;
-            // Populate shared files
             this.sharedFiles = newMsgs.filter((m: any) =>
               m.messageType === 'File' || m.MessageType === 'File' || m.fileUrl || m.FileUrl
             );
-            // Cache
             this.chatCache.set(chatId, newMsgs);
-            this.shouldScrollToBottom = !this.highlightedMessageId;
-            this.shouldScrollToHighlight = !!this.highlightedMessageId;
+            if (this.detailComponent) this.detailComponent.forceScroll();
           }
           this.hasMoreContext = newMsgs.length === this.pageSize;
         } else {
@@ -329,19 +337,9 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
         }
         this.loadingContext = false;
         this.cdr.detectChanges();
-
-        // Fade highlight after 3s
-        if (this.highlightedMessageId) {
-          if (this.highlightTimeout) clearTimeout(this.highlightTimeout);
-          this.highlightTimeout = setTimeout(() => {
-            this.highlightedMessageId = null;
-            this.cdr.detectChanges();
-          }, 3500);
-        }
       },
       error: () => {
         this.loadingContext = false;
-        if (!append) this.contextMessages = [];
         this.cdr.detectChanges();
       }
     });
@@ -353,44 +351,18 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
     return null;
   }
 
-  onThreadScroll(event: Event): void {
-    const el = event.target as HTMLElement;
-    if (el.scrollTop <= 50 && this.hasMoreContext && !this.loadingContext && this.selectedActivity) {
-      this.currentPage++;
-      this.loadContext(this.selectedActivity, true);
-    }
-  }
-
   // ─── SEND / REPLY ────────────────────────────────────────────────────────
 
-  onReplyEditorInput(event: Event): void {
-    const target = event.target as HTMLElement;
-    this.formattedReplyText = target.innerHTML;
-    this.replyText = target.innerText;
-  }
-
-  onReplyEditorKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      this.sendReply();
-    }
-  }
-
-  sendReply(fileUrl?: string, fileName?: string): void {
-    const content = this.replyText?.trim();
-    if (!content && !fileUrl) return;
+  handleSendReply(data: { text: string, html: string }): void {
     if (!this.selectedActivity) return;
-
     const chatId = this.resolveChatId(this.selectedActivity);
     if (!chatId) return;
 
     this.isSendingReply = true;
-    const msgType = fileUrl ? 'File' : 'Text';
-
     this.chatService.sendMessageApi(
-      chatId, content || '', msgType,
-      fileUrl, fileName, this.replyToMessage?.id,
-      this.formattedReplyText
+      chatId, data.text || '', 'Text',
+      undefined, undefined, this.replyToMessage?.id,
+      data.html
     ).subscribe({
       next: (res) => {
         if (res.success && res.data) {
@@ -400,15 +372,10 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
           sentMsg.sentAt = sentMsg.sentAt || new Date().toISOString();
           this.contextMessages = [...this.contextMessages, sentMsg];
           this.chatCache.set(chatId, this.contextMessages);
-          this.shouldScrollToBottom = true;
+          if (this.detailComponent) this.detailComponent.forceScroll();
         }
         this.isSendingReply = false;
         this.replyToMessage = null;
-        this.formattedReplyText = '';
-        this.replyText = '';
-        if (this.replyEditorRef) {
-          this.replyEditorRef.nativeElement.innerHTML = '';
-        }
         this.cdr.detectChanges();
       },
       error: () => {
@@ -418,69 +385,24 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
     });
   }
 
-  setReplyTo(msg: any): void {
-    this.replyToMessage = msg;
-    setTimeout(() => this.replyEditorRef?.nativeElement.focus(), 50);
-  }
-
-  cancelReply(): void {
-    this.replyToMessage = null;
-  }
-
-  // ─── REACTIONS ───────────────────────────────────────────────────────────
-
-  toggleReaction(msg: any, emoji: string): void {
-    const chatId = this.resolveChatId(this.selectedActivity!);
+  handleFileSelect(file: File): void {
+    if (!this.selectedActivity) return;
+    const chatId = this.resolveChatId(this.selectedActivity);
     if (!chatId) return;
-    const hasReacted = this.hasReacted(msg, emoji);
-    const call$ = hasReacted
-      ? this.chatService.removeReaction(msg.id, emoji)
-      : this.chatService.addReaction(msg.id, emoji);
-
-    call$.subscribe(() => {
-      if (!msg.reactions) msg.reactions = [];
-      if (hasReacted) {
-        const idx = msg.reactions.findIndex((r: any) => r.emoji === emoji && r.userId === this.session.getOISMeetUserId());
-        if (idx > -1) msg.reactions.splice(idx, 1);
-      } else {
-        msg.reactions.push({ emoji, userId: this.session.getOISMeetUserId() });
-      }
-      this.cdr.detectChanges();
-    });
-  }
-
-  hasReacted(msg: any, emoji: string): boolean {
-    return (msg.reactions || []).some((r: any) =>
-      r.emoji === emoji && r.userId?.toString() === this.session.getOISMeetUserId()?.toString()
-    );
-  }
-
-  getReactionCount(msg: any, emoji: string): number {
-    return (msg.reactions || []).filter((r: any) => r.emoji === emoji).length;
-  }
-
-  getReactedEmojis(msg: any): string[] {
-    const map = new Map<string, number>();
-    (msg.reactions || []).forEach((r: any) => map.set(r.emoji, (map.get(r.emoji) || 0) + 1));
-    return Array.from(map.keys());
-  }
-
-  // ─── FILE UPLOAD ─────────────────────────────────────────────────────────
-
-  onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
 
     this.isUploadingFile = true;
     this.fileService.uploadFile(file).subscribe({
       next: (evt: any) => {
-        if (evt.type === 4) {
-          const res = evt.body;
-          if (res?.success && res.data) {
-            this.sendReply(res.data.url, res.data.fileName);
-          }
-          this.isUploadingFile = false;
+        if (evt.type === 4 && evt.body?.success) {
+           const res = evt.body.data;
+           this.chatService.sendMessageApi(chatId, res.fileName, 'File', res.url, res.fileName).subscribe(r => {
+             if (r.success) {
+               this.contextMessages = [...this.contextMessages, r.data];
+               if (this.detailComponent) this.detailComponent.forceScroll();
+             }
+             this.isUploadingFile = false;
+             this.cdr.detectChanges();
+           });
         }
       },
       error: () => {
@@ -488,37 +410,6 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
         this.cdr.detectChanges();
       }
     });
-  }
-
-  formatDoc(command: string, value?: string): void {
-    document.execCommand(command, false, value || '');
-    this.replyEditorRef?.nativeElement.focus();
-  }
-
-  // ─── FILE ACTION ─────────────────────────────────────────────────────────
-
-  handleFileAction(action: 'open' | 'download'): void {
-    if (!this.selectedActivity?.body) return;
-    const fileUrl = (this.selectedActivity as any).fileUrl || '';
-    const fileName = this.selectedActivity.body || 'file';
-    if (action === 'download' && fileUrl) {
-      this.fileService.downloadFile(fileUrl, fileName);
-    }
-  }
-
-  downloadAttachment(fileUrl: string, fileName: string): void {
-    this.fileService.downloadFile(fileUrl, fileName);
-  }
-
-  getFileFullUrl(url: string): string {
-    return this.fileService.getFileUrl(url);
-  }
-
-  // ─── SCROLL ──────────────────────────────────────────────────────────────
-
-  private doScrollToBottom(): void {
-    const el = this.threadContainerRef?.nativeElement as HTMLElement;
-    if (el) el.scrollTop = el.scrollHeight;
   }
 
   // ─── HELPERS ─────────────────────────────────────────────────────────────
@@ -530,33 +421,6 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
       hash = seed.charCodeAt(i) + ((hash << 5) - hash);
     }
     return colors[Math.abs(hash) % colors.length];
-  }
-
-  isCurrentUser(msg: any): boolean {
-    return msg.senderId?.toString() === this.session.getOISMeetUserId()?.toString();
-  }
-
-  getMessageText(msg: any): string {
-    return msg.formattedContent || msg.content || msg.Content || '';
-  }
-
-  getAttachments(msg: any): any[] {
-    return msg.attachments || msg.Attachments || [];
-  }
-
-  isImageType(fileName: string): boolean {
-    return /\.(png|jpg|jpeg|gif|webp)$/i.test(fileName || '');
-  }
-
-  getFileIcon(fileName: string, fileType?: string): string {
-    const name = (fileName || fileType || '').toLowerCase();
-    if (/\.(pdf)$/.test(name)) return 'bi-file-earmark-pdf-fill text-danger';
-    if (/\.(xls|xlsx|csv)$/.test(name)) return 'bi-file-earmark-spreadsheet-fill text-success';
-    if (/\.(ppt|pptx)$/.test(name)) return 'bi-file-earmark-ppt-fill text-warning';
-    if (/\.(doc|docx)$/.test(name)) return 'bi-file-earmark-word-fill text-primary';
-    if (/\.(zip|rar|7z)$/.test(name)) return 'bi-file-earmark-zip-fill text-secondary';
-    if (/\.(png|jpg|jpeg|gif|webp)$/.test(name)) return 'bi-file-earmark-image-fill text-info';
-    return 'bi-file-earmark-fill';
   }
 
   private isGuid(val: string): boolean {
@@ -580,73 +444,7 @@ export class ActivityFeedComponent implements OnInit, OnDestroy, AfterViewChecke
     } catch { return ''; }
   }
 
-  getCategoryIcon(category: string): string {
-    switch (category) {
-      case 'mention': return 'bi-at';
-      case 'reply': return 'bi-reply-fill';
-      case 'reaction': return 'bi-hand-thumbs-up-fill text-warning';
-      case 'missed-call': return 'bi-telephone-x-fill text-danger';
-      case 'file': return 'bi-file-earmark-fill text-info';
-      case 'update': return 'bi-megaphone';
-      default: return 'bi-chat-left-text';
-    }
-  }
-
-  getActivityTypeText(item: ExtendedActivity): string {
-    switch (item.category) {
-      case 'mention': return 'mentioned you';
-      case 'reply': return 'replied to your message';
-      case 'reaction': return 'reacted to your message';
-      case 'missed-call': return 'missed a call with you';
-      case 'file': return 'shared a file';
-      default: return 'posted a new message';
-    }
-  }
-
-  getDisplayTitle(item: ExtendedActivity): string {
-    if (item.entityName) return item.entityName;
-    if (item.category === 'missed-call') return 'Missed Call';
-    if (item.category === 'file') return item.body || 'Shared File';
-    return `${item.senderName}`;
-  }
-
-  getDisplaySubtitle(item: ExtendedActivity): string {
-    return this.getActivityTypeText(item);
-  }
-
-  getDisplayIcon(item: ExtendedActivity): string {
-    if (item.entityType === 'Channel') return 'bi-hash';
-    if (item.entityType === 'Conversation') return 'bi-chat-dots-fill';
-    switch (item.category) {
-      case 'missed-call': return 'bi-telephone-x-fill';
-      case 'file': return 'bi-file-earmark-fill';
-      case 'mention': return 'bi-at';
-      default: return 'bi-chat-dots-fill';
-    }
-  }
-
   get unreadCount(): number {
     return this.items.filter(i => !i.isRead).length;
-  }
-
-  setActiveTab(tab: 'chat' | 'shared'): void {
-    this.activeTab = tab;
-  }
-
-  toggleMessageMenu(msgId: string): void {
-    this.activeMessageMenu = this.activeMessageMenu === msgId ? null : msgId;
-  }
-
-  toggleEmojiPicker(): void {
-    this.isEmojiPickerOpen = !this.isEmojiPickerOpen;
-  }
-
-  insertEmoji(emoji: string): void {
-    const editor = this.replyEditorRef?.nativeElement as HTMLElement;
-    if (editor) {
-      document.execCommand('insertText', false, emoji);
-      this.onReplyEditorInput({ target: editor } as any);
-    }
-    this.isEmojiPickerOpen = false;
   }
 }
