@@ -14,8 +14,7 @@
   </div>
 </div>
 
-<div class="workspace-wrapper" [class.hWrap]="isElectron" [class.h100]="!isElectron"
-  [style.grid-template-columns]="showRightPanel ? '280px 1fr 300px' : '280px 1fr'">
+<div class="workspace-wrapper" [class.hWrap]="isElectron" [class.h100]="!isElectron">
 
   <!-- TEAM/CHANNEL SIDEBAR (Secondary Sidebar) -->
   <div class="secondary-sidebar">
@@ -189,7 +188,7 @@
 
     <!-- Workspace Header -->
     <header class="workspace-header">
-      <div class="header-left">
+      <div class="header-left" (click)="selectMainTab('info')">
         <!-- Avatar -->
         <div class="avatar-wrapper" [style.background-color]="selectedUser?.avatarColor">
           <img *ngIf="selectedUser?.avatarUrl" [src]="selectedUser?.avatarUrl" class="avatar" alt="avatar">
@@ -219,531 +218,586 @@
         </div>
       </div>
       <div class="header-right">
-        <div class="header-actions">
-          <button class="action-btn" (click)="startCall('Audio')" [disabled]="!selectedUser || !isCallHubConnected"
-            [title]="isCallHubConnected ? 'Voice call' : callHubStatusMessage">
+        <!-- Panel Toggles -->
+        <div class="header-panel-toggles">
+          <button class="action-btn" [class.active]="mainActiveTab === 'chat'" title="Chat Feed"
+            (click)="selectMainTab('chat')">
+            <i class="bi bi-chat-text"></i>
+          </button>
+          <button class="action-btn" [class.active]="mainActiveTab === 'attachments'" title="Files & Attachments"
+            (click)="selectMainTab('attachments')">
+            <i class="bi bi-file-earmark-text"></i>
+          </button>
+        </div>
+
+        <!-- Call Actions (Separated) -->
+        <div class="header-call-actions">
+          <button class="action-btn call-btn" (click)="startCall('Audio')"
+            [disabled]="!selectedUser || !isCallHubConnected"
+            [title]="isCallHubConnected ? 'Start Voice Call' : callHubStatusMessage">
             <i class="bi bi-telephone" *ngIf="!isCalling"></i>
             <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Audio'"></div>
           </button>
-          <button class="action-btn" (click)="startCall('Video')" [disabled]="!selectedUser || !isCallHubConnected"
-            [title]="isCallHubConnected ? 'Video call' : callHubStatusMessage">
+          <button class="action-btn call-btn" (click)="startCall('Video')"
+            [disabled]="!selectedUser || !isCallHubConnected"
+            [title]="isCallHubConnected ? 'Start Video Call' : callHubStatusMessage">
             <i class="bi bi-camera-video" *ngIf="!isCalling"></i>
             <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Video'"></div>
-          </button>
-          <button class="action-btn" [class.active]="showRightPanel && rightPanelMode === 'attachments'" 
-            title="View Attachments" (click)="toggleRightPanel('attachments')">
-            <i class="bi bi-paperclip"></i>
-          </button>
-          <button class="action-btn" [class.active]="showRightPanel && rightPanelMode === 'info'" 
-            title="More info" (click)="toggleRightPanel('info')">
-            <i class="bi bi-info-circle"></i>
           </button>
         </div>
       </div>
     </header>
 
-    <!-- Chat Conversation Feed -->
-    <div class="chat-feed" #chatScrollArea>
-      <div *ngIf="messages.length === 0 && !isLoading" class="empty-state text-center py-5 opacity-50">
-        <i class="bi bi-chat-left-text fs-1 mb-2 d-block"></i>
-        <p *ngIf="!selectedUser">No messages in #{{ activeChannel }} yet. Start the conversation!</p>
-        <p *ngIf="selectedUser">No messages with {{ selectedUser.fullName || selectedUser.name }} yet. Start the
-          conversation!</p>
-      </div>
+    <!-- Removed Workspace Tab Bar -->
 
-      <div class="message-group" *ngFor="let msg of messages"
-        [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
-        <div class="message-avatar-col" *ngIf="msg.senderId?.toString() !== currentUserId?.toString()">
-          <img *ngIf="msg.senderAvatarUrl" [src]="msg.senderAvatarUrl" class="msg-avatar rounded-circle" alt="avatar">
-          <div *ngIf="!msg.senderAvatarUrl" class="msg-avatar"
-            [style.background-color]="getMemberAvatarColor(msg.senderName)">
-            {{ msg.senderName.charAt(0).toUpperCase() }}
-          </div>
-        </div>
-        <div class="message-data-col">
-          <div class="msg-header">
-            <span class="sender-name">{{ msg.senderId?.toString() === currentUserId?.toString() ? 'You' : msg.senderName
-              }}</span>
-            <span class="msg-time">{{ msg.sentAt | date:'shortTime' }}</span>
-          </div>
-          <div class="msg-content">
-            <!-- Formatted HTML content or fallback plain text -->
-            <div class="mb-0" *ngIf="msg.formattedContent || msg.content"
-              [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
+    <div class="main-content-split d-flex flex-grow-1 overflow-hidden">
+      <!-- Main Content Area -->
+      <div class="main-view-container flex-grow-1 d-flex flex-column overflow-hidden">
 
-            <!-- Attachments (Single File) -->
-            <!-- <div class="msg-attachments mt-2" *ngIf="msg.fileUrl || msg.FileUrl">
-              <div class="file-chip" (click)="downloadFile(msg.fileUrl || msg.FileUrl, msg.fileName || msg.FileName)">
-                <i [class]="(msg.fileName || msg.FileName)?.endsWith('.ppt') || (msg.fileName || msg.FileName)?.endsWith('.pptx') ? 'bi bi-file-earmark-ppt-fill text-danger' : 
-                           (msg.fileName || msg.FileName)?.endsWith('.xlsx') || (msg.fileName || msg.FileName)?.endsWith('.xls') ? 'bi bi-file-earmark-excel-fill text-success' : 
-                           (msg.fileName || msg.FileName)?.endsWith('.jpg') || (msg.fileName || msg.FileName)?.endsWith('.png') ? 'bi bi-file-earmark-image-fill text-info' :
-                           'bi bi-file-earmark-fill text-primary'" class="fs-4"></i>
-                <div class="file-info">
-                  <span class="file-name text-truncate" style="max-width: 200px;">{{ msg.fileName || msg.FileName }}</span>
+        <!-- MAIN TAB CONTENT -->
+        <div class="main-tab-content flex-grow-1 d-flex flex-column overflow-hidden min-vh-0"
+          [class.d-none]="mainActiveTab !== 'chat'">
+          <!-- Chat Conversation Feed -->
+          <div class="chat-feed" #chatScrollArea>
+            <div *ngIf="messages.length === 0 && !isLoading" class="empty-state text-center py-5 opacity-50">
+              <i class="bi bi-chat-left-text fs-1 mb-2 d-block"></i>
+              <p *ngIf="!selectedUser">No messages in #{{ activeChannel }} yet. Start the conversation!</p>
+              <p *ngIf="selectedUser">No messages with {{ selectedUser.fullName || selectedUser.name }} yet. Start the
+                conversation!</p>
+            </div>
+
+            <div class="message-group" *ngFor="let msg of messages"
+              [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
+              <div class="message-avatar-col" *ngIf="msg.senderId?.toString() !== currentUserId?.toString()">
+                <img *ngIf="msg.senderAvatarUrl" [src]="msg.senderAvatarUrl" class="msg-avatar rounded-circle"
+                  alt="avatar">
+                <div *ngIf="!msg.senderAvatarUrl" class="msg-avatar"
+                  [style.background-color]="getMemberAvatarColor(msg.senderName)">
+                  {{ msg.senderName.charAt(0).toUpperCase() }}
                 </div>
-                <button class="btn-download"><i class="bi bi-download"></i></button>
               </div>
-            </div> -->
-
-            <!-- Legacy Attachments -->
-            <div class="msg-attachments"
-              *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
-              <div class="file-chip animate-fade-in" *ngFor="let file of (msg.attachments || msg.Attachments)" (click)="openPreview(file)">
-                <i class="bi fs-4" [class]="getFileIcon(file.fileName || file.FileName)"></i>
-                <div class="file-info">
-                  <span class="file-name text-truncate" style="max-width: 150px;">{{ file.fileName || file.FileName }}</span>
+              <div class="message-data-col">
+                <div class="msg-header">
+                  <span class="sender-name">{{ msg.senderId?.toString() === currentUserId?.toString() ? 'You' :
+                    msg.senderName
+                    }}</span>
+                  <span class="msg-time">{{ msg.sentAt | date:'shortTime' }}</span>
                 </div>
-                <button class="btn-download"
-                  (click)="downloadFile(file.fileUrl || file.FileUrl, file.fileName || file.FileName); $event.stopPropagation()">
-                  <i class="bi bi-download"></i>
+                <div class="msg-content">
+                  <!-- Formatted HTML content or fallback plain text -->
+                  <div class="mb-0" *ngIf="msg.formattedContent || msg.content"
+                    [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
+
+                  <!-- Legacy Attachments -->
+                  <div class="msg-attachments"
+                    *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
+                    <div class="file-chip animate-fade-in" *ngFor="let file of (msg.attachments || msg.Attachments)"
+                      (click)="openPreview(file)">
+                      <i class="bi fs-4" [class]="getFileIcon(file.fileName || file.FileName)"></i>
+                      <div class="file-info">
+                        <span class="file-name text-truncate" style="max-width: 150px;">{{ file.fileName ||
+                          file.FileName }}</span>
+                      </div>
+                      <button class="btn-download"
+                        (click)="downloadFile(file.fileUrl || file.FileUrl, file.fileName || file.FileName); $event.stopPropagation()">
+                        <i class="bi bi-download"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="msg-attachments-hidden mt-1"
+                    *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
+                    <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
+                      <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}} Attachment(s)
+                      hidden
+                    </span>
+                  </div>
+                </div> <!-- end msg-content -->
+
+                <!-- Reactions Section -->
+                <div class="msg-reactions mt-1 d-flex flex-wrap gap-1"
+                  *ngIf="msg.reactions && msg.reactions.length > 0">
+                  <span *ngFor="let emoji of commonEmojis">
+                    <button class="reaction-badge btn btn-sm rounded-pill" *ngIf="getReactionCount(msg, emoji) > 0"
+                      [class.reacted]="hasReacted(msg, emoji)" (click)="toggleReaction(msg, emoji)"
+                      [title]="getReactionUsers(msg, emoji)">
+                      <span class="emoji">{{ emoji }}</span>
+                      <span class="count">{{ getReactionCount(msg, emoji) }}</span>
+                    </button>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div *ngIf="isLoading" class="text-center py-3">
+              <div class="spinner-border spinner-border-sm text-primary" role="status">
+                <span class="visually-hidden">Loading messages...</span>
+              </div>
+            </div>
+
+            <div *ngIf="isUploading" class="text-center py-2 text-muted fs-small">
+              <div class="spinner-border spinner-border-xs me-2" role="status"></div>
+              Uploading file...
+            </div>
+          </div>
+
+          <!-- Message Input -->
+          <footer class="workspace-input-area">
+            <div class="input-card shadow-sm">
+              <div class="toolbar">
+                <button class="tool-btn" (click)="formatDoc('bold')"><i class="bi bi-type-bold"></i></button>
+                <button class="tool-btn" (click)="formatDoc('italic')"><i class="bi bi-type-italic"></i></button>
+                <button class="tool-btn" (click)="formatDoc('underline')"><i class="bi bi-type-underline"></i></button>
+                <button class="tool-btn" (click)="formatDoc('insertUnorderedList')"><i
+                    class="bi bi-list-ul"></i></button>
+                <button class="tool-btn" (click)="formatDoc('insertOrderedList')"><i class="bi bi-list-ol"></i></button>
+                <span class="v-divider"></span>
+                <button class="tool-btn" (click)="formatDoc('formatBlock', 'pre')"><i
+                    class="bi bi-code-slash"></i></button>
+                <button class="tool-btn" (click)="formatDoc('createLink', 'https://')"><i
+                    class="bi bi-link-45deg"></i></button>
+                <span class="v-divider"></span>
+                <!-- Emoji picker trigger — placed here so the popup can escape overflow:hidden via fixed positioning -->
+                <div class="emoji-picker-container" style="position: relative;">
+                  <button class="tool-btn" id="emojiPickerBtn" (click)="showEmojiPicker($event)" title="Emoji">
+                    <i class="bi bi-emoji-smile"></i>
+                  </button>
+                  <div class="emoji-picker-popover shadow border rounded-3 p-2 bg-white" *ngIf="isEmojiPickerVisible"
+                    style="position: fixed; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; min-width: 190px;">
+                    <button class="btn btn-light emoji-btn p-1" *ngFor="let e of commonEmojis" (click)="addEmoji(e)"
+                      (mousedown)="$event.preventDefault()">{{ e }}</button>
+                  </div>
+                </div>
+              </div>
+              <div class="message-field-wrapper position-relative">
+                <!-- Mentions Popover -->
+                <div class="mention-popover shadow border rounded-3 p-1 bg-white"
+                  *ngIf="mentionsVisible && filteredMentionList.length > 0">
+                  <div class="mention-item d-flex align-items-center gap-2 p-2 rounded cursor-pointer"
+                    *ngFor="let m of filteredMentionList; let i = index" [class.active]="i === mentionSelectedIndex"
+                    (click)="insertMention(m)">
+                    <div class="dm-avatar-xs" [style.background-color]="m.avatarColor || '#3b82f6'">
+                      {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+                    </div>
+                    <span class="fs-xs fw-medium">{{ m.fullName || m.name }}</span>
+                  </div>
+                </div>
+
+                <!-- Rich Text ContentEditable Area -->
+                <div #messageEditor class="message-editor" contenteditable="true" (input)="onEditorInput($event)"
+                  (keydown)="onEditorKeydown($event)"
+                  [attr.placeholder]="selectedUser ? 'Message @' + (selectedUser.fullName || selectedUser.name) : 'Message #' + activeChannel">
+                </div>
+              </div>
+              <div class="input-footer">
+                <div class="left-actions">
+                  <!-- Hidden file input -->
+                  <input type="file" #fileInput style="display: none" (change)='onFileSelected($event)'>
+                  <button class="action-icon" (click)="fileInput.click()"><i class="bi bi-plus-circle"></i></button>
+                  <button class="action-icon"><i class="bi bi-emoji-smile"></i></button>
+                  <button class="action-icon"><i class="bi bi-mention"></i></button>
+                </div>
+                <button class="send-btn-primary" (click)="sendMessage()"
+                  [disabled]="isSendingMessage || (!newMessage.trim() && !isUploading)">
+                  <i class="bi bi-send-fill" *ngIf="!isSendingMessage"></i>
+                  <div class="spinner-border spinner-border-sm" *ngIf="isSendingMessage"></div>
                 </button>
               </div>
             </div>
-            <div class="msg-attachments-hidden mt-1"
-              *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
-              <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
-                <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}} Attachment(s)
-                hidden
-              </span>
-            </div>
-          </div> <!-- end msg-content -->
-
-          <!-- Reactions Section -->
-          <div class="msg-reactions mt-1 d-flex flex-wrap gap-1" *ngIf="msg.reactions && msg.reactions.length > 0">
-            <span *ngFor="let emoji of commonEmojis">
-              <button class="reaction-badge btn btn-sm rounded-pill" *ngIf="getReactionCount(msg, emoji) > 0"
-                [class.reacted]="hasReacted(msg, emoji)" (click)="toggleReaction(msg, emoji)"
-                [title]="getReactionUsers(msg, emoji)">
-                <span class="emoji">{{ emoji }}</span>
-                <span class="count">{{ getReactionCount(msg, emoji) }}</span>
-              </button>
-            </span>
-          </div>
+          </footer>
         </div>
-      </div>
 
-      <div *ngIf="isLoading" class="text-center py-3">
-        <div class="spinner-border spinner-border-sm text-primary" role="status">
-          <span class="visually-hidden">Loading messages...</span>
-        </div>
-      </div>
+        <!-- ATTACHMENTS TAB CONTENT (MAIN TABLE VIEW) -->
+        <div class="main-tab-content flex-grow-1 bg-light p-4"
+          [class.d-none]="mainActiveTab !== 'attachments'">
+          <div class="table-container bg-white shadow-sm rounded-4 overflow-hidden d-flex flex-column flex-grow-1">
 
-      <div *ngIf="isUploading" class="text-center py-2 text-muted fs-small">
-        <div class="spinner-border spinner-border-xs me-2" role="status"></div>
-        Uploading file...
-      </div>
-    </div>
-
-    <!-- Message Input -->
-    <footer class="workspace-input-area">
-      <div class="input-card shadow-sm">
-        <div class="toolbar">
-          <button class="tool-btn" (click)="formatDoc('bold')"><i class="bi bi-type-bold"></i></button>
-          <button class="tool-btn" (click)="formatDoc('italic')"><i class="bi bi-type-italic"></i></button>
-          <button class="tool-btn" (click)="formatDoc('underline')"><i class="bi bi-type-underline"></i></button>
-          <button class="tool-btn" (click)="formatDoc('insertUnorderedList')"><i class="bi bi-list-ul"></i></button>
-          <button class="tool-btn" (click)="formatDoc('insertOrderedList')"><i class="bi bi-list-ol"></i></button>
-          <span class="v-divider"></span>
-          <button class="tool-btn" (click)="formatDoc('formatBlock', 'pre')"><i class="bi bi-code-slash"></i></button>
-          <button class="tool-btn" (click)="formatDoc('createLink', 'https://')"><i
-              class="bi bi-link-45deg"></i></button>
-          <span class="v-divider"></span>
-          <!-- Emoji picker trigger — placed here so the popup can escape overflow:hidden via fixed positioning -->
-          <div class="emoji-picker-container" style="position: relative;">
-            <button class="tool-btn" id="emojiPickerBtn" (click)="showEmojiPicker($event)" title="Emoji">
-              <i class="bi bi-emoji-smile"></i>
-            </button>
-            <div class="emoji-picker-popover shadow border rounded-3 p-2 bg-white" *ngIf="isEmojiPickerVisible"
-              style="position: fixed; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; min-width: 190px;">
-              <button class="btn btn-light emoji-btn p-1" *ngFor="let e of commonEmojis" (click)="addEmoji(e)"
-                (mousedown)="$event.preventDefault()">{{ e }}</button>
-            </div>
-          </div>
-        </div>
-        <div class="message-field-wrapper position-relative">
-          <!-- Mentions Popover -->
-          <div class="mention-popover shadow border rounded-3 p-1 bg-white"
-            *ngIf="mentionsVisible && filteredMentionList.length > 0">
-            <div class="mention-item d-flex align-items-center gap-2 p-2 rounded cursor-pointer"
-              *ngFor="let m of filteredMentionList; let i = index" [class.active]="i === mentionSelectedIndex"
-              (click)="insertMention(m)">
-              <div class="dm-avatar-xs" [style.background-color]="m.avatarColor || '#3b82f6'">
-                {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+            <!-- Table Header / Search -->
+            <div
+              class="p-3 border-bottom d-flex align-items-center justify-content-between bg-white sticky-top rounded-top-4">
+              <div class="d-flex align-items-center gap-3">
+                <h6 class="mb-0 fw-bold">All Attachments</h6>
+                <span class="badge bg-light text-muted border px-3 rounded-pill">{{ filteredSharedFiles.length }}
+                  found</span>
               </div>
-              <span class="fs-xs fw-medium">{{ m.fullName || m.name }}</span>
-            </div>
-          </div>
-
-          <!-- Rich Text ContentEditable Area -->
-          <div #messageEditor class="message-editor" contenteditable="true" (input)="onEditorInput($event)"
-            (keydown)="onEditorKeydown($event)"
-            [attr.placeholder]="selectedUser ? 'Message @' + (selectedUser.fullName || selectedUser.name) : 'Message #' + activeChannel">
-          </div>
-        </div>
-        <div class="input-footer">
-          <div class="left-actions">
-            <!-- Hidden file input -->
-            <input type="file" #fileInput style="display: none" (change)='onFileSelected($event)'>
-            <button class="action-icon" (click)="fileInput.click()"><i class="bi bi-plus-circle"></i></button>
-            <button class="action-icon"><i class="bi bi-emoji-smile"></i></button>
-            <button class="action-icon"><i class="bi bi-mention"></i></button>
-          </div>
-          <button class="send-btn-primary" (click)="sendMessage()"
-            [disabled]="isSendingMessage || (!newMessage.trim() && !isUploading)">
-            <i class="bi bi-send-fill" *ngIf="!isSendingMessage"></i>
-            <div class="spinner-border spinner-border-sm" *ngIf="isSendingMessage"></div>
-          </button>
-        </div>
-      </div>
-    </footer>
-  </div>
-
-  <!-- RIGHT PANEL (Info / Activity / Files) -->
-  <aside class="workspace-right-panel" *ngIf="showRightPanel">
-    
-    <!-- Panel Header (Shared) -->
-    <div class="panel-header-sticky d-flex align-items-center justify-content-between mb-4">
-      <h6 class="fw-bold mb-0">{{ rightPanelMode === 'info' ? 'Info' : 'Attachments' }}</h6>
-      <button class="btn btn-icon-sm" (click)="showRightPanel = false"><i class="bi bi-x-lg"></i></button>
-    </div>
-
-    <!-- INFO MODE -->
-    <div class="info-view-container" *ngIf="rightPanelMode === 'info'">
-      <!-- User Profile Widget (Slack Style) -->
-      <section class="panel-section profile-widget" *ngIf="selectedUser && !selectedUser.isGroup">
-        <div class="profile-card border rounded-3 p-3 text-center mb-2">
-          <div class="avatar-large mx-auto mb-2" [style.background-color]="selectedUser.avatarColor || '#3b82f6'">
-            {{ (selectedUser.fullName || selectedUser.name || 'U').charAt(0).toUpperCase() }}
-          </div>
-          <h6 class="mb-1">{{ selectedUser.fullName || selectedUser.name }}</h6>
-          <p class="text-muted small mb-0">{{ selectedUser.email }}</p>
-          <div class="mt-2">
-            <span class="badge rounded-pill"
-              [ngClass]="selectedUser.isOnline ? 'bg-success-soft text-success' : 'bg-secondary-soft text-muted'">
-              ● {{ selectedUser.isOnline ? 'Online' : 'Away' }}
-            </span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Group Members Column (Teams Style) -->
-      <section class="panel-section" *ngIf="selectedUser?.isGroup">
-        <div class="section-header d-flex justify-content-between align-items-center mb-2">
-          <h6 class="fw-bold fs-7 mb-0">Group Members</h6>
-          <div class="d-flex gap-1 align-items-center">
-            <button class="btn btn-icon-xs text-primary" (click)="openAddMemberModal()" title="Add Member">
-              <i class="bi bi-person-plus-fill"></i>
-            </button>
-            <span class="badge bg-light text-muted border fs-xs">{{ selectedUser.participants?.length || 0 }}</span>
-          </div>
-        </div>
-
-        <div class="search-input-wrapper position-relative mb-2">
-          <i class="bi bi-search search-icon me-2 position-absolute"
-            style="left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; opacity: 0.5;"></i>
-          <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="groupMembersSearchQuery"
-            placeholder="Find a member..." />
-        </div>
-
-        <div class="group-members-list list-unstyled">
-          <div class="member-item d-flex align-items-center gap-2 mb-2 p-2 rounded cursor-pointer"
-            *ngFor="let member of filteredGroupMembers">
-            <div class="member-avatar-wrapper position-relative">
-              <img *ngIf="member.avatarUrl" [src]="member.avatarUrl" class="member-avatar rounded-circle" alt="avatar">
-              <div *ngIf="!member.avatarUrl" class="member-avatar"
-                [style.background-color]="getMemberAvatarColor(member.name)">
-                {{ (member.name || 'U').charAt(0).toUpperCase() }}
+              <div class="search-input-wrapper position-relative" style="width: 300px;">
+                <i class="bi bi-search search-icon me-2 position-absolute"
+                  style="left: 12px; top: 50%; transform: translateY(-50%); font-size: 0.9rem; opacity: 0.5;"></i>
+                <input type="text" class="form-control form-control-sm ps-5 rounded-pill bg-light border-0"
+                  [(ngModel)]="attachmentsSearchQuery" placeholder="Search by name, type, or user..." />
               </div>
-              <span class="status-indicator-xs" [class.online]="presenceService.isOnline(member.userId)"></span>
             </div>
-            <div class="member-info min-w-0 flex-grow-1">
-              <div class="member-name text-truncate fs-small fw-medium">{{ member.name }}</div>
-              <div class="member-role fs-xs text-muted">{{ member.userId === currentUserId ? 'You' : 'Member' }}</div>
+
+            <!-- Scrollable Table Body -->
+            <div class="flex-grow-1 overflow-auto">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light sticky-top">
+                  <tr class="fs-xxs text-uppercase text-muted letter-spacing-1">
+                    <th class="ps-4 border-0 py-3" style="width: 40%">File Name</th>
+                    <th class="border-0 py-3">Type</th>
+                    <th class="border-0 py-3">Uploaded By</th>
+                    <th class="border-0 py-3">Date</th>
+                    <th class="pe-4 border-0 py-3 text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="border-top-0">
+                  <tr *ngIf="filteredSharedFiles.length === 0">
+                    <td colspan="5" class="py-5 text-center text-muted">
+                      <i class="bi bi-folder2-open d-block mb-3 fs-1 opacity-20"></i>
+                      <p class="mb-0">No shared files match your search</p>
+                    </td>
+                  </tr>
+                  <tr *ngFor="let file of filteredSharedFiles" class="cursor-pointer" (click)="openPreview(file)">
+                    <td class="ps-4 py-3">
+                      <div class="d-flex align-items-center gap-3">
+                        <div
+                          class="file-icon-box bg-light-hover rounded-3 d-flex align-items-center justify-content-center"
+                          style="width: 40px; height: 40px;">
+                          <i class="bi fs-5" [class]="getFileIcon(file.type)"></i>
+                        </div>
+                        <span class="fw-semibold text-dark text-truncate" style="max-width: 300px;">{{ file.name
+                          }}</span>
+                      </div>
+                    </td>
+                    <td class="py-3">
+                      <span class="badge bg-light text-uppercase text-muted border fs-xxxs px-2">{{ file.type }}</span>
+                    </td>
+                    <td class="py-3">
+                      <div class="d-flex align-items-center gap-2">
+                        <div class="dm-avatar-xs" [style.background-color]="getMemberAvatarColor(file.owner)">
+                          {{ (file.owner || 'U').charAt(0).toUpperCase() }}
+                        </div>
+                        <span class="fs-small text-secondary">{{ file.owner }}</span>
+                      </div>
+                    </td>
+                    <td class="py-3">
+                      <span class="fs-small text-muted">{{ file.date }}</span>
+                    </td>
+                    <td class="pe-4 py-3 text-end">
+                      <div class="d-flex gap-2 justify-content-end">
+                        <button class="btn btn-icon-sm hover-primary"
+                          (click)="openPreview(file); $event.stopPropagation()" title="Preview">
+                          <i class="bi bi-eye"></i>
+                        </button>
+                        <button class="btn btn-icon-sm hover-success"
+                          (click)="downloadFile(file.url, file.name); $event.stopPropagation()" title="Download">
+                          <i class="bi bi-download"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-      </section>
 
-      <!-- Activity Feed -->
-      <section class="panel-section">
-        <div class="section-header d-flex justify-content-between mb-2">
-          <h6 class="fw-bold fs-7 mb-0">Team Activity</h6>
-          <a href="#" class="text-primary fs-small text-decoration-none">View all</a>
-        </div>
-        <div class="activity-list">
-          <div class="activity-item d-flex gap-2 mb-2" *ngFor="let act of activityFeed">
-            <div class="activity-dot mt-1"></div>
-            <div class="activity-content">
-              <p class="mb-0 fs-small"><strong>{{ act.user }}</strong> {{ act.action }}</p>
-              <span class="text-muted fs-xs">{{ act.time }}</span>
+        <!-- INFO TAB CONTENT -->
+        <div class="main-tab-content flex-grow-1 overflow-auto bg-light" [class.d-none]="mainActiveTab !== 'info'" style="display: block;">
+          <div class="container-fluid p-0">
+            <div class="row">
+              <div class="col-md-12 mx-auto">
+                <div class="card border-0 shadow-sm rounded-4 p-4">
+                  <h5 class="fw-bold mb-4">Context Details</h5>
+
+                  <!-- User Profile Widget -->
+                  <div class="profile-widget" *ngIf="selectedUser && !selectedUser.isGroup">
+                    <div class="profile-card-modern border-0 rounded-4 bg-light p-4 text-center">
+                      <div class="avatar-xl mx-auto mb-3 shadow-sm border border-4 border-white"
+                        [style.background-color]="selectedUser.avatarColor || '#3b82f6'">
+                        {{ (selectedUser.fullName || selectedUser.name || 'U').charAt(0).toUpperCase() }}
+                      </div>
+                      <h5 class="mb-1 fw-bold">{{ selectedUser.fullName || selectedUser.name }}</h5>
+                      <p class="text-muted mb-3">{{ selectedUser.email }}</p>
+                      <div class="d-flex justify-content-center">
+                        <span class="badge rounded-pill px-3 py-2"
+                          [ngClass]="selectedUser.isOnline ? 'bg-success-soft text-success' : 'bg-secondary-soft text-muted'">
+                          {{ selectedUser.isOnline ? 'Available' : 'Away' }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Group Info -->
+                  <div class="group-header" *ngIf="selectedUser?.isGroup">
+                    <div class="profile-card-modern border-0 rounded-4 bg-light p-4 text-center mb-4">
+                      <div class="avatar-xl mx-auto mb-3 shadow-sm border border-4 border-white"
+                        [style.background-color]="selectedUser.avatarColor || '#10b981'">
+                        <i class="bi bi-people-fill"></i>
+                      </div>
+                      <h5 class="mb-1 fw-bold">{{ selectedUser.name }}</h5>
+                      <span class="badge bg-white text-primary border rounded-pill">{{ selectedUser.participants?.length
+                        || 0 }} Members</span>
+                    </div>
+
+                    <section class="panel-section mb-4">
+                      <div class="section-header d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold mb-0">Members</h6>
+                        <button class="btn btn-sm btn-outline-primary" (click)="openAddMemberModal()">
+                          <i class="bi bi-person-plus-fill me-1"></i> Add Member
+                        </button>
+                      </div>
+                      <div class="list-group">
+                        <div class="list-group-item d-flex align-items-center gap-3"
+                          *ngFor="let member of filteredGroupMembers">
+                          <div class="dm-avatar-sm" [style.background-color]="getMemberAvatarColor(member.name)">
+                            {{ (member.name || 'U').charAt(0).toUpperCase() }}
+                          </div>
+                          <div>
+                            <div class="fw-medium">{{ member.name }}</div>
+                            <small class="text-muted">{{ member.userId === currentUserId ? 'You' : 'Member' }}</small>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <!-- Recent Activity -->
+                  <section class="panel-section">
+                    <h6 class="fw-bold mb-3">Recent Activity</h6>
+                    <div class="activity-timeline ps-2">
+                      <div class="activity-item-compact d-flex gap-3 mb-3" *ngFor="let act of activityFeed">
+                        <div class="activity-dot-sm"></div>
+                        <div class="activity-content-sm">
+                          <p class="mb-0 fs-sm"><strong>{{ act.user }}</strong> {{ act.action }}</p>
+                          <span class="text-muted fs-xs">{{ act.time }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </section>
-    </div>
-
-    <!-- ATTACHMENTS MODE -->
-    <div class="attachments-view-container" *ngIf="rightPanelMode === 'attachments'">
-      <div class="search-input-wrapper position-relative mb-3">
-        <i class="bi bi-search search-icon me-2 position-absolute"
-          style="left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; opacity: 0.5;"></i>
-        <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="attachmentsSearchQuery"
-          placeholder="Filter attachments..." />
       </div>
+    </div> <!-- end .main-view-container -->
+  </div> <!-- end .main-content-split -->
 
-      <div class="attachments-list h-100 overflow-auto">
-        <div *ngIf="filteredSharedFiles.length === 0" class="text-center py-5 text-muted">
-          <i class="bi bi-folder2-open d-block mb-2 fs-2 opacity-50"></i>
-          <p class="fs-xs mb-0">No attachments found</p>
+  <!-- Image viewer modal -->
+  <div class="modal fade" id="imageViewerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">{{ selectedImage?.fileName }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-
-        <div class="attachment-item-card d-flex align-items-center gap-2 p-2 rounded mb-2 border cursor-pointer hover-bg-light animate-fade-in" 
-             *ngFor="let file of filteredSharedFiles" (click)="openPreview(file)">
-          <div class="file-icon-square p-2 bg-light rounded d-flex align-items-center justify-content-center">
-            <i class="bi fs-5" [class]="getFileIcon(file.type)"></i>
-          </div>
-          <div class="file-info min-w-0 flex-grow-1">
-            <div class="file-name text-truncate fs-xs fw-bold">{{ file.name }}</div>
-            <div class="file-meta fs-xs text-muted mt-1">
-              {{ file.owner }} • {{ file.date }}
-            </div>
-          </div>
-          <button class="btn btn-icon-xs text-muted" (click)="downloadFile(file.url, file.name); $event.stopPropagation()">
-            <i class="bi bi-download"></i>
+        <div class="modal-body text-center">
+          <img [src]="selectedImage?.fileUrl" class="img-fluid" alt="Full size image">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary"
+            (click)="downloadFile(selectedImage.fileUrl, selectedImage.fileName)">
+            <i class="bi bi-download me-2"></i>Download
           </button>
         </div>
       </div>
     </div>
+  </div>
 
-  </aside>
-
-</div>
-
-
-<!-- Image viewer modal -->
-<div class="modal fade" id="imageViewerModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">{{ selectedImage?.fileName }}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  <!-- Incoming Call Overlay -->
+  <div class="incoming-call-overlay" *ngIf="incomingCall">
+    <div class="call-card shadow-lg bounce">
+      <div class="call-header">
+        <div class="call-avatar" [style.background-color]="getMemberAvatarColor(incomingCall.fromUserName)">
+          {{ incomingCall.fromUserName.charAt(0).toUpperCase() }}
+        </div>
       </div>
-      <div class="modal-body text-center">
-        <img [src]="selectedImage?.fileUrl" class="img-fluid" alt="Full size image">
+      <div class="call-body">
+        <h5>{{ incomingCall.fromUserName }}</h5>
+        <p>Incoming {{ incomingCall.callType }} call...</p>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary"
-          (click)="downloadFile(selectedImage.fileUrl, selectedImage.fileName)">
-          <i class="bi bi-download me-2"></i>Download
-        </button>
+      <div class="call-footer">
+        <button class="btn-reject" (click)="rejectIncomingCall()"><i class="bi bi-telephone-x-fill"></i></button>
+        <button class="btn-accept" (click)="acceptIncomingCall()"><i class="bi bi-telephone-fill"></i></button>
       </div>
     </div>
   </div>
-</div>
 
-<!-- Incoming Call Overlay -->
-<div class="incoming-call-overlay" *ngIf="incomingCall">
-  <div class="call-card shadow-lg bounce">
-    <div class="call-header">
-      <div class="call-avatar" [style.background-color]="getMemberAvatarColor(incomingCall.fromUserName)">
-        {{ incomingCall.fromUserName.charAt(0).toUpperCase() }}
-      </div>
-    </div>
-    <div class="call-body">
-      <h5>{{ incomingCall.fromUserName }}</h5>
-      <p>Incoming {{ incomingCall.callType }} call...</p>
-    </div>
-    <div class="call-footer">
-      <button class="btn-reject" (click)="rejectIncomingCall()"><i class="bi bi-telephone-x-fill"></i></button>
-      <button class="btn-accept" (click)="acceptIncomingCall()"><i class="bi bi-telephone-fill"></i></button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════
+  <!-- ═══════════════════════════════════════════════════════
      NEW GROUP CREATION MODAL (Angular-native, no Bootstrap)
      ═══════════════════════════════════════════════════════ -->
-<div class="group-modal-overlay" *ngIf="isGroupModalOpen" (click)="closeGroupModal()">
-  <div class="group-modal-card shadow-lg" (click)="$event.stopPropagation()" (keydown.escape)="closeGroupModal()">
+  <div class="group-modal-overlay" *ngIf="isGroupModalOpen" (click)="closeGroupModal()">
+    <div class="group-modal-card shadow-lg" (click)="$event.stopPropagation()" (keydown.escape)="closeGroupModal()">
 
-    <div class="group-modal-header">
-      <div class="header-title-section">
-        <h5 class="mb-0 fw-bold"><i class="bi bi-people-fill me-2 text-primary"></i>Create New Group</h5>
-        <p class="text-muted fs-xs mb-0 mt-1">Chat collectively with your team members</p>
+      <div class="group-modal-header">
+        <div class="header-title-section">
+          <h5 class="mb-0 fw-bold"><i class="bi bi-people-fill me-2 text-primary"></i>Create New Group</h5>
+          <p class="text-muted fs-xs mb-0 mt-1">Chat collectively with your team members</p>
+        </div>
+        <button class="btn-close" (click)="closeGroupModal()"></button>
       </div>
-      <button class="btn-close" (click)="closeGroupModal()"></button>
-    </div>
 
-    <div class="group-modal-body">
-      <!-- Group name -->
-      <div class="form-group mb-2">
-        <label class="form-label d-flex justify-content-between align-items-center">
-          <span class="fw-semibold fs-small">Group Name <span class="text-danger">*</span></span>
-          <span class="text-muted fs-xs">{{ newGroupName.length }}/80</span>
-        </label>
-        <input type="text" class="form-control form-control-sm group-name-input" [(ngModel)]="newGroupName"
-          placeholder="Enter group name" maxlength="80" autofocus (keydown.enter)="createGroup()"
-          [class.is-invalid]="groupCreationError && !newGroupName.trim()" />
-        <div class="invalid-feedback d-block" *ngIf="groupCreationError && !newGroupName.trim()">
-          Group name is required
+      <div class="group-modal-body">
+        <!-- Group name -->
+        <div class="form-group mb-2">
+          <label class="form-label d-flex justify-content-between align-items-center">
+            <span class="fw-semibold fs-small">Group Name <span class="text-danger">*</span></span>
+            <span class="text-muted fs-xs">{{ newGroupName.length }}/80</span>
+          </label>
+          <input type="text" class="form-control form-control-sm group-name-input" [(ngModel)]="newGroupName"
+            placeholder="Enter group name" maxlength="80" autofocus (keydown.enter)="createGroup()"
+            [class.is-invalid]="groupCreationError && !newGroupName.trim()" />
+          <div class="invalid-feedback d-block" *ngIf="groupCreationError && !newGroupName.trim()">
+            Group name is required
+          </div>
+        </div>
+
+        <!-- Member search -->
+        <div class="form-group mb-0">
+          <label class="form-label d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-semibold fs-small">Add Members <span class="text-danger">*</span></span>
+            <span class="badge" [class.bg-success-soft]="selectedGroupMembers.length >= 2"
+              [class.text-success]="selectedGroupMembers.length >= 2"
+              [class.bg-light]="selectedGroupMembers.length < 2">
+              {{ selectedGroupMembers.length }} selected
+            </span>
+          </label>
+
+          <div class="search-input-wrapper position-relative mb-2">
+            <i class="bi bi-search search-icon me-2"></i>
+            <input type="text" class="form-control form-control-md ps-4" [(ngModel)]="newGroupSearchQuery"
+              placeholder="Search colleagues by name or email..." />
+            <i class="bi bi-x-circle-fill search-icon me-2" (click)="clearGroupSearch()"></i>
+          </div>
+
+          <!-- Selected chips (Horizontal Scrollable) -->
+          <div class="selected-members-chips d-flex flex-wrap gap-2 mb-2" *ngIf="selectedGroupMembers.length > 0">
+            <div class="member-chip animate-fade-in" *ngFor="let m of selectedGroupMembers">
+              <div class="chip-avatar" [style.background-color]="m.avatarColor || '#3b82f6'">
+                {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+              </div>
+              <span class="chip-label">{{ m.fullName || m.name }}</span>
+              <button type="button" class="chip-remove" (click)="toggleGroupMember(m)" title="Remove">
+                <i class="bi bi-x"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- User list container -->
+          <div class="group-member-list-wrapper">
+            <div class="group-member-list">
+              <div *ngFor="let user of groupModalFilteredUsers"
+                class="group-member-item d-flex align-items-center gap-2 p-2 rounded"
+                [class.selected]="isGroupMemberSelected(user)" (click)="toggleGroupMember(user)">
+
+                <div class="dm-avatar-sm flex-shrink-0" [style.background-color]="user.avatarColor || '#3b82f6'">
+                  {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
+                </div>
+
+                <div class="member-info flex-grow-1 min-w-0">
+                  <div class="member-name fs-small text-truncate fw-medium">{{ user.fullName || user.name }}</div>
+                  <div class="member-email fs-xs text-muted text-truncate">{{ user.email }}</div>
+                </div>
+
+                <div class="selection-status">
+                  <i class="bi bi-check-circle-fill text-primary" *ngIf="isGroupMemberSelected(user)"></i>
+                  <i class="bi bi-circle text-muted opacity-25" *ngIf="!isGroupMemberSelected(user)"></i>
+                </div>
+              </div>
+
+              <div class="text-center text-muted fs-xs py-4" *ngIf="groupModalFilteredUsers.length === 0">
+                <i class="bi bi-person-x fs-4 d-block mb-1 opacity-50"></i>
+                No colleagues found matching "{{ newGroupSearchQuery }}"
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- General error display -->
+        <div class="alert alert-danger-soft d-flex align-items-start gap-2 mt-4 animate-shake"
+          *ngIf="groupCreationError && (newGroupName.trim() || selectedGroupMembers.length >= 2)">
+          <i class="bi bi-exclamation-circle-fill mt-1"></i>
+          <div>
+            <div class="fw-bold fs-xs">Creation Failed</div>
+            <div class="fs-xs opacity-75">{{ groupCreationError }}</div>
+          </div>
         </div>
       </div>
 
-      <!-- Member search -->
-      <div class="form-group mb-0">
-        <label class="form-label d-flex justify-content-between align-items-center mb-2">
-          <span class="fw-semibold fs-small">Add Members <span class="text-danger">*</span></span>
-          <span class="badge" [class.bg-success-soft]="selectedGroupMembers.length >= 2"
-            [class.text-success]="selectedGroupMembers.length >= 2" [class.bg-light]="selectedGroupMembers.length < 2">
-            {{ selectedGroupMembers.length }} selected
-          </span>
-        </label>
+      <div class="group-modal-footer">
+        <button class="btn btn-md btn-link text-decoration-none text-muted" (click)="closeGroupModal()"
+          [disabled]="isCreatingGroup">Cancel</button>
+        <button class="btn btn-md btn-primary px-4 d-flex align-items-center gap-2 shadow-sm" (click)="createGroup()"
+          [disabled]="isCreatingGroup || !newGroupName.trim() || selectedGroupMembers.length < 2">
+          <span class="spinner-border spinner-border-sm" *ngIf="isCreatingGroup"></span>
+          <i class="bi bi-plus-lg" *ngIf="!isCreatingGroup"></i>
+          <span>{{ isCreatingGroup ? 'Creating Group...' : 'Create Group' }}</span>
+        </button>
+      </div>
 
+    </div>
+  </div>
+
+  <!-- Add Member Modal -->
+  <div class="group-modal-overlay" *ngIf="isAddMemberModalOpen" (click)="closeAddMemberModal()">
+    <div class="group-modal-card shadow-lg" (click)="$event.stopPropagation()" (keydown.escape)="closeAddMemberModal()">
+      <div class="group-modal-header">
+        <div class="header-title-section">
+          <h5 class="mb-0 fw-bold"><i class="bi bi-person-plus-fill me-2 text-primary"></i>Add Members</h5>
+          <p class="text-muted fs-xs mb-0 mt-1">Add colleagues to {{ selectedUser?.name || selectedUser?.fullName }}</p>
+        </div>
+        <button class="btn-close" (click)="closeAddMemberModal()"></button>
+      </div>
+
+      <div class="group-modal-body">
         <div class="search-input-wrapper position-relative mb-2">
           <i class="bi bi-search search-icon me-2"></i>
-          <input type="text" class="form-control form-control-md ps-4" [(ngModel)]="newGroupSearchQuery"
-            placeholder="Search colleagues by name or email..." />
-          <i class="bi bi-x-circle-fill search-icon me-2" (click)="clearGroupSearch()"></i>
+          <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="addMemberSearchQuery"
+            placeholder="Search by name or email..." />
+          <i class="bi bi-x-circle-fill search-icon me-2" (click)="addMemberSearchQuery = ''"></i>
         </div>
 
-        <!-- Selected chips (Horizontal Scrollable) -->
-        <div class="selected-members-chips d-flex flex-wrap gap-2 mb-2" *ngIf="selectedGroupMembers.length > 0">
-          <div class="member-chip animate-fade-in" *ngFor="let m of selectedGroupMembers">
+        <!-- Selected chips -->
+        <div class="selected-members-chips d-flex flex-wrap gap-2 mb-2" *ngIf="selectedNewMembers.length > 0">
+          <div class="member-chip animate-fade-in" *ngFor="let m of selectedNewMembers">
             <div class="chip-avatar" [style.background-color]="m.avatarColor || '#3b82f6'">
               {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
             </div>
             <span class="chip-label">{{ m.fullName || m.name }}</span>
-            <button type="button" class="chip-remove" (click)="toggleGroupMember(m)" title="Remove">
+            <button type="button" class="chip-remove" (click)="toggleNewMember(m)" title="Remove">
               <i class="bi bi-x"></i>
             </button>
           </div>
         </div>
 
-        <!-- User list container -->
         <div class="group-member-list-wrapper">
           <div class="group-member-list">
-            <div *ngFor="let user of groupModalFilteredUsers"
+            <div *ngFor="let user of addMemberFilteredUsers"
               class="group-member-item d-flex align-items-center gap-2 p-2 rounded"
-              [class.selected]="isGroupMemberSelected(user)" (click)="toggleGroupMember(user)">
-
+              [class.selected]="isNewMemberSelected(user)" (click)="toggleNewMember(user)">
               <div class="dm-avatar-sm flex-shrink-0" [style.background-color]="user.avatarColor || '#3b82f6'">
                 {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
               </div>
-
               <div class="member-info flex-grow-1 min-w-0">
                 <div class="member-name fs-small text-truncate fw-medium">{{ user.fullName || user.name }}</div>
                 <div class="member-email fs-xs text-muted text-truncate">{{ user.email }}</div>
               </div>
-
               <div class="selection-status">
-                <i class="bi bi-check-circle-fill text-primary" *ngIf="isGroupMemberSelected(user)"></i>
-                <i class="bi bi-circle text-muted opacity-25" *ngIf="!isGroupMemberSelected(user)"></i>
+                <i class="bi bi-check-circle-fill text-primary" *ngIf="isNewMemberSelected(user)"></i>
+                <i class="bi bi-circle text-muted opacity-25" *ngIf="!isNewMemberSelected(user)"></i>
               </div>
             </div>
-
-            <div class="text-center text-muted fs-xs py-4" *ngIf="groupModalFilteredUsers.length === 0">
-              <i class="bi bi-person-x fs-4 d-block mb-1 opacity-50"></i>
-              No colleagues found matching "{{ newGroupSearchQuery }}"
+            <div class="text-center text-muted fs-xs py-4" *ngIf="addMemberFilteredUsers.length === 0">
+              No colleagues found matching "{{ addMemberSearchQuery }}"
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- General error display -->
-      <div class="alert alert-danger-soft d-flex align-items-start gap-2 mt-4 animate-shake"
-        *ngIf="groupCreationError && (newGroupName.trim() || selectedGroupMembers.length >= 2)">
-        <i class="bi bi-exclamation-circle-fill mt-1"></i>
-        <div>
-          <div class="fw-bold fs-xs">Creation Failed</div>
-          <div class="fs-xs opacity-75">{{ groupCreationError }}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="group-modal-footer">
-      <button class="btn btn-md btn-link text-decoration-none text-muted" (click)="closeGroupModal()"
-        [disabled]="isCreatingGroup">Cancel</button>
-      <button class="btn btn-md btn-primary px-4 d-flex align-items-center gap-2 shadow-sm" (click)="createGroup()"
-        [disabled]="isCreatingGroup || !newGroupName.trim() || selectedGroupMembers.length < 2">
-        <span class="spinner-border spinner-border-sm" *ngIf="isCreatingGroup"></span>
-        <i class="bi bi-plus-lg" *ngIf="!isCreatingGroup"></i>
-        <span>{{ isCreatingGroup ? 'Creating Group...' : 'Create Group' }}</span>
-      </button>
-    </div>
-
-  </div>
-</div>
-
-<!-- Add Member Modal -->
-<div class="group-modal-overlay" *ngIf="isAddMemberModalOpen" (click)="closeAddMemberModal()">
-  <div class="group-modal-card shadow-lg" (click)="$event.stopPropagation()" (keydown.escape)="closeAddMemberModal()">
-    <div class="group-modal-header">
-      <div class="header-title-section">
-        <h5 class="mb-0 fw-bold"><i class="bi bi-person-plus-fill me-2 text-primary"></i>Add Members</h5>
-        <p class="text-muted fs-xs mb-0 mt-1">Add colleagues to {{ selectedUser?.name || selectedUser?.fullName }}</p>
-      </div>
-      <button class="btn-close" (click)="closeAddMemberModal()"></button>
-    </div>
-
-    <div class="group-modal-body">
-      <div class="search-input-wrapper position-relative mb-2">
-        <i class="bi bi-search search-icon me-2"></i>
-        <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="addMemberSearchQuery"
-          placeholder="Search by name or email..." />
-        <i class="bi bi-x-circle-fill search-icon me-2" (click)="addMemberSearchQuery = ''"></i>
-      </div>
-
-      <!-- Selected chips -->
-      <div class="selected-members-chips d-flex flex-wrap gap-2 mb-2" *ngIf="selectedNewMembers.length > 0">
-        <div class="member-chip animate-fade-in" *ngFor="let m of selectedNewMembers">
-          <div class="chip-avatar" [style.background-color]="m.avatarColor || '#3b82f6'">
-            {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
-          </div>
-          <span class="chip-label">{{ m.fullName || m.name }}</span>
-          <button type="button" class="chip-remove" (click)="toggleNewMember(m)" title="Remove">
-            <i class="bi bi-x"></i>
-          </button>
+        <div class="alert alert-danger-soft d-flex align-items-start gap-2 mt-4" *ngIf="addMemberError">
+          <i class="bi bi-exclamation-circle-fill mt-1"></i>
+          <div class="fs-xs">{{ addMemberError }}</div>
         </div>
       </div>
 
-      <div class="group-member-list-wrapper">
-        <div class="group-member-list">
-          <div *ngFor="let user of addMemberFilteredUsers"
-            class="group-member-item d-flex align-items-center gap-2 p-2 rounded"
-            [class.selected]="isNewMemberSelected(user)" (click)="toggleNewMember(user)">
-            <div class="dm-avatar-sm flex-shrink-0" [style.background-color]="user.avatarColor || '#3b82f6'">
-              {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
-            </div>
-            <div class="member-info flex-grow-1 min-w-0">
-              <div class="member-name fs-small text-truncate fw-medium">{{ user.fullName || user.name }}</div>
-              <div class="member-email fs-xs text-muted text-truncate">{{ user.email }}</div>
-            </div>
-            <div class="selection-status">
-              <i class="bi bi-check-circle-fill text-primary" *ngIf="isNewMemberSelected(user)"></i>
-              <i class="bi bi-circle text-muted opacity-25" *ngIf="!isNewMemberSelected(user)"></i>
-            </div>
-          </div>
-          <div class="text-center text-muted fs-xs py-4" *ngIf="addMemberFilteredUsers.length === 0">
-            No colleagues found matching "{{ addMemberSearchQuery }}"
-          </div>
-        </div>
+      <div class="group-modal-footer">
+        <button class="btn btn-link text-muted" (click)="closeAddMemberModal()"
+          [disabled]="isAddingMember">Cancel</button>
+        <button class="btn btn-primary px-4 d-flex align-items-center gap-2" (click)="addMembers()"
+          [disabled]="isAddingMember || selectedNewMembers.length === 0">
+          <span class="spinner-border spinner-border-sm" *ngIf="isAddingMember"></span>
+          <span>{{ isAddingMember ? 'Adding...' : 'Add Members' }}</span>
+        </button>
       </div>
-
-      <div class="alert alert-danger-soft d-flex align-items-start gap-2 mt-4" *ngIf="addMemberError">
-        <i class="bi bi-exclamation-circle-fill mt-1"></i>
-        <div class="fs-xs">{{ addMemberError }}</div>
-      </div>
-    </div>
-
-    <div class="group-modal-footer">
-      <button class="btn btn-link text-muted" (click)="closeAddMemberModal()"
-        [disabled]="isAddingMember">Cancel</button>
-      <button class="btn btn-primary px-4 d-flex align-items-center gap-2" (click)="addMembers()"
-        [disabled]="isAddingMember || selectedNewMembers.length === 0">
-        <span class="spinner-border spinner-border-sm" *ngIf="isAddingMember"></span>
-        <span>{{ isAddingMember ? 'Adding...' : 'Add Members' }}</span>
-      </button>
     </div>
   </div>
-</div>

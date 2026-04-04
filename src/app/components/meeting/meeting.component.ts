@@ -55,6 +55,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   isRemoteScreenSharing: boolean = false;
   screenShareOwnerName: string = 'Your Screen';
   isRecording: boolean = false;
+  isSpeaking: boolean = false;
   showParticipants: boolean = false;
   showChat: boolean = false;
   isLoading: boolean = true;

@@ -65,7 +65,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   isEmojiPickerVisible = false;
   commonEmojis = ['👍', '❤️', '😄', '😮', '😢', '🔥', '👏', '✅'];
   showRightPanel: boolean = true;
-  rightPanelMode: 'info' | 'attachments' = 'info';
+  mainActiveTab: 'chat' | 'attachments' | 'info' = 'chat';
   attachmentsSearchQuery: string = '';
   groupMembersSearchQuery: string = '';
   // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -310,20 +310,20 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }
   }
 
-  toggleRightPanel(mode: 'info' | 'attachments'): void {
-    if (this.showRightPanel && this.rightPanelMode === mode) {
-      this.showRightPanel = false;
-    } else {
-      this.showRightPanel = true;
-      this.rightPanelMode = mode;
-    }
+  toggleRightPanel(): void {
+    this.showRightPanel = !this.showRightPanel;
     this.saveRightPanelState();
+  }
+
+  selectMainTab(tab: 'chat' | 'attachments' | 'info'): void {
+    this.mainActiveTab = tab;
+    // Persist active tab if needed
+    localStorage.setItem('ois_main_active_tab', tab);
   }
 
   private saveRightPanelState(): void {
     localStorage.setItem('ois_right_panel_state', JSON.stringify({
-      show: this.showRightPanel,
-      mode: this.rightPanelMode
+      show: this.showRightPanel
     }));
   }
 
@@ -333,10 +333,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       try {
         const state = JSON.parse(saved);
         this.showRightPanel = state.show;
-        this.rightPanelMode = state.mode || 'info';
       } catch (e) {
         console.error('Failed to parse right panel state', e);
       }
+    }
+
+    const savedTab = localStorage.getItem('ois_main_active_tab');
+    if (savedTab === 'attachments' || savedTab === 'chat') {
+      this.mainActiveTab = savedTab as any;
     }
   }
 
@@ -699,7 +703,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const name = file.fileName || file.FileName || file.name;
     const type = name.split('.').pop()?.toLowerCase() || '';
     const isOffice = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(type);
-    
+
     this.previewService.open({
       fileName: name,
       fileUrl: url,
