@@ -105,44 +105,56 @@ export class CallService {
       });
   }
 
-  private ensureConnected(): void {
+  private async ensureConnected(): Promise<void> {
     if (!this.isConnected()) {
-      throw new Error('Call hub is not connected. Please wait for the connection to establish.');
+      const state = this.hubConnection?.state;
+      if (state === signalR.HubConnectionState.Connecting || state === signalR.HubConnectionState.Reconnecting) {
+        console.log(`Call hub is currently ${state}. Waiting for connection...`);
+        let attempts = 0;
+        while (!this.isConnected() && attempts < 20) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          attempts++;
+        }
+        if (this.isConnected()) return;
+      }
+
+      // If still not connected, try to restart IF we have a userId
+      throw new Error(`Call signaling is unavailable (Status: ${state || 'Disconnected'}). Please check your internet and try again.`);
     }
   }
 
   public async startCall(targetUserId: string, fromUserName: string, callType: CallType): Promise<void> {
-    this.ensureConnected();
+    await this.ensureConnected();
     await this.hubConnection.invoke('StartCall', targetUserId, fromUserName, callType);
   }
 
   public async acceptCall(targetUserId: string): Promise<void> {
-    this.ensureConnected();
+    await this.ensureConnected();
     await this.hubConnection.invoke('AcceptCall', targetUserId);
   }
 
   public async rejectCall(targetUserId: string, reason: string): Promise<void> {
-    this.ensureConnected();
+    await this.ensureConnected();
     await this.hubConnection.invoke('RejectCall', targetUserId, reason);
   }
 
   public async endCall(targetUserId: string): Promise<void> {
-    this.ensureConnected();
+    await this.ensureConnected();
     await this.hubConnection.invoke('EndCall', targetUserId);
   }
 
   public async sendOffer(targetUserId: string, offer: any): Promise<void> {
-    this.ensureConnected();
+    await this.ensureConnected();
     await this.hubConnection.invoke('SendOffer', targetUserId, offer);
   }
 
   public async sendAnswer(targetUserId: string, answer: any): Promise<void> {
-    this.ensureConnected();
+    await this.ensureConnected();
     await this.hubConnection.invoke('SendAnswer', targetUserId, answer);
   }
 
   public async sendIceCandidate(targetUserId: string, candidate: any): Promise<void> {
-    this.ensureConnected();
+    await this.ensureConnected();
     await this.hubConnection.invoke('SendIceCandidate', targetUserId, candidate);
   }
 

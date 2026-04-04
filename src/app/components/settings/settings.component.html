@@ -33,6 +33,10 @@
         <i class="bi bi-palette"></i>
         <span>Appearance</span>
       </div>
+      <div class="nav-item">
+        <i class="bi bi-cpu"></i>
+        <span>Devices</span>
+      </div>
     </aside>
 
     <!-- SETTINGS CONTENT -->
@@ -79,6 +83,63 @@
               <input class="form-check-input" type="checkbox" id="notifToggle" 
                      [checked]="settings.notificationsMentionsOnly" 
                      (change)="toggleSetting('notificationsMentionsOnly')">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DEVICES SECTION -->
+      <section class="settings-section">
+        <h3 class="section-title">Devices & Calling</h3>
+        <div class="setting-card">
+          <div class="setting-info">
+            <div class="setting-label">Microphone</div>
+            <div class="setting-description">Select your preferred audio input device.</div>
+            <select class="form-select mt-2" [value]="settings.preferredAudioInputId" (change)="updateDevice('preferredAudioInputId', $event)">
+              <option value="default">System Default</option>
+              <option *ngFor="let device of audioInputs" [value]="device.deviceId">{{device.label || 'Microphone ' + device.deviceId.substring(0,5)}}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-info">
+            <div class="setting-label">Camera</div>
+            <div class="setting-description">Select your preferred video input device.</div>
+            <select class="form-select mt-2" [value]="settings.preferredVideoInputId" (change)="updateDevice('preferredVideoInputId', $event)">
+              <option value="default">System Default</option>
+              <option *ngFor="let device of videoInputs" [value]="device.deviceId">{{device.label || 'Camera ' + device.deviceId.substring(0,5)}}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="test-panel mt-4 p-3 rounded-4 bg-light shadow-sm">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="bi bi-camera-video me-2"></i>Test Devices</h5>
+            <button class="btn btn-primary btn-sm" (click)="isPreviewing ? stopPreview() : startPreview()">
+              {{ isPreviewing ? (isPreviewing ? 'Stop Preview' : 'Start Preview') : 'Start Preview' }}
+            </button>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6">
+              <div class="video-preview-box rounded-3 overflow-hidden bg-dark position-relative" style="aspect-ratio: 16/9;">
+                <video #previewVideo autoplay playsinline muted class="w-100 h-100" style="object-fit: cover;"></video>
+                <div *ngIf="!isPreviewing" class="position-absolute top-50 start-50 translate-middle text-white-50 text-center">
+                  <i class="bi bi-camera-video-off fs-1 d-block mb-2"></i>
+                  <span>No Preview Active</span>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mic-test p-3 border rounded-3 h-100 d-flex flex-column justify-content-center">
+                <div class="setting-label mb-2">Microphone Level</div>
+                <div class="progress" style="height: 12px;">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                       role="progressbar" [style.width.%]="audioLevel"></div>
+                </div>
+                <small class="text-muted mt-2 d-block">Speak to test your microphone levels during preview.</small>
+              </div>
             </div>
           </div>
         </div>

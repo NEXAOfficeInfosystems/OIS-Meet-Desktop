@@ -458,9 +458,10 @@
         </label>
 
         <div class="search-input-wrapper position-relative mb-3">
-          <i class="bi bi-search search-icon"></i>
+          <i class="bi bi-search search-icon me-2"></i>
           <input type="text" class="form-control form-control-sm ps-4" [(ngModel)]="newGroupSearchQuery"
             placeholder="Search colleagues by name or email..." />
+          <i class="bi bi-x-circle-fill search-icon me-2" (click)="clearGroupSearch()"></i>
         </div>
 
         <!-- Selected chips (Horizontal Scrollable) -->

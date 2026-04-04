@@ -21,6 +21,7 @@ import { StorageService } from '../../core/services/storage.service';
 import { AudioRecorderService, TranscriptionResponse, TranscriptionSegment } from '../../core/services/audio-recorder.service';
 import { MomGeneratorService } from '../../core/services/mom-generator.service';
 import { LivekitService } from '../../core/services/livekit.service';
+import { SettingsService } from '../../core/services/settings.service';
 import {
   LiveTranscriptionService,
   LiveTranscriptionSegment,
@@ -140,6 +141,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     private momGeneratorService: MomGeneratorService,
     private livekitService: LivekitService,
     private liveTranscriptionService: LiveTranscriptionService,
+    private settingsService: SettingsService
   ) {
     this.userFullName = this.sessionService.getFullName() || 'User';
     this.oisMeetUserId = this.sessionService.getOISMeetUserId() || '';
@@ -1024,12 +1026,22 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async initializeMedia() {
     try {
-      // Always obtain an audio track once, then control mute via track.enabled.
+      const settings = this.settingsService.currentSettings;
+      const audioConstraints: any = { 
+        echoCancellation: true, 
+        noiseSuppression: true, 
+        autoGainControl: true 
+      };
+      
+      if (settings.preferredAudioInputId && settings.preferredAudioInputId !== 'default') {
+        audioConstraints.deviceId = { exact: settings.preferredAudioInputId };
+      }
+
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: audioConstraints,
         video: false
       });
-      console.log('Got initial audio stream');
+      console.log('Got initial audio stream with device:', settings.preferredAudioInputId);
 
       const startWithAudio = !this.isMuted; // derived from query params
       const audioTracks = this.mediaStream.getAudioTracks();
@@ -1939,7 +1951,17 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       } else if (!this.isVideoOff) {
         // If turning video on but no video tracks, need to get camera
         try {
-          const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          const settings = this.settingsService.currentSettings;
+          const videoConstraints: any = { width: { ideal: 1280 }, height: { ideal: 720 } };
+          
+          if (settings.preferredVideoInputId && settings.preferredVideoInputId !== 'default') {
+            videoConstraints.deviceId = { exact: settings.preferredVideoInputId };
+          }
+
+          const newStream = await navigator.mediaDevices.getUserMedia({ 
+            video: videoConstraints, 
+            audio: false 
+          });
           const videoTrack = newStream.getVideoTracks()[0];
           this.mediaStream.addTrack(videoTrack);
 

@@ -1564,4 +1564,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         }
       });
   }
+
+  clearGroupSearch() {
+    this.newGroupSearchQuery = '';
+    this.applySearch();
+  }
 }

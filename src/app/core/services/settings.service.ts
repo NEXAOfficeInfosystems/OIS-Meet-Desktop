@@ -6,12 +6,18 @@ export interface UserSettings {
   showMessagePreview: boolean;
   showMediaPreviews: boolean;
   notificationsMentionsOnly: boolean;
+  preferredAudioInputId?: string;
+  preferredAudioOutputId?: string;
+  preferredVideoInputId?: string;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
   showMessagePreview: true,
   showMediaPreviews: true,
-  notificationsMentionsOnly: false
+  notificationsMentionsOnly: false,
+  preferredAudioInputId: 'default',
+  preferredAudioOutputId: 'default',
+  preferredVideoInputId: 'default'
 };
 
 const SETTINGS_KEY = 'ois_user_settings';

@@ -141,6 +141,35 @@
   animation: fadeIn 0.4s ease-out;
 }
 
+.test-panel {
+  background-color: #f8fafc !important;
+  border: 1px solid #e2e8f0;
+}
+
+.video-preview-box {
+  background-color: #0f172a;
+  border: 2px solid #334155;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+
+  video {
+    transform: scaleX(-1); // Mirror effect for self-preview
+  }
+}
+
+.mic-test {
+  background-color: #fff;
+  
+  .progress {
+    background-color: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .progress-bar {
+    transition: width 0.05s ease-out;
+  }
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
