@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+﻿import { Component, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivityType } from '../../../core/models/activity.models';
 
@@ -35,5 +35,15 @@ export class ActivityItemComponent {
       case ActivityType.ChannelCreated: return 'bi-hash';
       default: return 'bi-chat-left-text';
     }
+  }
+
+  getAvatarLetter(): string {
+    const name = (this.activity()?.senderName || '').trim();
+    if (!name) return 'S';
+    return name.charAt(0).toUpperCase();
+  }
+
+  getAvatarClass(): string {
+    return this.activity()?.senderName ? 'avatar' : 'avatar is-system';
   }
 }

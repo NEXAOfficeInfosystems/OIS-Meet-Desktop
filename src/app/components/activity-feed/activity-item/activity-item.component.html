@@ -1,6 +1,6 @@
-<div class="activity-row" [class.is-unread]="!activity().isRead" [class.is-selected]="isSelected()">
-  <div class="avatar">
-    {{ activity().senderName?.charAt(0)?.toUpperCase() || 'S' }}
+﻿<div class="activity-row" [class.is-unread]="!activity().isRead" [class.is-selected]="isSelected()">
+  <div class="avatar" [class.is-system]="!activity().senderName">
+    <span class="avatar-letter">{{ getAvatarLetter() }}</span>
     @if (!activity().isRead) {
       <div class="unread-dot"></div>
     }

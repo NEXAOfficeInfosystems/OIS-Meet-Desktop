@@ -1,9 +1,14 @@
-@if (activity()) {
+﻿@if (activity()) {
   <div class="detail-header">
     <div class="sender-info">
-      <div class="avatar">{{ getAvatarLetter() }}</div>
+      <ng-container *ngIf="getAvatarImage(); else letterAvatar">
+        <img class="avatar avatar-image" [src]="getAvatarImage()!" alt="{{ getDisplayName() }}">
+      </ng-container>
+      <ng-template #letterAvatar>
+        <div class="avatar" [style.background-color]="getAvatarColor()">{{ getAvatarLetter() }}</div>
+      </ng-template>
       <div class="text">
-        <h2 class="name">{{ activity()?.sender?.fullName || 'System' }}</h2>
+        <h2 class="name">{{ getDisplayName() }}</h2>
         <span class="context">{{ activity()?.context || 'Meeting' }}</span>
       </div>
     </div>
