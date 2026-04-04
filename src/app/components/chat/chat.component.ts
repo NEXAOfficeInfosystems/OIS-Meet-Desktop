@@ -106,6 +106,20 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   mentionSelectedIndex: number = 0;
   mentionsMap: { [userId: string]: string } = {};
 
+  // Group Profile Editing
+  isEditingName = false;
+  editingNameValue = '';
+  isUploadingAvatar = false;
+
+  // Image Cropping
+  showCropModal = false;
+  imageToCropUrl: string | null = null;
+  cropZoom = 1;
+  cropTranslateX = 0;
+  cropTranslateY = 0;
+  isDraggingCrop = false;
+  lastDragPos = { x: 0, y: 0 };
+
   // â”€â”€ UI flags â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   isLoading: boolean = false;
   isSendingFile: boolean = false;
@@ -171,7 +185,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private userService: UserService,
     private storageService: StorageService,
     private chatService: ChatService,
-    private fileService: FileService,
+    public fileService: FileService,
     private meetingService: MeetingService,     // ← ADDED for validateMeeting
     private chatSignalrService: ChatSignalrService,
     public presenceService: PresenceService,
@@ -873,6 +887,27 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           }
         }
       });
+
+    this.chatSignalrService.groupInfoUpdated$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(data => {
+        if (data && data.conversationId) {
+          const convId = data.conversationId.toString();
+          const user = this.users.find(u => u.conversationId?.toString() === convId);
+          if (user) {
+            if (data.groupName) {
+              user.name = data.groupName;
+              user.fullName = data.groupName;
+            }
+            if (data.avatarUrl) {
+              user.avatarUrl = data.avatarUrl;
+            }
+            this.users = [...this.users];
+            this.applySearch();
+            this.cdr.detectChanges();
+          }
+        }
+      });
   }
 
   private setupPresenceTracking(): void {
@@ -1109,6 +1144,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
             if (user) {
               user.conversationId = conv.id?.toString();
               user.isGroup = isGroup;
+              if (isGroup) {
+                user.name = conv.groupName || user.name;
+                user.fullName = conv.groupName || user.fullName;
+                user.avatarUrl = conv.groupAvatarUrl || user.avatarUrl;
+              }
               const lastMsg = conv.lastMessage;
               const type = lastMsg?.messageType || lastMsg?.MessageType || '';
               user.lastMessage = (type === 'File') ? '📎 File Shared' :
@@ -1137,7 +1177,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
                 unreadCount: conv.unreadCount || 0,
                 conversationId: conv.id?.toString(),
                 avatarColor: this.commonService.getRandomColor(),
-                avatarUrl: isGroup ? null : other.avatarUrl,
+                avatarUrl: isGroup ? conv.groupAvatarUrl : other.avatarUrl,
                 isGroup: isGroup,
                 isPinned: conv.isPinned || false,
                 participants: participants
@@ -1984,5 +2024,205 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           console.error('Add member failed:', err);
         }
       });
+  }
+
+  // ——————————————————————————————————————————————————————————————————————————————
+  // GROUP INFO EDITING
+  // ——————————————————————————————————————————————————————————————————————————————
+
+  startEditingName(): void {
+    if (!this.selectedUser?.isGroup) return;
+    this.isEditingName = true;
+    this.editingNameValue = this.selectedUser.name;
+    this.cdr.detectChanges();
+  }
+
+  cancelEditingName(): void {
+    this.isEditingName = false;
+    this.editingNameValue = '';
+  }
+
+  saveGroupName(): void {
+    if (!this.selectedUser?.isGroup || !this.editingNameValue.trim()) {
+      this.isEditingName = false;
+      return;
+    }
+
+    const newName = this.editingNameValue.trim();
+    if (newName === this.selectedUser.name) {
+      this.isEditingName = false;
+      return;
+    }
+
+    const conversationId = this.selectedConversation?.id;
+    if (!conversationId) return;
+
+    this.chatService.updateGroupInfo(conversationId, newName).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.selectedUser.name = newName;
+          this.selectedUser.fullName = newName;
+          this.isEditingName = false;
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err) => {
+        console.error('Failed to update group name:', err);
+        alert('Failed to update group name. Please try again.');
+        this.isEditingName = false;
+      }
+    });
+  }
+
+  // --- AVATAR UPLOAD & CROP ---
+
+  onAvatarClick(fileInput: HTMLInputElement): void {
+    if (!this.selectedUser?.isGroup) return;
+    fileInput.click();
+  }
+
+  onAvatarFileSelected(event: any): void {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate type
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      alert('Please select a valid image (JPG, PNG, or WEBP)');
+      return;
+    }
+
+    // Validate size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image too large. Max size is 5MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      this.imageToCropUrl = e.target.result;
+      this.showCropModal = true;
+      this.resetCropState();
+      this.cdr.detectChanges();
+    };
+    reader.readAsDataURL(file);
+    
+    // Reset input so same file can be selected again
+    event.target.value = '';
+  }
+
+  private resetCropState(): void {
+    this.cropZoom = 1;
+    this.cropTranslateX = 0;
+    this.cropTranslateY = 0;
+  }
+
+  @HostListener('window:mousemove', ['$event'])
+  onCropDrag(event: MouseEvent): void {
+    if (!this.isDraggingCrop) return;
+    const dx = event.clientX - this.lastDragPos.x;
+    const dy = event.clientY - this.lastDragPos.y;
+    this.cropTranslateX += dx;
+    this.cropTranslateY += dy;
+    this.lastDragPos = { x: event.clientX, y: event.clientY };
+  }
+
+  @HostListener('window:mouseup')
+  stopCropDrag(): void {
+    this.isDraggingCrop = false;
+  }
+
+  startCropDrag(event: MouseEvent): void {
+    this.isDraggingCrop = true;
+    this.lastDragPos = { x: event.clientX, y: event.clientY };
+    event.preventDefault();
+  }
+
+  handleCropScroll(event: WheelEvent): void {
+    event.preventDefault();
+    const delta = event.deltaY > 0 ? -0.1 : 0.1;
+    this.cropZoom = Math.max(0.5, Math.min(5, this.cropZoom + delta));
+  }
+
+  confirmCrop(): void {
+    // In a real app, we'd use a canvas to crop the image based on zoom/translate.
+    // For this demo, we'll simulate it by uploading the current image after processing it via a canvas.
+    this.isUploadingAvatar = true;
+    this.showCropModal = false;
+
+    // Create a 1:1 canvas
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const img = new Image();
+    img.src = this.imageToCropUrl!;
+    img.onload = () => {
+      if (!ctx) return;
+      
+      // Calculate drawing dimensions
+      const aspect = img.width / img.height;
+      let drawW, drawH;
+      if (aspect > 1) {
+        drawH = size * this.cropZoom;
+        drawW = drawH * aspect;
+      } else {
+        drawW = size * this.cropZoom;
+        drawH = drawW / aspect;
+      }
+
+      const x = (size / 2) + this.cropTranslateX - (drawW / 2);
+      const y = (size / 2) + this.cropTranslateY - (drawH / 2);
+
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, size, size);
+      ctx.drawImage(img, x, y, drawW, drawH);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const croppedFile = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
+          this.uploadGroupAvatar(croppedFile);
+        }
+      }, 'image/jpeg', 0.9);
+    };
+  }
+
+  private uploadGroupAvatar(file: File): void {
+    this.fileService.uploadFile(file).subscribe({
+      next: (event: any) => {
+        if (event.type === 4) { // Sent
+          const res = event.body;
+          if (res.success && res.data) {
+            const avatarUrl = res.data.url;
+            this.saveGroupAvatar(avatarUrl);
+          }
+          this.isUploadingAvatar = false;
+        }
+      },
+      error: (err) => {
+        console.error('Avatar upload failed', err);
+        this.isUploadingAvatar = false;
+        alert('Failed to upload avatar. Please try again.');
+      }
+    });
+  }
+
+  private saveGroupAvatar(avatarUrl: string): void {
+    const conversationId = this.selectedConversation?.id;
+    if (!conversationId) return;
+
+    this.chatService.updateGroupInfo(conversationId, undefined, avatarUrl).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.selectedUser.avatarUrl = avatarUrl;
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err) => {
+        console.error('Failed to update group avatar:', err);
+      }
+    });
   }
 }

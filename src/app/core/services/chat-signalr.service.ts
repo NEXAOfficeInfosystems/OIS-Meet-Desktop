@@ -42,6 +42,7 @@ export class ChatSignalrService {
   private reactionRemovedSubject = new BehaviorSubject<any>(null);
   private activeUsersListSubject = new BehaviorSubject<string[]>([]);
   private memberAddedSubject = new BehaviorSubject<string | null>(null);
+  private groupInfoUpdatedSubject = new BehaviorSubject<any>(null);
   private connectionStateSubject = new BehaviorSubject<signalR.HubConnectionState>(
     signalR.HubConnectionState.Disconnected
   );
@@ -64,6 +65,7 @@ export class ChatSignalrService {
   reactionRemoved$ = this.reactionRemovedSubject.asObservable();
   activeUsersList$ = this.activeUsersListSubject.asObservable();
   memberAdded$ = this.memberAddedSubject.asObservable();
+  groupInfoUpdated$ = this.groupInfoUpdatedSubject.asObservable();
   connectionState$ = this.connectionStateSubject.asObservable();
 
   startConnection(userId: string | null): void {
@@ -137,6 +139,7 @@ export class ChatSignalrService {
     this.hubConnection.off('MessagesRead');
     this.hubConnection.off('NewConversation');
     this.hubConnection.off('MemberAdded');
+    this.hubConnection.off('GroupInfoUpdated');
 
     // Handle new messages
     const messageHandler = (message: any) => {
@@ -197,6 +200,12 @@ export class ChatSignalrService {
     this.hubConnection.on('MemberAdded', (conversationId: string) => {
       console.log('👥 Member added to conversation:', conversationId);
       this.memberAddedSubject.next(conversationId);
+    });
+
+    // Handle group info updated
+    this.hubConnection.on('GroupInfoUpdated', (data: any) => {
+      console.log('🔄 Group info updated:', data);
+      this.groupInfoUpdatedSubject.next(data);
     });
 
     // Handle reactions

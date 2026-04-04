@@ -216,4 +216,15 @@ export class ChatService {
       headers: this.getHeaders()
     });
   }
+
+  updateGroupInfo(conversationId: string, groupName?: string, avatarUrl?: string): Observable<any> {
+    const currentUserId = this.getCurrentUserId();
+    return this.http.put(`${this.apiUrl}/conversations/${conversationId}/group-info`, {
+      groupName,
+      avatarUrl,
+      currentUserId
+    }, {
+      headers: this.getHeaders()
+    });
+  }
 }
