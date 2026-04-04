@@ -105,11 +105,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // â”€â”€ Teams Workspace State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   activeView: 'chat' | 'teams' = 'teams';
   activeTeam: string = '';
-  activeChannel: string = 'General';
+  activeChannel: string = '';
 
   // These will now be populated from the API
   teams: any[] = [];
-  channels: string[] = ['General']; // Default fallback channel for groups
+  channels: string[] = []; // Default fallback channel for groups
 
   sharedFiles: any[] = [];
 
@@ -861,8 +861,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
               this.users.push({
                 id: isGroup ? conv.id?.toString() : other.userId?.toString(),
                 userId: isGroup ? null : other.userId?.toString(),
-                name: isGroup ? (conv.name || 'Marketing Team') : (other.name || other.fullName || 'User'),
-                fullName: isGroup ? (conv.name || 'Marketing Team') : (other.name || other.fullName || 'User'),
+                name: isGroup ? (conv.groupName || '') : (other.name || other.fullName || ''),
+                fullName: isGroup ? (conv.groupName || '') : (other.name || other.fullName || ''),
                 email: other.email || '',
                 isOnline: isGroup ? true : (other.isOnline || false),
                 lastMessage: (conv.lastMessage?.messageType || conv.lastMessage?.MessageType) === 'File' ? '📎 File Shared' :
