@@ -1,11 +1,14 @@
 <div class="calendar-grid" [class]="viewType">
-  <!-- Sidebar with hours -->
-  <div class="time-column">
-    <div class="header-spacer"></div>
-    @for (hour of hours; track hour) {
-      <div class="hour-cell">{{ hour + ':00' }}</div>
-    }
-  </div>
+  <!-- Sidebar with hours: Hide in month view -->
+  @if (viewType !== 'month') {
+    <div class="time-column">
+      <div class="header-spacer"></div>
+      @for (hour of hours; track hour) {
+        <div class="hour-cell">{{ hour + ':00' }}</div>
+      }
+    </div>
+  }
+
 
   <!-- Days columns -->
   <div class="days-container">
@@ -22,9 +25,10 @@
       <div class="month-grid">
          <!-- Month view items -->
          @for (day of days; track day.getTime()) {
-            <div class="month-cell" [class.other-month]="day.getMonth() !== selectedDate.getMonth()">
+            <div class="month-cell" [class.other-month]="day.getMonth() !== selectedDate.getMonth()"
+                 (click)="onSlotClick(day, 0)">
                 <div class="cell-day">{{ day | date: 'd' }}</div>
-                @for (event of getEventsForSlot(day, 0); track event.id) {
+                @for (event of getEventsForSlot(day, 0, true); track event.id) {
                     <div class="event-pill" (click)="onEventClick(event, $event)">{{ event.title }}</div>
                 }
             </div>

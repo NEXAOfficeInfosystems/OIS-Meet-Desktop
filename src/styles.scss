@@ -11,8 +11,9 @@
   --dark-text: #f8fafc;
 
   /* Premium Design Tokens */
-  --primary-color: #5b5fc7; /* Teams Purple */
-  --primary-color-soft: rgba(91, 95, 199, 0.1);
+  --primary-color: #0b5ed7; /* OIS Meet Blue */
+  --primary-color-soft: rgba(11, 94, 215, 0.1);
+
   --success-color: #22c55e;
   --danger-color: #ef4444;
   --warning-color: #f59e0b;
@@ -30,9 +31,10 @@
 }
 
 body.theme-dark {
-  --primary-color: #7f85f5;
-  --primary-color-soft: rgba(127, 133, 245, 0.15);
+  --primary-color: #3d8bfd;
+  --primary-color-soft: rgba(61, 139, 253, 0.15);
   --border-color: #334155;
+
   --border-color-soft: #1e293b;
   --bg-card: #1e293b;
   --bg-main: #0f172a;

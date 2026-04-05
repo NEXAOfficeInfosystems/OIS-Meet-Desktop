@@ -1,15 +1,16 @@
 <div class="calendar-header">
   <div class="left">
-    <button class="btn btn-primary" (click)="onCreateEvent()">
-      <i class="fas fa-plus"></i> New meeting
+    <button class="btn btn-primary compact" (click)="onCreateEvent()">
+      <i class="bi bi-plus-lg"></i> New meeting
     </button>
-    <div class="navigation">
-      <button class="btn btn-icon" (click)="prev()"><i class="fas fa-chevron-left"></i></button>
-      <button class="btn btn-icon" (click)="next()"><i class="fas fa-chevron-right"></i></button>
-      <button class="btn btn-text" (click)="today()">Today</button>
+    <div class="navigation-group">
+      <button class="btn btn-icon-compact" (click)="prev()"><i class="bi bi-chevron-left"></i></button>
+      <button class="btn btn-today" (click)="today()">Today</button>
+      <button class="btn btn-icon-compact" (click)="next()"><i class="bi bi-chevron-right"></i></button>
     </div>
-    <span class="date-label text-lg font-semibold ml-4">{{ dateLabel }}</span>
+    <span class="date-label text-lg font-semibold ml-2">{{ dateLabel }}</span>
   </div>
+
   
   <div class="right">
     <div class="view-toggle group">

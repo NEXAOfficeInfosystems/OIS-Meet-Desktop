@@ -1,67 +1,99 @@
 <div class="modal-overlay" (click)="onClose()">
   <div class="modal-card" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h2 class="title font-bold text-xl">{{ event ? 'Edit Meeting' : 'New Meeting' }}</h2>
-      <button class="btn btn-icon close-btn" (click)="onClose()"><i class="fas fa-times"></i></button>
+      <div class="d-flex align-items-center gap-2">
+        <div class="header-icon bg-primary px-2 py-1 rounded">
+          <i class="bi bi-calendar-check text-white"></i>
+        </div>
+        <h2 class="title">{{ event ? 'Edit Meeting' : 'Schedule Meeting' }}</h2>
+      </div>
+      <button class="btn-close-compact" (click)="onClose()">
+        <i class="bi bi-x"></i>
+      </button>
     </div>
     
-    <div class="modal-body">
+    <div class="modal-body pb-0">
       <form [formGroup]="eventForm" (ngSubmit)="onSave()">
-        <div class="form-group mb-4">
-          <input type="text" formControlName="title" placeholder="Add title" class="form-control title-input">
+        <div class="form-group mb-3">
+          <input type="text" formControlName="title" placeholder="What's this meeting about?" class="title-field">
         </div>
         
-        <div class="form-row flex gap-4 mb-4">
-          <div class="form-group flex-1">
-            <label class="block text-sm font-medium mb-1">Start</label>
-            <input type="datetime-local" formControlName="startTime" class="form-control">
+        <div class="date-range-container mb-3">
+          <div class="date-item">
+            <span class="field-label">Start time</span>
+            <div class="input-with-icon">
+              <i class="bi bi-clock"></i>
+              <input type="datetime-local" formControlName="startTime" class="modern-field">
+            </div>
           </div>
-          <div class="form-group flex-1">
-            <label class="block text-sm font-medium mb-1">End</label>
-            <input type="datetime-local" formControlName="endTime" class="form-control">
+          <div class="date-item">
+            <span class="field-label">End time</span>
+            <div class="input-with-icon">
+              <i class="bi bi-clock"></i>
+              <input type="datetime-local" formControlName="endTime" class="modern-field">
+            </div>
           </div>
         </div>
         
-        <div class="form-group mb-4">
-          <label class="flex items-center gap-2 cursor-pointer">
+        <div class="options-container mb-3 px-1">
+          <label class="checkbox-label me-4">
             <input type="checkbox" formControlName="isAllDay">
-            <span class="text-sm">All day</span>
+            <span class="ms-2">All day</span>
+          </label>
+          
+          <label class="checkbox-label">
+            <input type="checkbox" formControlName="isPrivate">
+            <span class="ms-2">Private</span>
           </label>
         </div>
         
-        <div class="form-group mb-4">
-          <div class="icon-input-group flex items-center gap-3 bg-gray-50 dark:bg-gray-800 p-2 rounded">
-            <i class="fas fa-map-marker-alt text-gray-400"></i>
-            <input type="text" formControlName="location" placeholder="Add location" class="bg-transparent border-none outline-none w-full">
+        <div class="details-section mb-3">
+          <div class="input-row mb-2">
+            <i class="bi bi-geo-alt field-icon text-primary opacity-75"></i>
+            <input type="text" formControlName="location" placeholder="Add location or link" class="underlined-field">
+          </div>
+          
+          <div class="input-row align-items-start">
+            <i class="bi bi-card-text field-icon text-primary opacity-75 mt-2"></i>
+            <textarea formControlName="description" placeholder="Share a brief overview..." class="underlined-field h-20" rows="2"></textarea>
           </div>
         </div>
         
-        <div class="form-group mb-6">
-          <textarea formControlName="description" placeholder="Add description" class="form-control h-32" rows="4"></textarea>
+        <div class="form-group d-flex align-items-center gap-3 bg-light p-2 rounded mb-4">
+          <label class="field-label mb-0 text-dark opacity-50">Recurrence:</label>
+          <div class="select-wrapper border-0">
+            <select formControlName="repeat" class="modern-select bg-transparent py-1">
+              <option value="none">Happens once</option>
+              <option value="daily">Every day</option>
+              <option value="weekly">Every week</option>
+              <option value="monthly">Every month</option>
+            </select>
+            <i class="bi bi-chevron-expand"></i>
+          </div>
         </div>
         
-        <div class="form-group flex items-center gap-2 mb-4">
-          <label class="text-sm">Repeat:</label>
-          <select formControlName="repeat" class="form-control-select">
-            <option value="none">Does not repeat</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        </div>
-        
-        <div class="modal-footer flex justify-between mt-8">
-          <div>
-            @if (event) {
-              <button type="button" class="btn btn-danger" (click)="onDelete()">Delete</button>
-            }
-          </div>
-          <div class="flex gap-2">
-            <button type="button" class="btn btn-secondary" (click)="onClose()">Discard</button>
-            <button type="submit" class="btn btn-primary" [disabled]="eventForm.invalid">Save</button>
-          </div>
+        <div class="modal-footer-custom pb-3">
+           <div class="d-flex justify-content-between align-items-center w-100">
+             <div>
+               @if (event) {
+                 <button type="button" class="btn btn-outline-danger btn-sm border-0" (click)="onDelete()">
+                   <i class="bi bi-trash"></i> Cancel
+                 </button>
+               }
+             </div>
+             <div class="d-flex gap-2">
+               <button type="button" class="btn btn-link text-secondary text-decoration-none py-1" (click)="onClose()">Discard</button>
+               <button type="submit" class="btn btn-primary px-5 shadow-sm" [disabled]="eventForm.invalid">
+                 {{ event ? 'Save' : 'Schedule' }}
+               </button>
+             </div>
+           </div>
         </div>
       </form>
     </div>
+
+
+
+
   </div>
 </div>

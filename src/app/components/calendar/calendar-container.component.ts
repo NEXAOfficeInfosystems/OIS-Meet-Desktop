@@ -19,7 +19,7 @@ export class CalendarContainerComponent implements OnInit {
   private calendarService = inject(CalendarService);
 
   // Use Angular Signals for state management
-  viewType = signal<CalendarViewType>('week');
+  viewType = signal<CalendarViewType>('month');
   selectedDate = signal<Date>(new Date());
   events = signal<CalendarEvent[]>([]);
   loading = signal<boolean>(false);

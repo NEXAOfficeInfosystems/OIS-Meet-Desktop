@@ -55,15 +55,18 @@ export class CalendarGridComponent {
     return d;
   }
 
-  getEventsForSlot(day: Date, hour: number): CalendarEvent[] {
+  getEventsForSlot(day: Date, hour: number, ignoreHour: boolean = false): CalendarEvent[] {
     return this.events.filter(e => {
       const start = new Date(e.startTimeUtc);
-      return start.getFullYear() === day.getFullYear() &&
-             start.getMonth() === day.getMonth() &&
-             start.getDate() === day.getDate() &&
-             start.getHours() === hour;
+      const sameDay = start.getFullYear() === day.getFullYear() &&
+                      start.getMonth() === day.getMonth() &&
+                      start.getDate() === day.getDate();
+      
+      if (ignoreHour) return sameDay;
+      return sameDay && start.getHours() === hour;
     });
   }
+
 
   getEventStyle(event: CalendarEvent) {
     const start = new Date(event.startTimeUtc);
