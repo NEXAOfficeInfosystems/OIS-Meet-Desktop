@@ -1,0 +1,71 @@
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    
+    .navigation {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      overflow: hidden;
+      
+      .btn-icon {
+        padding: 0.5rem 0.75rem;
+        background: transparent;
+        border: none;
+        
+        &:hover { background: var(--bg-hover); }
+      }
+      
+      .btn-text {
+        padding: 0.5rem 0.75rem;
+        border: none;
+        border-left: 1px solid var(--border-color);
+        background: transparent;
+        font-weight: 500;
+        
+        &:hover { background: var(--bg-hover); }
+      }
+    }
+  }
+  
+  .right {
+    .view-toggle {
+      display: flex;
+      border: 1px solid var(--border-color);
+      border-radius: 100px;
+      padding: 0.25rem;
+      background: var(--bg-input);
+      
+      button {
+        padding: 0.5rem 1.25rem;
+        border: none;
+        border-radius: 100px;
+        background: transparent;
+        color: var(--text-secondary);
+        font-weight: 500;
+        transition: all 0.2s ease;
+        
+        &.active {
+          background: var(--primary-color);
+          color: white;
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        &:hover:not(.active) {
+          color: var(--text-primary);
+        }
+      }
+    }
+  }
+}

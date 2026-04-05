@@ -1,0 +1,55 @@
+<div class="calendar-grid" [class]="viewType">
+  <!-- Sidebar with hours -->
+  <div class="time-column">
+    <div class="header-spacer"></div>
+    @for (hour of hours; track hour) {
+      <div class="hour-cell">{{ hour + ':00' }}</div>
+    }
+  </div>
+
+  <!-- Days columns -->
+  <div class="days-container">
+    <div class="days-header">
+      @for (day of (viewType === 'month' ? days.slice(0, 7) : days); track day.getTime()) {
+        <div class="day-header" [class.today]="day.toDateString() === today.toDateString()">
+          <span class="day-name">{{ day | date: 'EEE' }}</span>
+          <span class="day-number">{{ day | date: 'd' }}</span>
+        </div>
+      }
+    </div>
+
+    @if (viewType === 'month') {
+      <div class="month-grid">
+         <!-- Month view items -->
+         @for (day of days; track day.getTime()) {
+            <div class="month-cell" [class.other-month]="day.getMonth() !== selectedDate.getMonth()">
+                <div class="cell-day">{{ day | date: 'd' }}</div>
+                @for (event of getEventsForSlot(day, 0); track event.id) {
+                    <div class="event-pill" (click)="onEventClick(event, $event)">{{ event.title }}</div>
+                }
+            </div>
+         }
+      </div>
+    } @else {
+      <div class="week-grid">
+        @for (day of days; track day.getTime()) {
+          <div class="day-column">
+            @for (hour of hours; track hour) {
+              <div class="grid-cell" (click)="onSlotClick(day, hour)">
+                <div class="cell-line"></div>
+                @for (event of getEventsForSlot(day, hour); track event.id) {
+                  <div class="event-item" 
+                      [ngStyle]="getEventStyle(event)"
+                      (click)="onEventClick(event, $event)">
+                    <div class="event-title">{{ event.title }}</div>
+                    <div class="event-time">{{ event.startTimeUtc | date: 'h:mm a' }}</div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

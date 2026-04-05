@@ -1,0 +1,35 @@
+<div class="calendar-app-container">
+  <app-calendar-header 
+    [viewType]="viewType()"
+    [selectedDate]="selectedDate()"
+    (viewTypeChange)="onViewTypeChange($event)"
+    (dateChange)="onDateChange($event)"
+    (createEventRequested)="onCreateEvent()">
+  </app-calendar-header>
+
+  <div class="calendar-content">
+    @if (loading()) {
+      <div class="loader-overlay">
+        <div class="spinner"></div>
+      </div>
+    }
+    
+    <app-calendar-grid 
+      [viewType]="viewType()"
+      [selectedDate]="selectedDate()"
+      [events]="events()"
+      (eventClick)="onEventClick($event)"
+      (slotClick)="onSlotClick($event)">
+    </app-calendar-grid>
+  </div>
+
+  @if (isDialogVisible()) {
+    <app-event-dialog
+      [event]="selectedEvent()"
+      [initialDate]="initialDate()"
+      (close)="closeDialog()"
+      (save)="onSaveEvent($event)"
+      (delete)="onDeleteEvent($event)">
+    </app-event-dialog>
+  }
+</div>

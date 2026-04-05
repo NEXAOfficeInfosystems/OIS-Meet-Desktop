@@ -9,7 +9,41 @@
 
   --dark-bg: #0f172a;
   --dark-text: #f8fafc;
+
+  /* Premium Design Tokens */
+  --primary-color: #5b5fc7; /* Teams Purple */
+  --primary-color-soft: rgba(91, 95, 199, 0.1);
+  --success-color: #22c55e;
+  --danger-color: #ef4444;
+  --warning-color: #f59e0b;
+  
+  --border-color: #e1e5e8;
+  --border-color-soft: #f0f2f4;
+  --bg-card: #ffffff;
+  --bg-main: #f5f7f9;
+  --bg-hover: #f0f2f4;
+  --bg-hover-soft: rgba(0, 0, 0, 0.02);
+  --bg-input: #ffffff;
+  
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
 }
+
+body.theme-dark {
+  --primary-color: #7f85f5;
+  --primary-color-soft: rgba(127, 133, 245, 0.15);
+  --border-color: #334155;
+  --border-color-soft: #1e293b;
+  --bg-card: #1e293b;
+  --bg-main: #0f172a;
+  --bg-hover: #334155;
+  --bg-hover-soft: rgba(255, 255, 255, 0.05);
+  --bg-input: #0f172a;
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+}
+
 
 html,
 body {
@@ -75,6 +109,44 @@ body.theme-dark {
 }
 
 .form-control:focus-visible {
-  border-color: #007bff !important;
+  border-color: var(--primary-color) !important;
   box-shadow: none !important;
 }
+
+/* Common Buttons */
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+  
+  &.btn-primary {
+    background: var(--primary-color);
+    color: white;
+    &:hover { filter: brightness(1.1); }
+  }
+  
+  &.btn-secondary {
+    background: var(--bg-card);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+    &:hover { background: var(--bg-hover); }
+  }
+  
+  &.btn-danger {
+    background: var(--danger-color);
+    color: white;
+  }
+  
+  &.btn-icon {
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: var(--text-secondary);
+    &:hover { background: var(--bg-hover); color: var(--text-primary); }
+  }
+}

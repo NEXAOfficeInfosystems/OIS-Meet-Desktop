@@ -1,0 +1,27 @@
+<div class="calendar-header">
+  <div class="left">
+    <button class="btn btn-primary" (click)="onCreateEvent()">
+      <i class="fas fa-plus"></i> New meeting
+    </button>
+    <div class="navigation">
+      <button class="btn btn-icon" (click)="prev()"><i class="fas fa-chevron-left"></i></button>
+      <button class="btn btn-icon" (click)="next()"><i class="fas fa-chevron-right"></i></button>
+      <button class="btn btn-text" (click)="today()">Today</button>
+    </div>
+    <span class="date-label text-lg font-semibold ml-4">{{ dateLabel }}</span>
+  </div>
+  
+  <div class="right">
+    <div class="view-toggle group">
+      <button 
+        [class.active]="viewType === 'day'" 
+        (click)="setView('day')">Day</button>
+      <button 
+        [class.active]="viewType === 'week'" 
+        (click)="setView('week')">Work week</button>
+      <button 
+        [class.active]="viewType === 'month'" 
+        (click)="setView('month')">Month</button>
+    </div>
+  </div>
+</div>

@@ -14,13 +14,14 @@ import { CallsCenterComponent } from './components/calls-center/calls-center.com
 import { TeamsPanelComponent } from './components/teams-panel/teams-panel.component';
 import { FilesPanelComponent } from './components/files-panel/files-panel.component';
 import { SettingsComponent } from './components/settings/settings.component';
+import { CalendarContainerComponent } from './components/calendar/calendar-container.component';
 
 
 export const routes: Routes = [
 
   { path: '', pathMatch: 'full', redirectTo: 'login' },
   { path: 'login', component: LoginComponent },
-  { path: 'meeting/:meetingId', component: MeetingComponent , canActivate:[authGuard]},
+  { path: 'meeting/:meetingId', component: MeetingComponent, canActivate: [authGuard] },
   {
     path: '',
     component: AppLayoutComponent,
@@ -34,6 +35,7 @@ export const routes: Routes = [
       { path: 'notifications', component: NotificationsPanelComponent },
       { path: 'calls', component: CallsCenterComponent },
       { path: 'teams', component: TeamsPanelComponent },
+      { path: 'calendar', component: CalendarContainerComponent },
       { path: 'files', component: FilesPanelComponent },
       { path: 'coming-soon', component: ComingSoonComponent },
       { path: 'settings', component: SettingsComponent },

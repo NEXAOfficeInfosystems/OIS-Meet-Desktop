@@ -1,0 +1,67 @@
+<div class="modal-overlay" (click)="onClose()">
+  <div class="modal-card" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2 class="title font-bold text-xl">{{ event ? 'Edit Meeting' : 'New Meeting' }}</h2>
+      <button class="btn btn-icon close-btn" (click)="onClose()"><i class="fas fa-times"></i></button>
+    </div>
+    
+    <div class="modal-body">
+      <form [formGroup]="eventForm" (ngSubmit)="onSave()">
+        <div class="form-group mb-4">
+          <input type="text" formControlName="title" placeholder="Add title" class="form-control title-input">
+        </div>
+        
+        <div class="form-row flex gap-4 mb-4">
+          <div class="form-group flex-1">
+            <label class="block text-sm font-medium mb-1">Start</label>
+            <input type="datetime-local" formControlName="startTime" class="form-control">
+          </div>
+          <div class="form-group flex-1">
+            <label class="block text-sm font-medium mb-1">End</label>
+            <input type="datetime-local" formControlName="endTime" class="form-control">
+          </div>
+        </div>
+        
+        <div class="form-group mb-4">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" formControlName="isAllDay">
+            <span class="text-sm">All day</span>
+          </label>
+        </div>
+        
+        <div class="form-group mb-4">
+          <div class="icon-input-group flex items-center gap-3 bg-gray-50 dark:bg-gray-800 p-2 rounded">
+            <i class="fas fa-map-marker-alt text-gray-400"></i>
+            <input type="text" formControlName="location" placeholder="Add location" class="bg-transparent border-none outline-none w-full">
+          </div>
+        </div>
+        
+        <div class="form-group mb-6">
+          <textarea formControlName="description" placeholder="Add description" class="form-control h-32" rows="4"></textarea>
+        </div>
+        
+        <div class="form-group flex items-center gap-2 mb-4">
+          <label class="text-sm">Repeat:</label>
+          <select formControlName="repeat" class="form-control-select">
+            <option value="none">Does not repeat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        
+        <div class="modal-footer flex justify-between mt-8">
+          <div>
+            @if (event) {
+              <button type="button" class="btn btn-danger" (click)="onDelete()">Delete</button>
+            }
+          </div>
+          <div class="flex gap-2">
+            <button type="button" class="btn btn-secondary" (click)="onClose()">Discard</button>
+            <button type="submit" class="btn btn-primary" [disabled]="eventForm.invalid">Save</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

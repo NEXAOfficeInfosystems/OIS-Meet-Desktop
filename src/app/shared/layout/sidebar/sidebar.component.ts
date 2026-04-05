@@ -22,7 +22,7 @@ export class SidebarComponent {
       activity: '/activity',
       chat: '/chat',
       teams: '/teams',
-      calendar: '/coming-soon',
+      calendar: '/calendar',
       calls: '/calls',
       files: '/files',
       notifications: '/notifications',
