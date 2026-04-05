@@ -1,19 +1,19 @@
-<header class="title-bar" [class.is-electron]="isElectron">
-  <!-- Left Side: Brand & Drag Handle -->
+<header class="title-bar" *ngIf="isElectron || !isLoginPage" [class.is-electron]="isElectron"
+  [class.login-mode]="isLoginPage">
+  <!-- Brand & Drag Section: Only show if NOT login page OR (is Electron and we want to allow dragging but user said hide drag icon) -->
   <div class="brand-section">
-    <div class="drag-handle" *ngIf="isElectron"></div>
-    <!-- Global Sidebar Toggle -->
-    <button class="icon-btn sidebar-toggle-btn" (click)="toggleSidebar()" title="Toggle Sidebar">
+    <div class="drag-handle" *ngIf="isElectron && !isLoginPage"></div>
+    <button class="icon-btn sidebar-toggle-btn" (click)="toggleSidebar()" title="Toggle Sidebar" *ngIf="!isLoginPage">
       <i class="bi bi-list"></i>
     </button>
-    <a class="app-brand" routerLink="/dashboard" title="Go to Home">
+    <a class="app-brand" [routerLink]="isLoginPage ? '/login' : '/dashboard'" title="Go to Home">
       <img src="assets/login/logo.png" alt="OIS MEET" class="app-logo" />
       <span class="app-title">OIS MEET</span>
     </a>
   </div>
 
-  <!-- Center: Search Bar (Fluent UI Style) -->
-  <div class="search-container" *ngIf="isAuthenticated$ | async">
+  <!-- Center Search: Only if authenticated and not login page -->
+  <div class="search-container" *ngIf="!isLoginPage && (isAuthenticated$ | async)">
     <div class="search-box">
       <i class="bi bi-search"></i>
       <input type="text" placeholder="Search for chats, people, or files" class="search-input" />
@@ -21,8 +21,8 @@
     </div>
   </div>
 
-  <!-- Right Side Actions: Theme, Profile, Window Controls -->
-  <div class="main-actions" *ngIf="isAuthenticated$ | async">
+  <!-- Right Actions: Only if authenticated and not login page -->
+  <div class="main-actions" *ngIf="!isLoginPage && (isAuthenticated$ | async)">
     <div class="meet-controls d-none d-lg-flex">
       <button type="button" class="btn-meet btn-meet-primary" (click)="openMeetNowDialog('meet-now')">
         <i class="bi bi-camera-video"></i>
@@ -36,13 +36,11 @@
 
     <div class="right-actions">
       <div class="action-group">
-        <button type="button" class="icon-btn theme-toggle" (click)="toggleTheme()"
-          [attr.title]="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
+        <button type="button" class="icon-btn theme-toggle" (click)="toggleTheme()" title="Toggle Theme">
           <i class="bi"
             [ngClass]="theme === 'dark' ? 'bi-sun-fill text-warning' : 'bi-moon-stars-fill text-primary'"></i>
         </button>
 
-        <!-- User Dropdown Menu -->
         <div class="user-dropdown">
           <button type="button" class="avatar-trigger" (click)="toggleUserMenu($event)" [class.active]="isUserMenuOpen">
             <div class="avatar-circle">
@@ -51,47 +49,15 @@
             <i class="bi bi-chevron-down caret-icon"></i>
           </button>
 
-          <!-- Dropdown Menu -->
           <div class="dropdown-window shadow" *ngIf="isUserMenuOpen" (click)="$event.stopPropagation()">
-            <!-- Current User Info (Moved from Title Bar) -->
+            <!-- Dropdown content... -->
             <div class="user-profile-header">
-              <div class="profile-avatar-large">
-                <i class="bi bi-person-fill"></i>
-              </div>
+              <div class="profile-avatar-large"><i class="bi bi-person-fill"></i></div>
               <div class="profile-details">
-                <div class="profile-name">{{ userFullName || 'John Doe' }}</div>
-                <div class="profile-email">john.doe&#64;example.com</div>
+                <div class="profile-name">{{ userFullName || 'User' }}</div>
               </div>
             </div>
-
             <div class="dropdown-divider"></div>
-
-            <div class="dropdown-header">
-              <span class="menu-title">Account Settings</span>
-            </div>
-
-            <div class="company-section">
-              <div class="company-trigger" (click)="toggleCompanyMenu($event)">
-                <span class="trigger-label"><i class="bi bi-building me-2"></i>Switch Company</span>
-                <i class="bi" [ngClass]="isCompanyMenuOpen ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
-              </div>
-
-              <div class="company-list" *ngIf="isCompanyMenuOpen">
-                <div class="company-item" *ngFor="let item of companyList" (click)="selectCompany(item)"
-                  [class.active]="item.companyId === selectedCompanyId">
-                  <span class="name">{{ item?.name | titlecase }}</span>
-                  <i *ngIf="item.companyId === selectedCompanyId" class="bi bi-check2"></i>
-                </div>
-              </div>
-            </div>
-
-            <div class="dropdown-divider"></div>
-
-            <button class="menu-item-btn" (click)="setTheme(theme === 'dark' ? 'light' : 'dark')">
-              <i class="bi" [ngClass]="theme === 'dark' ? 'bi-sun' : 'bi-moon'"></i>
-              <span>{{ theme === 'dark' ? 'Light Mode' : 'Dark Mode' }}</span>
-            </button>
-
             <button class="logout-btn" (click)="logout()">
               <i class="bi bi-box-arrow-right me-2"></i>Logout
             </button>
@@ -101,8 +67,8 @@
     </div>
   </div>
 
-  <!-- Far Right: Electron Window Controls -->
-  <div class="window-controls" *ngIf="isElectron">
+  <!-- Far Right: Electron Window Controls (Always show in Electron if we keep the header) -->
+  <div class="window-controls ms-auto" *ngIf="isElectron">
     <button class="control-btn minimize" (click)="onMinimize()" title="Minimize">
       <svg width="10" height="10" viewBox="0 0 10 1" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect width="10" height="1" fill="currentColor" />

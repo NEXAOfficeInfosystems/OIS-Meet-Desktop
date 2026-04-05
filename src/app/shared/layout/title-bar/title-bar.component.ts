@@ -1,6 +1,6 @@
 import { Component, ElementRef, HostListener, OnInit, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, NavigationEnd } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { SessionService } from '../../../core/services/session.service';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
@@ -9,7 +9,7 @@ import { CommonService } from '../../../core/services/common.service';
 import { SsoApiService } from '../../../core/services/sso-api.service';
 import { StorageService } from '../../../core/services/storage.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog.component';
-import { switchMap } from 'rxjs';
+import { switchMap, filter } from 'rxjs';
 import { UserService } from '../../../core/services/user.service';
 
 type ThemeMode = 'light' | 'dark';
@@ -24,6 +24,7 @@ type ThemeMode = 'light' | 'dark';
 export class TitleBarComponent implements OnInit {
   isMaximized = false;
   isElectron = !!(window as any).windowAPI;
+  isLoginPage = false;
 
   readonly isAuthenticated$ = this.auth.isAuthenticated$;
   readonly appTitle = computed(() => 'OIS Meet');
@@ -48,9 +49,16 @@ export class TitleBarComponent implements OnInit {
   ) {
     this.userFullName = this.sessionService.getFullName();
     this.applyThemeToDocument();
+    this.checkRoute(this.router.url);
   }
 
   ngOnInit(): void {
+    this.router.events.pipe(
+      filter(event => event instanceof NavigationEnd)
+    ).subscribe((event: any) => {
+      this.checkRoute(event.urlAfterRedirects);
+    });
+
     if (this.isElectron) {
       this.updateMaximizedState();
       window.addEventListener('resize', () => {
@@ -71,6 +79,10 @@ export class TitleBarComponent implements OnInit {
         this.companyList = companies;
       }
     });
+  }
+
+  private checkRoute(url: string) {
+    this.isLoginPage = url.includes('/login');
   }
 
   async updateMaximizedState() {

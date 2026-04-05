@@ -51,6 +51,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   ======================== */
   captcha: any = null;
 
+  isElectron = !!(window as any).windowAPI;
+
   constructor(
     private ssoApiService: SsoApiService,
     private authService: AuthService,
@@ -173,9 +175,9 @@ export class LoginComponent implements OnInit, OnDestroy {
     });
   }
 
- /* =======================
-      LOGIN
-  ======================== */
+  /* =======================
+       LOGIN
+   ======================== */
   login(): void {
     this.showLoading = true;
     this.loadingMessage = 'Signing in...';
@@ -192,184 +194,184 @@ export class LoginComponent implements OnInit, OnDestroy {
     }));
 
     this.ssoApiService.authenticateUser(encryptedData).pipe(takeUntil(this.destroy$)).subscribe({
-        next: (res) => {
-          const result = res?.response?.table?.[0];
-          if (result?.successflag === 1) {
-            this.formError = null;
-            this.authService.setSession(result.token, res?.encryptedJson);
-            this.loadingMessage = 'Loading your workspace...';
-            this.loadPostLoginData(result.token, res?.encryptedJson);
-          } else {
-            this.handleLoginError(result?.responsemessage || 'Invalid credentials. Please try again.');
-            this.resetCaptcha();
-          }
-        },
-        error: () => {
-          this.handleLoginError('Login failed. Please try again.');
+      next: (res) => {
+        const result = res?.response?.table?.[0];
+        if (result?.successflag === 1) {
+          this.formError = null;
+          this.authService.setSession(result.token, res?.encryptedJson);
+          this.loadingMessage = 'Loading your workspace...';
+          this.loadPostLoginData(result.token, res?.encryptedJson);
+        } else {
+          this.handleLoginError(result?.responsemessage || 'Invalid credentials. Please try again.');
           this.resetCaptcha();
         }
-      });
+      },
+      error: () => {
+        this.handleLoginError('Login failed. Please try again.');
+        this.resetCaptcha();
+      }
+    });
   }
 
   /* =======================
       POST LOGIN DATA
   ======================== */
-private loadPostLoginData(token: string, userinfo: string): void {
-  this.ssoApiService.getUserDetails(token, userinfo).pipe(
-    takeUntil(this.destroy$),
-    tap((user: any) => {
-      this.storageService.setObject(
-        'userDetails',
-        this.storageService.pickUserDetailsForStorage(user)
-      );
-    }),
-    switchMap((user: any) => {
-      const userId = user?.Id || user?.UserId || user?.userId || user?.id;
-      if (!userId) {
-        console.error('[Login] User mapping failed. Raw user data:', user);
-        throw new Error('UserId not found in GetUser response.');
-      }
-      return this.ssoApiService.getApplicationList(token, userinfo, userId)
-        .pipe(
-          switchMap((apps: any[]) => {
-            const meetApp = apps.find(app => {
-              const code = (app.Code || app.code || '').toUpperCase();
-              return code === 'MEET' || code === 'OISMEET';
-            });
-
-            const meetAppId = meetApp?.ApplicationId || meetApp?.applicationId;
-
-            if (!meetAppId) {
-              console.error('[Login] Meet app mapping failed. Apps list:', apps);
-              throw new Error('Meet app not found in application list.');
-            }
-
-            this.storageService.setItem('meetAppId', meetAppId.toString());
-            this.storageService.setItem('applicationName', meetApp.ApplicationName || meetApp.applicationName || '');
-
-            return forkJoin({
-              meetUrl: this.ssoApiService.getMeetUrl(token, userinfo, meetAppId),
-              companyUrl: this.ssoApiService.getCompanyURL(token, userinfo, userId, meetAppId),
-            });
-          })
+  private loadPostLoginData(token: string, userinfo: string): void {
+    this.ssoApiService.getUserDetails(token, userinfo).pipe(
+      takeUntil(this.destroy$),
+      tap((user: any) => {
+        this.storageService.setObject(
+          'userDetails',
+          this.storageService.pickUserDetailsForStorage(user)
         );
-    }),
-    // ADD THIS: Sync users BEFORE navigation
-    switchMap(({ meetUrl, companyUrl }) => {
-      const appUrl: string | null = (meetUrl?.appURL ?? meetUrl?.AppURL ?? null);
-      const companies = (companyUrl.data ?? []).map((x: any) => x.company);
-      this.commonService.setCompanies(companies);
-
-      if (appUrl) {
-        this.storageService.setItem('applicationUrl', appUrl);
-        const appToken = this.storageService.extractTokenFromAppUrl(appUrl);
-        if (appToken) {
-          this.storageService.setItem('applicationToken', appToken);
+      }),
+      switchMap((user: any) => {
+        const userId = user?.Id || user?.UserId || user?.userId || user?.id;
+        if (!userId) {
+          console.error('[Login] User mapping failed. Raw user data:', user);
+          throw new Error('UserId not found in GetUser response.');
         }
-      }
+        return this.ssoApiService.getApplicationList(token, userinfo, userId)
+          .pipe(
+            switchMap((apps: any[]) => {
+              const meetApp = apps.find(app => {
+                const code = (app.Code || app.code || '').toUpperCase();
+                return code === 'MEET' || code === 'OISMEET';
+              });
 
-      const defaultCompany = this.commonService.pickDefaultCompanyForStorage(companyUrl);
-      if (defaultCompany) {
-        this.storageService.setObject('defaultCompany', defaultCompany);
-      }
+              const meetAppId = meetApp?.ApplicationId || meetApp?.applicationId;
 
-      // Sync users NOW before navigating
-      this.loadingMessage = 'Syncing users...';
-      // return this.syncUsersBeforeNavigation(token, userinfo).pipe(
-      //   map(() => ({ meetUrl, companyUrl }))
-      // );
-      return this.syncUsersBeforeNavigation(token, userinfo).pipe(
-        switchMap(() => {
-          const clientId = this.sessionService.getClientId() ?? '';
-          const companyId = this.sessionService.getCompanyId() ?? 0;
-          const appId = this.sessionService.getMeetAppId() ?? '';
+              if (!meetAppId) {
+                console.error('[Login] Meet app mapping failed. Apps list:', apps);
+                throw new Error('Meet app not found in application list.');
+              }
 
-          return this.userService.getOisMeetUsers(clientId, companyId, appId);
-        }),
-        tap((res: any) => {
-          if (res?.success && res?.data?.length) {
+              this.storageService.setItem('meetAppId', meetAppId.toString());
+              this.storageService.setItem('applicationName', meetApp.ApplicationName || meetApp.applicationName || '');
 
-            const loggedInSSOUserId = this.sessionService.getUserId() || '';
+              return forkJoin({
+                meetUrl: this.ssoApiService.getMeetUrl(token, userinfo, meetAppId),
+                companyUrl: this.ssoApiService.getCompanyURL(token, userinfo, userId, meetAppId),
+              });
+            })
+          );
+      }),
+      // ADD THIS: Sync users BEFORE navigation
+      switchMap(({ meetUrl, companyUrl }) => {
+        const appUrl: string | null = (meetUrl?.appURL ?? meetUrl?.AppURL ?? null);
+        const companies = (companyUrl.data ?? []).map((x: any) => x.company);
+        this.commonService.setCompanies(companies);
 
-            const currentUser = res.data.find(
-              (u: any) => u.ssoUserId === loggedInSSOUserId
-            );
+        if (appUrl) {
+          this.storageService.setItem('applicationUrl', appUrl);
+          const appToken = this.storageService.extractTokenFromAppUrl(appUrl);
+          if (appToken) {
+            this.storageService.setItem('applicationToken', appToken);
+          }
+        }
 
-            if (currentUser) {
-              this.storageService.setItem('oisMeetUserId', currentUser.id);
-              console.log('OIS Meet UserId stored:', currentUser.id);
-            } else {
-              console.warn('Logged-in user not found in OIS Users table');
+        const defaultCompany = this.commonService.pickDefaultCompanyForStorage(companyUrl);
+        if (defaultCompany) {
+          this.storageService.setObject('defaultCompany', defaultCompany);
+        }
+
+        // Sync users NOW before navigating
+        this.loadingMessage = 'Syncing users...';
+        // return this.syncUsersBeforeNavigation(token, userinfo).pipe(
+        //   map(() => ({ meetUrl, companyUrl }))
+        // );
+        return this.syncUsersBeforeNavigation(token, userinfo).pipe(
+          switchMap(() => {
+            const clientId = this.sessionService.getClientId() ?? '';
+            const companyId = this.sessionService.getCompanyId() ?? 0;
+            const appId = this.sessionService.getMeetAppId() ?? '';
+
+            return this.userService.getOisMeetUsers(clientId, companyId, appId);
+          }),
+          tap((res: any) => {
+            if (res?.success && res?.data?.length) {
+
+              const loggedInSSOUserId = this.sessionService.getUserId() || '';
+
+              const currentUser = res.data.find(
+                (u: any) => u.ssoUserId === loggedInSSOUserId
+              );
+
+              if (currentUser) {
+                this.storageService.setItem('oisMeetUserId', currentUser.id);
+                console.log('OIS Meet UserId stored:', currentUser.id);
+              } else {
+                console.warn('Logged-in user not found in OIS Users table');
+              }
             }
+          }),
+          map(() => ({ meetUrl, companyUrl }))
+        );
+      })
+    )
+      .subscribe({
+        next: () => {
+          this.showLoading = false;
+          // If running inside Electron, forward auth details to main process
+          // so new meeting windows can restore authentication state.
+          try {
+            const electronApi = (window as any).oisMeet;
+            if (electronApi?.isElectron && typeof electronApi.setAuthData === 'function') {
+              const authData = {
+                token,
+                userinfo,
+                user: this.storageService.getObject('userDetails'),
+                meetAppId: this.storageService.getItem('meetAppId'),
+                oisMeetUserId: this.storageService.getItem('oisMeetUserId')
+              };
+              void electronApi.setAuthData(authData);
+            }
+          } catch (err) {
+            console.warn('Failed to set auth data in main process:', err);
           }
-        }),
-        map(() => ({ meetUrl, companyUrl }))
-      );
-    })
-  )
-  .subscribe({
-    next: () => {
-      this.showLoading = false;
-        // If running inside Electron, forward auth details to main process
-        // so new meeting windows can restore authentication state.
-        try {
-          const electronApi = (window as any).oisMeet;
-          if (electronApi?.isElectron && typeof electronApi.setAuthData === 'function') {
-            const authData = {
-              token,
-              userinfo,
-              user: this.storageService.getObject('userDetails'),
-              meetAppId: this.storageService.getItem('meetAppId'),
-              oisMeetUserId: this.storageService.getItem('oisMeetUserId')
-            };
-            void electronApi.setAuthData(authData);
-          }
-        } catch (err) {
-          console.warn('Failed to set auth data in main process:', err);
-        }
 
-        this.router.navigateByUrl('/chat');
-    },
-    error: (err) => {
-      console.error('Post-login data load failed:', err);
-      this.handleLoginError('Unable to load user details. Please try again.');
-    }
-  });
-}
+          this.router.navigateByUrl('/chat');
+        },
+        error: (err) => {
+          console.error('Post-login data load failed:', err);
+          this.handleLoginError('Unable to load user details. Please try again.');
+        }
+      });
+  }
 
   /* =======================
       BACKGROUND SSO SYNC
   ======================== */
-private syncUsersBeforeNavigation(token: string, userinfo: string): Observable<any> {
-  // if (sessionStorage.getItem('ssoSynced')) {
-  //   return of(null);
-  // }
+  private syncUsersBeforeNavigation(token: string, userinfo: string): Observable<any> {
+    // if (sessionStorage.getItem('ssoSynced')) {
+    //   return of(null);
+    // }
 
-  const client = this.sessionService.getClientId() ?? '';
-  const companyId = this.sessionService.getCompanyId() ?? 0;
-  const appId = this.sessionService.getMeetAppId() ?? '';
+    const client = this.sessionService.getClientId() ?? '';
+    const companyId = this.sessionService.getCompanyId() ?? 0;
+    const appId = this.sessionService.getMeetAppId() ?? '';
 
-  return this.ssoApiService.getSSOUserList(token, userinfo, client, companyId.toString(), appId)
-    .pipe(
-      switchMap((ssoUsers: any[]) => {
-        if (ssoUsers.length === 0) {
-          console.warn('No users to sync');
+    return this.ssoApiService.getSSOUserList(token, userinfo, client, companyId.toString(), appId)
+      .pipe(
+        switchMap((ssoUsers: any[]) => {
+          if (ssoUsers.length === 0) {
+            console.warn('No users to sync');
+            return of(null);
+          }
+
+          // Pass client and company to sync method
+          return this.userService.syncSsoUsers(ssoUsers, client, companyId, appId);
+        }),
+        tap((response) => {
+          if (response) {
+          }
+          // sessionStorage.setItem('ssoSynced', 'true');
+        }),
+        catchError(error => {
           return of(null);
-        }
-
-        // Pass client and company to sync method
-        return this.userService.syncSsoUsers(ssoUsers, client, companyId,appId);
-      }),
-      tap((response) => {
-        if (response) {
-        }
-        // sessionStorage.setItem('ssoSynced', 'true');
-      }),
-      catchError(error => {
-        return of(null);
-      })
-    );
-}
+        })
+      );
+  }
 
 
 
