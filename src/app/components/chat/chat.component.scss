@@ -34,27 +34,134 @@
    SECONDARY SIDEBAR (TEAMS & CHANNELS)
 ===================================================== */
 .secondary-sidebar {
-  background-color: #f8fafc;
-  border-right: 1px solid #e2e8f0;
+  background-color: #ffffff; // Adjusted to white
+  border-right: 1px solid var(--fluent-border);
   display: flex;
   flex-direction: column;
   padding: 0;
-  overflow: hidden; // prevent the sidebar itself from bursting the grid
+  overflow: hidden;
+}
 
-  .sidebar-top {
-    padding: 0 1.25rem 1rem;
+.secondary-sidebar-header {
+  padding: 16px 12px 10px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--fluent-border);
+
+  .header-top {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-shrink: 0;
+    margin-bottom: 16px;
+    padding: 0 4px;
 
-    .sidebar-title {
+    .header-title {
+      font-size: 1.25rem;
       font-weight: 700;
-      color: #1e293b;
+      color: #334155;
       margin: 0;
-      font-size: 0.95rem;
+    }
+
+    .search-input-box {
+      animation: fadeIn 0.2s ease-out;
+
+      .form-control {
+        height: 32px;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+
+        &:focus {
+          background: #fff !important;
+          box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+          border: 1px solid #1a73e8 !important;
+        }
+      }
     }
   }
+
+  .header-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .header-filters {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+}
+
+.filter-chip {
+  padding: 5px 14px;
+  border-radius: 12px; // Slightly less rounded than 100px for a more modern card feel
+  background: #fff;
+  border: 1px solid var(--fluent-border);
+  font-size: 0.85rem;
+  color: #5f6368;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: #f8f9fa;
+    color: #202124;
+    border-color: #dadce0;
+  }
+
+  &.active {
+    background: #e8f0fe;
+    color: #1a73e8;
+    border-color: #1a73e8;
+    font-weight: 500;
+  }
+}
+
+.icon-btn-v3 {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #5f6368;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #202124;
+  }
+
+  i {
+    font-size: 1.15rem;
+  }
+
+  &.compose-btn {
+    width: auto;
+    padding: 0 8px;
+    gap: 4px;
+  }
+}
+
+.member-badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 1px 8px;
+  background: #f1f3f4;
+  border: 1px solid #e8eaed;
+  border-radius: 4px;
+  color: #5f6368;
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
 }
 
 .team-section {
@@ -136,7 +243,7 @@
       background: #e0e7ff;
       color: #0047ba;
       font-weight: 600;
-      border-left: 3px solid #0047ba;
+      // border-left: 3px solid #0047ba;
     }
   }
 }
@@ -176,9 +283,9 @@
   }
 
   &.active {
-    background: #e0e7ff;
+    background: #e8f0fe;
     color: #0047ba;
-    border-left-color: #0047ba;
+    // border-left-color: #0047ba;
   }
 
   .dm-actions {
@@ -242,9 +349,10 @@
   padding: 0;
 
   .badge {
+    --badge-size: 20px;
     font-size: 0.65rem !important;
     padding: 0.25rem 0.5rem !important;
-    background-color: #0047ba !important;
+    background-color: #1a73e8 !important;
     color: white !important;
   }
 }
@@ -845,8 +953,9 @@
 
     .mention-item {
       transition: background 0.2s;
-      
-      &:hover, &.active {
+
+      &:hover,
+      &.active {
         background: #f1f5f9;
         color: #0047ba;
       }
@@ -2379,6 +2488,7 @@
     border-radius: inherit;
   }
 }
+
 /* =====================================================
    ACTIVITY SIDEBAR
 ===================================================== */
@@ -2409,11 +2519,65 @@
     background-color: rgba(0, 71, 186, 0.2);
     box-shadow: 0 0 15px rgba(0, 71, 186, 0.3);
   }
+
   70% {
     background-color: rgba(0, 71, 186, 0.1);
   }
+
   100% {
     background-color: transparent;
     box-shadow: none;
+  }
+}
+
+.header-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .v-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--fluent-border);
+    margin: 0 4px;
+  }
+}
+
+.action-btn-v4 {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #5f6368;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #202124;
+  }
+
+  &.active {
+    color: var(--fluent-primary);
+  }
+
+  i {
+    font-size: 1.25rem;
+  }
+}
+
+.call-btn-v4 {
+  color: #107c10; // Teams green
+
+  i {
+    font-size: 1.25rem;
+  }
+
+  &:hover {
+    color: #0b5a0b;
   }
 }

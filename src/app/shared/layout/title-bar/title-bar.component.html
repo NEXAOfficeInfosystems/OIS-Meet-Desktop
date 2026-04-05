@@ -2,32 +2,39 @@
   <!-- Left Side: Brand & Drag Handle -->
   <div class="brand-section">
     <div class="drag-handle" *ngIf="isElectron"></div>
-    <a class="app-brand" routerLink="/chat" title="Go to Home" (click)="navigateToHome()">
-      <img src="assets/login/logo.png" alt="OIS Meet App Icon" class="app-logo" />
-      <span class="app-title">OIS Meet</span>
+    <!-- Global Sidebar Toggle -->
+    <button class="icon-btn sidebar-toggle-btn" (click)="toggleSidebar()" title="Toggle Sidebar">
+      <i class="bi bi-list"></i>
+    </button>
+    <a class="app-brand" routerLink="/dashboard" title="Go to Home">
+      <img src="assets/login/logo.png" alt="OIS MEET" class="app-logo" />
+      <span class="app-title">OIS MEET</span>
     </a>
   </div>
 
-  <!-- Center-Left Actions (Visible when Authenticated) -->
+  <!-- Center: Search Bar (Fluent UI Style) -->
+  <div class="search-container" *ngIf="isAuthenticated$ | async">
+    <div class="search-box">
+      <i class="bi bi-search"></i>
+      <input type="text" placeholder="Search for chats, people, or files" class="search-input" />
+      <span class="search-shortcut">Ctrl+F</span>
+    </div>
+  </div>
+
+  <!-- Right Side Actions: Theme, Profile, Window Controls -->
   <div class="main-actions" *ngIf="isAuthenticated$ | async">
-    <div class="meet-controls flex-shrink-0">
+    <div class="meet-controls d-none d-lg-flex">
       <button type="button" class="btn-meet btn-meet-primary" (click)="openMeetNowDialog('meet-now')">
-        <i class="bi bi-camera-video-fill"></i>
+        <i class="bi bi-camera-video"></i>
         <span>Meet Now</span>
       </button>
       <button type="button" class="btn-meet btn-meet-outline" (click)="openMeetNowDialog('join-meeting')">
-        <i class="bi bi-plus-circle"></i>
+        <i class="bi bi-plus"></i>
         <span>Join</span>
       </button>
     </div>
 
-    <!-- Right Side Actions: Welcome, Theme, Profile -->
     <div class="right-actions">
-      <div class="welcome-section d-none d-xl-flex" *ngIf="userFullName">
-        <span class="welcome-label">Welcome,</span>
-        <span class="user-name">{{ userFullName }}</span>
-      </div>
-
       <div class="action-group">
         <button type="button" class="icon-btn theme-toggle" (click)="toggleTheme()"
           [attr.title]="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
@@ -35,6 +42,7 @@
             [ngClass]="theme === 'dark' ? 'bi-sun-fill text-warning' : 'bi-moon-stars-fill text-primary'"></i>
         </button>
 
+        <!-- User Dropdown Menu -->
         <div class="user-dropdown">
           <button type="button" class="avatar-trigger" (click)="toggleUserMenu($event)" [class.active]="isUserMenuOpen">
             <div class="avatar-circle">
@@ -45,13 +53,26 @@
 
           <!-- Dropdown Menu -->
           <div class="dropdown-window shadow" *ngIf="isUserMenuOpen" (click)="$event.stopPropagation()">
+            <!-- Current User Info (Moved from Title Bar) -->
+            <div class="user-profile-header">
+              <div class="profile-avatar-large">
+                <i class="bi bi-person-fill"></i>
+              </div>
+              <div class="profile-details">
+                <div class="profile-name">{{ userFullName || 'John Doe' }}</div>
+                <div class="profile-email">john.doe&#64;example.com</div>
+              </div>
+            </div>
+
+            <div class="dropdown-divider"></div>
+
             <div class="dropdown-header">
-              <span class="menu-title">User Account</span>
+              <span class="menu-title">Account Settings</span>
             </div>
 
             <div class="company-section">
               <div class="company-trigger" (click)="toggleCompanyMenu($event)">
-                <span><i class="bi bi-building me-2"></i>Switch Company</span>
+                <span class="trigger-label"><i class="bi bi-building me-2"></i>Switch Company</span>
                 <i class="bi" [ngClass]="isCompanyMenuOpen ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
               </div>
 
@@ -65,6 +86,12 @@
             </div>
 
             <div class="dropdown-divider"></div>
+
+            <button class="menu-item-btn" (click)="setTheme(theme === 'dark' ? 'light' : 'dark')">
+              <i class="bi" [ngClass]="theme === 'dark' ? 'bi-sun' : 'bi-moon'"></i>
+              <span>{{ theme === 'dark' ? 'Light Mode' : 'Dark Mode' }}</span>
+            </button>
+
             <button class="logout-btn" (click)="logout()">
               <i class="bi bi-box-arrow-right me-2"></i>Logout
             </button>

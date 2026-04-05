@@ -23,6 +23,8 @@
     "@angular/platform-browser": "^17.3.0",
     "@angular/platform-browser-dynamic": "^17.3.0",
     "@angular/router": "^17.3.0",
+    "@fluentui/tokens": "^1.0.0-alpha.23",
+    "@fluentui/web-components": "^2.6.1",
     "@microsoft/signalr": "^10.0.0",
     "@ngrx/effects": "^17.2.0",
     "@ngrx/entity": "^17.2.0",

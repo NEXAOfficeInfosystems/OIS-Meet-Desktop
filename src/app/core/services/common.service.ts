@@ -34,6 +34,13 @@ notifySyncComplete(company: any) {
     return this.companyListSource.value;
   }
 
+  private isSidebarCollapsedSource = new BehaviorSubject<boolean>(false);
+  isSidebarCollapsed$ = this.isSidebarCollapsedSource.asObservable();
+
+  toggleSidebar() {
+    this.isSidebarCollapsedSource.next(!this.isSidebarCollapsedSource.value);
+  }
+
   pickDefaultCompanyForStorage(companyUrlResponse: CompanyUrlResponse): StoredDefaultCompany | null {
       const items = companyUrlResponse?.data;
       if (!Array.isArray(items) || items.length === 0) return null;

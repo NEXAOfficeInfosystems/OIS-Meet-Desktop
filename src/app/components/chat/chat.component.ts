@@ -141,9 +141,18 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   isTyping: boolean = false;
   totalUnreadCount: number = 0;
   searchQuery: string = '';
+  isSidebarSearching: boolean = false;
   isConnected: boolean = false;
   isUploading: boolean = false;
   isToolbarVisible: boolean = false; // Controls formatting toolbar visibility
+
+  toggleSidebarSearch(): void {
+    this.isSidebarSearching = !this.isSidebarSearching;
+    if (!this.isSidebarSearching) {
+      this.searchQuery = '';
+      this.applySearch();
+    }
+  }
   userFilterMode: 'recent' | 'unread' = 'recent';
   isElectron = !!(window as any).windowAPI;
   settings: UserSettings = { showMessagePreview: true, showMediaPreviews: true, notificationsMentionsOnly: false };
@@ -1169,7 +1178,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.applySearch();
   }
 
-  private applySearch(): void {
+  applySearch(): void {
     this.sortUsersByLastMessage();
     const q = (this.searchQuery || '').toLowerCase().trim();
 

@@ -1,54 +1,39 @@
-<!-- Left Sidebar -->
-<aside class="d-flex flex-column justify-content-between bg-light border-end" style="width: 72px;">
+<aside class="fluent-sidebar" [class.is-collapsed]="isCollapsed()">
+  <!-- Brand Header -->
+  <!-- <div class="sidebar-header">
+    <div class="logo-wrap" (click)="setActiveTab('dashboard')">
+      <img src="assets/login/ois-meet-logo.svg" alt="OIS MEET" class="sidebar-logo" />
+    </div>
+  </div> -->
 
-  <!-- TOP -->
-  <div class="d-flex flex-column align-items-center gap-2 py-0">
+  <!-- Main Navigation Items -->
+  <nav class="nav-list">
+    <div class="nav-item" [class.active]="activeTab === 'chat'" (click)="setActiveTab('chat')" [title]="isCollapsed() ? 'Chat' : ''">
+      <i class="bi bi-chat-dots"></i>
+      <span class="nav-label" *ngIf="!isCollapsed()">Chat</span>
+    </div>
 
-    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'activity'"
-      (click)="setActiveTab('activity')" title="Activity">
-      <i class="bi bi-bell fs-5"></i>
-      <span class="sidebar-label">Activity</span>
-    </button>
+    <div class="nav-item" [class.active]="activeTab === 'meetings'" (click)="setActiveTab('meetings')" [title]="isCollapsed() ? 'Meetings' : ''">
+      <i class="bi bi-camera-video"></i>
+      <span class="nav-label" *ngIf="!isCollapsed()">Meetings</span>
+      <fluent-badge appearance="accent" class="nav-badge" *ngIf="!isCollapsed()">3</fluent-badge>
+    </div>
 
-    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'chat'"
-      (click)="setActiveTab('chat')" title="Chat">
-      <i class="bi bi-chat-dots fs-5"></i>
-      <span class="sidebar-label">Chat</span>
-    </button>
+    <div class="nav-item" [class.active]="activeTab === 'calendar'" (click)="setActiveTab('calendar')" [title]="isCollapsed() ? 'Calendar' : ''">
+      <i class="bi bi-calendar3"></i>
+      <span class="nav-label" *ngIf="!isCollapsed()">Calendar</span>
+    </div>
 
-    <!-- <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'teams'"
-      (click)="setActiveTab('teams')" title="Teams">
-      <i class="bi bi-people fs-5"></i>
-      <span class="sidebar-label">Teams</span>
-    </button> -->
+    <div class="nav-item" [class.active]="activeTab === 'activity'" (click)="setActiveTab('activity')" [title]="isCollapsed() ? 'Activity' : ''">
+      <i class="bi bi-bell"></i>
+      <span class="nav-label" *ngIf="!isCollapsed()">Activity</span>
+    </div>
 
-    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'calendar'"
-      (click)="setActiveTab('calendar')" title="Calendar">
-      <i class="bi bi-calendar-event fs-5"></i>
-      <span class="sidebar-label">Calendar</span>
-    </button>
+    <div class="nav-item" [class.active]="activeTab === 'settings'" (click)="setActiveTab('settings')" [title]="isCollapsed() ? 'Settings' : ''">
+      <i class="bi bi-gear"></i>
+      <span class="nav-label" *ngIf="!isCollapsed()">Settings</span>
+    </div>
+  </nav>
 
-    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'calls'"
-      (click)="setActiveTab('calls')" title="Calls">
-      <i class="bi bi-telephone fs-5"></i>
-      <span class="sidebar-label">Calls</span>
-    </button>
-
-    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'files'"
-      (click)="setActiveTab('files')" title="Files">
-      <i class="bi bi-folder fs-5"></i>
-      <span class="sidebar-label">Files</span>
-    </button>
-
-  </div>
-
-  <!-- BOTTOM -->
-  <div class="d-flex flex-column mb-3">
-
-    <button class="btn btn-link nav-btn d-flex flex-column align-items-center" [class.active]="activeTab === 'settings'"
-      (click)="setActiveTab('settings')" title="Settings">
-      <i class="bi bi-gear fs-5"></i>
-      <span class="sidebar-label">Settings</span>
-    </button>
-  </div>
+  <!-- Removed Profile Section, Contacts, and Upgrade button per User Request -->
 </aside>

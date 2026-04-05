@@ -4,14 +4,16 @@
   min-height: 0;
   background: var(--bg-card);
   overflow: hidden;
-  
+
   .time-column {
     flex: 0 0 60px;
     border-right: 1px solid var(--border-color);
     background: var(--bg-card);
-    
-    .header-spacer { height: 48px; }
-    
+
+    .header-spacer {
+      height: 48px;
+    }
+
     .hour-cell {
       height: 48px;
       padding: 10px 5px;
@@ -21,19 +23,19 @@
     }
 
   }
-  
+
   .days-container {
     flex: 1;
     display: flex;
     flex-direction: column;
     overflow: auto;
-    
+
     .days-header {
       display: flex;
       height: 48px;
       border-bottom: 1px solid var(--border-color);
       background: var(--bg-card);
-      
+
       .day-header {
         flex: 1;
         display: flex;
@@ -43,36 +45,52 @@
         padding: 0 0.5rem;
         gap: 0.5rem;
         border-right: 1px solid var(--border-color);
-        
-        .day-name { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; }
-        .day-number { font-size: 16px; font-weight: 600; }
-        
+
+        .day-name {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+        }
+
+        .day-number {
+          font-size: 16px;
+          font-weight: 600;
+        }
+
         &.today {
           color: var(--primary-color);
           background: var(--primary-color-soft);
-          .day-name, .day-number { font-weight: 700; color: var(--primary-color); }
+
+          .day-name,
+          .day-number {
+            font-weight: 700;
+            color: var(--primary-color);
+          }
         }
       }
     }
 
-    
+
     .week-grid {
       display: flex;
       flex: 1;
-      
+
       .day-column {
         flex: 1;
         border-right: 1px solid var(--border-color);
         position: relative;
-        
+
         .grid-cell {
           height: 48px;
           border-bottom: 1px solid var(--border-color-soft);
           position: relative;
           cursor: pointer;
-          
-          &:hover { background: var(--bg-hover-soft); }
-          
+
+          &:hover {
+            background: var(--bg-hover-soft);
+          }
+
           .event-item {
             position: absolute;
             left: 2px;
@@ -82,54 +100,81 @@
             color: white;
             z-index: 10;
             overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             font-size: 12px;
-            
-            .event-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .event-time { font-size: 10px; opacity: 0.9; }
+
+            .event-title {
+              font-weight: 600;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .event-time {
+              font-size: 10px;
+              opacity: 0.9;
+            }
           }
         }
       }
     }
-    
+
     .month-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        grid-auto-rows: 1fr;
-        flex: 1;
-        
-        .month-cell {
-            border-right: 1px solid var(--border-color-soft);
-            border-bottom: 1px solid var(--border-color-soft);
-            padding: 4px;
-            min-height: 80px;
-            background: var(--bg-card);
-            
-            .cell-day { 
-              font-weight: 500; 
-              margin-bottom: 4px; 
-              color: var(--text-secondary); 
-              font-size: 12px;
-              opacity: 0.7;
-            }
-            &.other-month { background: var(--bg-hover-soft); opacity: 0.4; }
-            
-            .event-pill {
-                background: var(--primary-color);
-                color: white;
-                font-size: 11px;
-                padding: 2px 6px;
-                border-radius: 3px;
-                margin-bottom: 2px;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                cursor: pointer;
-                transition: transform 0.1s ease;
-                
-                &:hover { filter: brightness(1.1); transform: translateX(2px); }
-            }
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      grid-auto-rows: 1fr;
+      flex: 1;
+      // overflow: auto;
+      padding-left: 20px;
+
+      // &::-webkit-scrollbar {
+      //   width: 6px;
+      // }
+
+      // &::-webkit-scrollbar-thumb {
+      //   background: var(--border-color);
+      //   border-radius: 3px;
+      // }
+
+      .month-cell {
+        border-right: 1px solid var(--border-color-soft);
+        border-bottom: 1px solid var(--border-color-soft);
+        padding: 4px;
+        min-height: 80px;
+        background: var(--bg-card);
+
+        .cell-day {
+          font-weight: 500;
+          margin-bottom: 4px;
+          color: var(--text-secondary);
+          font-size: 12px;
+          opacity: 0.7;
         }
+
+        &.other-month {
+          background: var(--bg-hover-soft);
+          opacity: 0.4;
+        }
+
+        .event-pill {
+          background: var(--primary-color);
+          color: white;
+          font-size: 11px;
+          padding: 2px 6px;
+          border-radius: 3px;
+          margin-bottom: 2px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          cursor: pointer;
+          transition: transform 0.1s ease;
+
+          &:hover {
+            filter: brightness(1.1);
+            transform: translateX(2px);
+          }
+        }
+      }
     }
 
   }

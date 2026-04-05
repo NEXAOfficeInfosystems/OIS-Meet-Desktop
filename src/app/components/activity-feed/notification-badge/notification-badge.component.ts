@@ -12,6 +12,7 @@ import { CommonModule } from '@angular/common';
   `,
   styles: [`
     .badge {
+      --badge-size: 20px;
       background: #c4314b; /* Teams-like red */
       color: white;
       font-size: 10px;

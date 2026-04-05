@@ -86,6 +86,10 @@ export class TitleBarComponent implements OnInit {
     }
   }
 
+  toggleSidebar(): void {
+    this.commonService.toggleSidebar();
+  }
+
   onMaximize() {
     if (this.isElectron) {
       (window as any).windowAPI.maximize();
@@ -202,9 +206,11 @@ export class TitleBarComponent implements OnInit {
     body.classList.toggle('theme-dark', this.theme === 'dark');
     body.classList.toggle('theme-light', this.theme === 'light');
   }
+
   navigateToHome() {
     this.router.navigateByUrl('/dashboard');
   }
+
   logout() {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '350px',

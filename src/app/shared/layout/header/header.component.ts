@@ -1,10 +1,10 @@
-import { Component, ElementRef, HostListener, computed, inject } from '@angular/core';
+import { Component, ElementRef, HostListener, computed, inject, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { SessionService } from '../../../core/services/session.service';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { MeetNowDialogComponentModule } from '../../../components/meet-now-dialog/meet-now-dialog.component.module';
+
 import { MeetNowDialogComponent } from '../../../components/meet-now-dialog/meet-now-dialog.component';
 import { CommonService } from '../../../core/services/common.service';
 import { SsoApiService } from '../../../core/services/sso-api.service';
@@ -18,7 +18,8 @@ type ThemeMode = 'light' | 'dark';
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [RouterLink, CommonModule, MatDialogModule, MeetNowDialogComponentModule],
+  imports: [RouterLink, CommonModule, MatDialogModule, MeetNowDialogComponent],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './header.component.html',
   styleUrl: './header.component.scss'
 })

@@ -1,114 +1,163 @@
-<div class="dashboard-root">
+<div class="fluent-dashboard">
 
-  <!-- ═══════════════════════════════════════════════ HERO -->
-  <div class="hero-banner">
-
-    <!-- LEFT: text + actions -->
-    <div class="hero-left">
-      <p class="hero-greeting">Good {{ greeting }}, <strong>{{ userFullName || 'there' }}</strong> 👋</p>
-      <h1 class="hero-title">Connect &amp; Collaborate<br><span>Seamlessly with OIS Meet</span></h1>
-      <p class="hero-sub">Start instant meetings, join with a code, or schedule for later — all from one place.</p>
-      <div class="hero-actions">
-        <button class="hero-btn primary" (click)="gotoLandingPage()">
-          <i class="bi bi-camera-video-fill"></i> Meet Now
-        </button>
-        <button class="hero-btn secondary" (click)="joinMeeting()">
-          <i class="bi bi-box-arrow-in-right"></i> Join Meeting
-        </button>
-        <button class="hero-btn ghost" (click)="scheduleMeeting()">
-          <i class="bi bi-calendar-plus"></i> Schedule
-        </button>
+  <div class="top-row">
+    <!-- A. Chat Panel (Left Section) -->
+    <fluent-card class="chat-panel">
+      <div class="panel-header">
+        <div class="header-text">
+          <i class="bi bi-chat-left-text me-2"></i>
+          <span>Start a chat</span>
+        </div>
+        <fluent-button appearance="stealth"><i class="bi bi-plus-lg"></i></fluent-button>
       </div>
-    </div>
 
-    <!-- RIGHT: illustration -->
-    <div class="hero-right">
-      <img src="assets/landing/meeting.svg" alt="Video Meeting Illustration" class="hero-illustration" />
-    </div>
+      <div class="recent-chats-label">Recent Chats</div>
 
+      <div class="chat-list">
+        <div class="chat-item" *ngFor="let chat of recentChats">
+          <div class="avatar-wrap">
+            <!-- <img [src]="chat.avatar" class="chat-avatar" /> -->
+            <div class="initial-avatar" [style.background]="getAvatarColor(chat.name)">
+              {{ getInitials(chat.name) }}
+            </div>
+            <div class="status-dot" [class]="chat.status.toLowerCase()" *ngIf="chat.status"></div>
+          </div>
+          <div class="chat-info">
+            <div class="chat-name-row">
+              <span class="chat-name">{{ chat.name }}</span>
+              <span class="chat-time">{{ chat.time }}</span>
+            </div>
+            <div class="chat-msg-preview">{{ chat.lastMsg }}</div>
+          </div>
+        </div>
+      </div>
+    </fluent-card>
+
+    <!-- B. Meeting Panel (Center-Right) -->
+    <fluent-card class="meeting-panel">
+      <div class="landing-content">
+        <!-- ── Left: Copy & Actions ── -->
+        <div class="landing-left">
+          <div class="hero-text">
+            <h1 class="landing-title">Premium video meetings. Now free for everyone</h1>
+            <p class="landing-subtitle">Real-time video meetings for modern teams. Simple, fast, and focused on work.
+            </p>
+          </div>
+
+          <div class="landing-actions">
+            <button class="btn-new-meeting" (click)="startNewMeeting()">
+              <i class="bi bi-camera-video"></i>New Meeting
+            </button>
+            <button class="btn-join-meeting" (click)="joinMeeting()">
+              <i class="bi bi-people"></i>Join Meeting
+            </button>
+          </div>
+          <!--           
+          <button class="btn-go-back" (click)="navigateTo('/login')">
+             <i class="bi bi-arrow-left"></i> Go Back
+          </button> -->
+        </div>
+
+        <!-- ── Right: Illustration Card ── -->
+        <div class="landing-right">
+          <div class="illustration-card">
+            <div class="laptop-view">
+              <img src="assets/landing/meeting-laptop.svg" alt="Meeting Illustration" class="meeting-img">
+              <div class="active-badge">
+                <div class="avatar-stack">
+                  <img src="assets/landing/avatars/a1.png" alt="A1">
+                  <img src="assets/landing/avatars/a2.png" alt="A2">
+                  <img src="assets/landing/avatars/a3.png" alt="A3">
+                </div>
+                <span class="badge-text">+12 others joined this meeting</span>
+              </div>
+            </div>
+
+            <div class="card-footer-info">
+              <h6>Get a link you can share</h6>
+              <p>Click <strong>New meeting</strong> to get a link you can send to people you want to meet with.</p>
+              <div class="carousel-dots">
+                <span class="dot active"></span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </fluent-card>
   </div>
 
-  <!-- ═══════════════════════════════════════════════ STATS ROW -->
-  <div class="stats-row">
-    <div class="stat-card" *ngFor="let stat of stats">
-      <div class="stat-icon" [style.background]="stat.bg">
-        <i [class]="stat.icon" [style.color]="stat.color"></i>
+  <!-- C. Bottom Dashboard Cards -->
+  <div class="bottom-row">
+    <!-- 1. Calendar Card -->
+    <fluent-card class="dash-card calendar-card">
+      <div class="card-header">
+        <span><i class="bi bi-calendar3 me-2"></i>Calendar</span>
+        <fluent-button appearance="stealth" class="view-all">Today <i class="bi bi-chevron-down"></i></fluent-button>
       </div>
-      <div class="stat-info">
-        <span class="stat-value">{{ stat.value }}</span>
-        <span class="stat-label">{{ stat.label }}</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════ MAIN GRID -->
-  <div class="dash-grid">
-
-    <!-- Upcoming Meetings -->
-    <div class="dash-card">
-      <div class="card-header-row">
-        <h6 class="card-title"><i class="bi bi-calendar-event me-2"></i>Upcoming Meetings</h6>
-        <button class="view-all-btn">View all</button>
-      </div>
-      <div class="meeting-list">
-        <div class="meeting-item" *ngFor="let m of upcomingMeetings">
-          <div class="meeting-time-col">
-            <span class="meeting-time">{{ m.time }}</span>
-            <span class="meeting-date">{{ m.date }}</span>
+      <div class="mini-calendar">
+        <!-- Mock mini calendar UI -->
+        <div class="calendar-grid">
+          <div class="day-label" *ngFor="let d of ['S','M','T','W','T','F','S']">{{ d }}</div>
+          <div class="day" *ngFor="let n of [7,8,9,10,11,12,13,14]">
+            <span [class.active]="n === 12">{{ n }}</span>
           </div>
-          <div class="meeting-info-col">
-            <span class="meeting-title">{{ m.title }}</span>
-            <span class="meeting-host">{{ m.host }}</span>
-            <div class="meeting-tags">
-              <span class="tag" [class.tag-video]="m.type === 'Video'" [class.tag-audio]="m.type === 'Audio'">
-                <i [class]="m.type === 'Video' ? 'bi bi-camera-video' : 'bi bi-telephone'"></i> {{ m.type }}
-              </span>
-              <span class="tag tag-neutral"><i class="bi bi-people"></i> {{ m.participants }}</span>
-            </div>
+        </div>
+      </div>
+      <div class="event-list">
+        <div class="event-item" *ngFor="let ev of calendarEvents">
+          <div class="event-indicator" [style.background]="ev.color"></div>
+          <div class="event-details">
+            <span class="event-name">{{ ev.title }}</span>
+            <span class="event-time">{{ ev.time }}</span>
           </div>
-          <button class="join-btn" (click)="gotoLandingPage()">Join</button>
-        </div>
-        <div class="empty-state-sm" *ngIf="upcomingMeetings.length === 0">
-          <i class="bi bi-calendar-x"></i><span>No upcoming meetings</span>
         </div>
       </div>
-    </div>
+    </fluent-card>
 
-    <!-- Right column -->
-    <div class="right-col">
-
-      <!-- Quick Actions -->
-      <div class="dash-card">
-        <div class="card-header-row">
-          <h6 class="card-title"><i class="bi bi-grid me-2"></i>Quick Actions</h6>
+    <!-- 2. Activity Card -->
+    <fluent-card class="dash-card activity-card">
+      <div class="card-header">
+        <span><i class="bi bi-activity me-2"></i>Activity</span>
+        <fluent-button appearance="accent" size="small">New Event</fluent-button>
+      </div>
+      <div class="activity-list">
+        <div class="activity-item" *ngFor="let act of activityFeed">
+          <div class="activity-icon-wrap">
+            <i [class]="act.icon"></i>
+          </div>
+          <div class="activity-content">
+            <span class="activity-text">{{ act.text }}</span>
+            <span class="activity-time">{{ act.time }}</span>
+          </div>
         </div>
-        <div class="quick-links-grid">
-          <button class="quick-link" *ngFor="let q of quickLinks" (click)="navigateTo(q.route)">
-            <div class="quick-link-icon" [style.background]="q.bg">
-              <i [class]="q.icon" [style.color]="q.color"></i>
+      </div>
+    </fluent-card>
+
+    <!-- 3. Contacts Card -->
+    <fluent-card class="dash-card contacts-card">
+      <div class="card-header">
+        <span><i class="bi bi-people me-2"></i>Contacts</span>
+        <fluent-button appearance="outline" size="small">Add Contact</fluent-button>
+      </div>
+      <div class="contact-search">
+        <i class="bi bi-search"></i>
+        <input type="text" placeholder="Search contacts..." />
+      </div>
+      <div class="contact-list">
+        <div class="contact-item" *ngFor="let c of contacts">
+          <div class="contact-avatar-wrap">
+            <!-- <img [src]="c.avatar" class="contact-avatar" /> -->
+            <div class="contact-initial-avatar" [style.background]="getAvatarColor(c.name)">
+              {{ getInitials(c.name) }}
             </div>
-            <span>{{ q.label }}</span>
-          </button>
+            <div class="status-dot" [class]="c.status.toLowerCase()"></div>
+          </div>
+          <span class="contact-name">{{ c.name }}</span>
+          <span class="contact-status-text">{{ c.status }}</span>
         </div>
       </div>
-
-      <!-- Recent Activity -->
-      <div class="dash-card">
-        <div class="card-header-row">
-          <h6 class="card-title"><i class="bi bi-activity me-2"></i>Recent Activity</h6>
-        </div>
-        <ul class="activity-list">
-          <li class="activity-item" *ngFor="let a of recentActivity">
-            <div class="activity-avatar" [style.background]="a.color">{{ a.initials }}</div>
-            <div class="activity-body">
-              <span class="activity-text" [innerHTML]="a.text"></span>
-              <span class="activity-time">{{ a.time }}</span>
-            </div>
-          </li>
-        </ul>
-      </div>
-
-    </div>
-
+    </fluent-card>
   </div>
 </div>

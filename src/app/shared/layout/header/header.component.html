@@ -1,76 +1,65 @@
-<header class="app-header position-fixed top-0 start-0 end-0 bg-light border-bottom">
-  <div class="container-fluid px-3 px-md-4">
-    <div class="app-header__inner d-flex align-items-center justify-content-between gap-3">
-      <a class="d-inline-flex align-items-center text-decoration-none" routerLink="/chat" aria-label="OIS Meet">
-        <img src="assets/login/ois-meet-logo.svg" class="app-header__logo" alt="OIS Meet Logo" />
-      </a>
+<header class="fluent-header">
+  <div class="header-inner">
+    <!-- Left: Branding (Logo) -->
+    <a routerLink="/dashboard" class="logo-link">
+      <img src="assets/login/ois-meet-logo.svg" alt="OIS Meet Logo" class="header-logo" />
+      <span class="app-name">OIS Meet</span>
+    </a>
 
-      <div class="d-flex align-items-center gap-2 gap-md-3 flex-shrink-0">
-        <!-- Meet Now and Join Meeting Buttons -->
-        <button type="button" class="btn btn-sm btn-primary d-none d-md-inline-block" style="min-width: 90px;" (click)="openMeetNowDialog('meet-now')">
-          <i class="bi bi-camera-video me-1"></i> Meet Now
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-primary d-none d-md-inline-block" style="min-width: 110px;" (click)="openMeetNowDialog('join-meeting')">
-          <i class="bi bi-box-arrow-in-right me-1"></i> Join Meeting
-        </button>
+    <!-- Center: Search Bar -->
+    <div class="search-container">
+      <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input type="text" placeholder="Search for chats, people, or files" class="search-input" />
+        <span class="search-shortcut">Ctrl+F</span>
+      </div>
+    </div>
 
-        <span class="app-header__welcome d-none d-md-inline" *ngIf="userFullName">
-          Welcome <span class="app-header__welcome-name">{{ userFullName }}</span>!
-        </span>
+    <!-- Right: Actions -->
+    <div class="actions-container">
+      <fluent-button appearance="stealth" title="New Call" (click)="openMeetNowDialog('meet-now')">
+        <i class="bi bi-camera-video"></i>
+      </fluent-button>
 
+      <fluent-button appearance="stealth" title="New Chat" routerLink="/chat">
+        <i class="bi bi-chat-text"></i>
+      </fluent-button>
 
-        <button type="button" class="btn btn-link p-0 app-header__theme-btn" (click)="toggleTheme()"
-          [attr.aria-label]="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
-          <img [src]="theme === 'dark' ? 'assets/header/night-mode.png' : 'assets/header/brightness.png'"
-            class="app-header__theme-icon" alt="" />
-        </button>
+      <fluent-button appearance="stealth" title="Notifications">
+        <i class="bi bi-bell"></i>
+        <fluent-badge appearance="accent" class="action-badge"></fluent-badge>
+      </fluent-button>
 
+      <fluent-divider orientation="vertical" class="action-divider"></fluent-divider>
 
+      <!-- Theme Toggle -->
+      <fluent-button appearance="stealth" (click)="toggleTheme()" [title]="theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+        <i [class]="theme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars'"></i>
+        <span class="theme-text">{{ theme === 'dark' ? 'Dark' : 'Light' }}</span>
+      </fluent-button>
 
+      <!-- User Avatar Profile -->
+      <div class="user-profile" (click)="toggleUserMenu($event)">
+        <img src="assets/header/profile.png" alt="User Profile" class="header-avatar" />
+        <i class="bi bi-chevron-down ms-1"></i>
+      </div>
 
-
-
-        <div class="dropdown position-relative">
-          <button type="button" class="btn p-0 border-0 bg-transparent" (click)="toggleUserMenu($event)"
-            [attr.aria-expanded]="isUserMenuOpen" aria-haspopup="menu" aria-label="User menu">
-            <span class="app-header__avatar rounded-circle d-inline-flex align-items-center justify-content-center">
-              <i class="bi bi-person-fill"></i>
-            </span>
-          </button>
-
-          <div class="dropdown-menu dropdown-menu-end show app-header__user-menu" data-bs-popper="static"
-            *ngIf="isUserMenuOpen">
-
-            <!-- Company Menu -->
-            <button type="button" class="dropdown-item d-flex justify-content-between align-items-center app-company-toggle"
-              (click)="toggleCompanyMenu($event)">
-              <span>
-                <i class="bi bi-building me-2"></i>
-                Company
-              </span>
-              <i class="bi" [ngClass]="isCompanyMenuOpen ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
-            </button>
-
-            <!-- Company Sub Items -->
-            <div *ngIf="isCompanyMenuOpen" class="app-company-submenu">
-              <button type="button" class="dropdown-item app-company-item" *ngFor="let item of companyList"
-                (click)="selectCompany(item)" [class.selected]="item.companyId === selectedCompanyId">
-                <span class="company-name">
-                  {{ item?.name | titlecase }}
-                </span>
-
-                <i *ngIf="item.companyId === selectedCompanyId" class="bi bi-check-circle-fill"></i>
-              </button>
-            </div>
-
-            <div class="dropdown-divider"></div>
-            <!-- Logout -->
-            <button type="button" class="dropdown-item text-danger" (click)="logout()">
-              <i class="bi bi-box-arrow-right me-2"></i>
-              Logout
-            </button>
+      <!-- Profile Dropdown (Fluent Design) -->
+      <div class="profile-dropdown" *ngIf="isUserMenuOpen">
+        <div class="dropdown-header">
+          <img src="assets/header/profile.png" class="dropdown-avatar" />
+          <div class="dropdown-user-info">
+            <span class="user-name">{{ userFullName }}</span>
+            <span class="user-status online">Available</span>
           </div>
         </div>
+        <fluent-divider></fluent-divider>
+        <button class="dropdown-item" routerLink="/settings">
+          <i class="bi bi-person me-2"></i> My Profile
+        </button>
+        <button class="dropdown-item" (click)="logout()">
+          <i class="bi bi-box-arrow-right me-2"></i> Log out
+        </button>
       </div>
     </div>
   </div>

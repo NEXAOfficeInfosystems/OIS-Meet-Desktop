@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
@@ -8,43 +8,67 @@ import { SessionService } from '../../core/services/session.service';
   selector: 'app-dashboard',
   standalone: true,
   imports: [CommonModule],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss'
 })
 export class DashboardComponent implements OnInit {
   userFullName: string | null = null;
-  applicationName: string | null = null;
-  greeting = 'Morning';
-
-  stats = [
-    { label: 'Meetings Today',  value: '3',  icon: 'bi bi-camera-video-fill', color: '#0b57d0', bg: '#e8f0fe' },
-    { label: 'Unread Messages', value: '12', icon: 'bi bi-chat-dots-fill',   color: '#1e7e34', bg: '#d4edda' },
-    { label: 'Active Contacts', value: '48', icon: 'bi bi-people-fill',      color: '#7c3aed', bg: '#ede9fe' },
-    { label: 'Files Shared',    value: '7',  icon: 'bi bi-folder2-open',     color: '#b45309', bg: '#fef3c7' },
+  
+  recentChats = [
+    { name: 'Jane Smith', status: 'Online', lastMsg: 'I will send the files by 5 PM.', time: '10:45 AM', avatar: 'assets/header/profile.png' },
+    { name: 'Michael Lee', status: 'Busy', lastMsg: 'Can we reschedule the sync?', time: '9:47 AM', avatar: 'assets/header/profile.png' },
+    { name: 'Group Project', status: '', lastMsg: 'Ellen: Great work everyone!', time: '8:25 AM', avatar: 'assets/header/profile.png' },
+    { name: 'Sarah Johnson', status: 'Away', lastMsg: 'See you at the meeting!', time: '5:12 PM', avatar: 'assets/header/profile.png' },
   ];
 
-  upcomingMeetings = [
-    { title: 'Q2 Product Review',     host: 'Hosted by Senthil Kumar',   time: '10:00 AM', date: 'Today',    type: 'Video', participants: 8  },
-    { title: 'Design Sprint Kickoff', host: 'Hosted by Deepak Kamaraj', time: '02:30 PM', date: 'Today',    type: 'Video', participants: 5  },
-    { title: 'Client Sync — OIS',     host: 'Hosted by Gowtham K',      time: '09:00 AM', date: 'Tomorrow', type: 'Audio', participants: 12 },
+  participants = [
+    { name: 'Jane Smith', avatar: 'assets/header/profile.png', audio: true, video: true },
+    { name: 'Michael Lee', avatar: 'assets/header/profile.png', audio: false, video: true },
+    { name: 'Sarah Johnson', avatar: 'assets/header/profile.png', audio: true, video: true },
+    { name: 'David Williams', avatar: 'assets/header/profile.png', audio: true, video: false },
+    { name: 'John Doe (You)', avatar: 'assets/header/profile.png', audio: true, video: true },
+    { name: 'Emily Clark', avatar: 'assets/header/profile.png', audio: false, video: false },
+    { name: 'Chris Evans', avatar: 'assets/header/profile.png', audio: true, video: true },
+    { name: 'Robert Downey', avatar: 'assets/header/profile.png', audio: true, video: true },
   ];
 
-  quickLinks = [
-    { label: 'Chat',      icon: 'bi bi-chat-dots-fill',   color: '#0b57d0', bg: '#e8f0fe', route: '/chat'        },
-    { label: 'Calls',     icon: 'bi bi-telephone-fill',   color: '#1e7e34', bg: '#d4edda', route: '/calls'       },
-    { label: 'Teams',     icon: 'bi bi-people-fill',      color: '#7c3aed', bg: '#ede9fe', route: '/teams'       },
-    { label: 'Files',     icon: 'bi bi-folder2-open',     color: '#b45309', bg: '#fef3c7', route: '/files'       },
-    { label: 'Activity',  icon: 'bi bi-bell-fill',        color: '#0891b2', bg: '#e0f2fe', route: '/activity'    },
-    { label: 'Calendar',  icon: 'bi bi-calendar-check',   color: '#be123c', bg: '#ffe4e6', route: '/coming-soon' },
+  calendarEvents = [
+    { title: 'Marketing Sync', time: '9:00 AM', color: '#2563EB' },
+    { title: 'UX Design Review', time: '1:30 PM', color: '#7C3AED' },
+    { title: 'Sprint Planning', time: '10:00 AM', color: '#107C10' },
+    { title: 'Project Presentation', time: '2:00 PM', color: '#D13438' },
   ];
 
-  recentActivity = [
-    { initials: 'DK', color: '#6366f1', text: '<b>Deepak Kamaraj</b> sent you a message',         time: '2m ago'   },
-    { initials: 'GK', color: '#10b981', text: '<b>Gowtham K</b> joined the <b>General</b> channel', time: '14m ago'  },
-    { initials: 'SK', color: '#f59e0b', text: '<b>Sasi Kumar</b> shared a file: <b>Q2_Report.pdf</b>', time: '1h ago'   },
-    { initials: 'RC', color: '#ef4444', text: '<b>Ranjith C A</b> started a meeting',             time: '2h ago'   },
-    { initials: 'JV', color: '#8b5cf6', text: '<b>Joseph Vijay</b> reacted to your message 👍',   time: 'Yesterday' },
+  activityFeed = [
+    { text: 'Product Demo is starting now', time: '10:00 AM', icon: 'bi bi-play-circle' },
+    { text: 'Marketing Sync starts in 1 hour', time: '8:00 AM', icon: 'bi bi-clock' },
+    { text: 'Sprint Planning rescheduled', time: '10:00 AM', icon: 'bi bi-calendar-event' },
+    { text: 'Project Presentation ready', time: '2:13 PM', icon: 'bi bi-file-earmark-check' },
   ];
+
+  contacts = [
+    { name: 'Jane Smith', status: 'Online', avatar: 'assets/header/profile.png' },
+    { name: 'Michael Lee', status: 'Busy', avatar: 'assets/header/profile.png' },
+    { name: 'Sarah Johnson', status: 'Away', avatar: 'assets/header/profile.png' },
+    { name: 'Emily Clark', status: 'Offline', avatar: 'assets/header/profile.png' },
+  ];
+
+  getInitials(name: string): string {
+    if (!name) return 'U';
+    const parts = name.split(' ');
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name[0].toUpperCase();
+  }
+
+  getAvatarColor(name: string): string {
+    const colors = ['#0078d4', '#107c10', '#d13438', '#0078d4', '#4f6bed', '#00bcf2', '#881798'];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  }
 
   constructor(
     private authService: AuthService,
@@ -54,33 +78,17 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit() {
     this.userFullName = this.sessionService.getFullName();
-    this.applicationName = this.sessionService.getApplicationName();
-    this.setGreeting();
   }
 
-  private setGreeting() {
-    const h = new Date().getHours();
-    this.greeting = h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : 'Evening';
-  }
-
-  gotoLandingPage() {
-    this.router.navigateByUrl('/landing');
+  startNewMeeting() {
+    this.navigateTo('/meeting');
   }
 
   joinMeeting() {
-    this.router.navigateByUrl('/join-meeting');
-  }
-
-  scheduleMeeting() {
-    this.router.navigateByUrl('/coming-soon');
+    this.navigateTo('/join-meeting');
   }
 
   navigateTo(route: string) {
     this.router.navigateByUrl(route);
-  }
-
-  logout() {
-    this.authService.logout();
-    void this.router.navigateByUrl('/login');
   }
 }

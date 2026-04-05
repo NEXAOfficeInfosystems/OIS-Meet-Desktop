@@ -1,49 +1,57 @@
 :root {
-  --app-header-height: 50px;
-  --app-header-offset: var(--app-header-height);
-  --app-footer-height: 0px; // Footer is hidden or not used in current designs
+  --app-header-height: 48px;
+  --app-sidebar-width: 280px;
+  --light-bg: #ffffff;
+  /* Fluent UI Color Palette (Light) */
+  --fluent-primary: #2563EB;
+  --fluent-primary-hover: #1D4ED8;
+  --fluent-primary-soft: rgba(37, 99, 235, 0.08);
 
-  /* Theme colors */
-  --light-bg: #fcfcfc;
-  --light-text: #1e293b;
+  --fluent-bg-canvas: #F3F2F1;
+  --fluent-bg-surface: #FFFFFF;
+  --fluent-bg-subtle: #FAF9F8;
+  --fluent-bg-hover: #EDEBE9;
 
-  --dark-bg: #0f172a;
-  --dark-text: #f8fafc;
+  --fluent-text-primary: #323130;
+  --fluent-text-secondary: #605E5C;
+  --fluent-text-subtle: #A19F9D;
 
-  /* Premium Design Tokens */
-  --primary-color: #0b5ed7; /* OIS Meet Blue */
-  --primary-color-soft: rgba(11, 94, 215, 0.1);
+  --fluent-border: #EDEBE9;
+  --fluent-border-strong: #D2D0CE;
 
-  --success-color: #22c55e;
-  --danger-color: #ef4444;
-  --warning-color: #f59e0b;
-  
-  --border-color: #e1e5e8;
-  --border-color-soft: #f0f2f4;
-  --bg-card: #ffffff;
-  --bg-main: #f5f7f9;
-  --bg-hover: #f0f2f4;
-  --bg-hover-soft: rgba(0, 0, 0, 0.02);
-  --bg-input: #ffffff;
-  
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
+  /* Fluent Shadow & Elevation */
+  --fluent-shadow: 0 1.6px 3.6px 0 rgba(0, 0, 0, 0.132), 0 0.3px 0.9px 0 rgba(0, 0, 0, 0.108);
+  --fluent-shadow-heavy: 0 6.4px 14.4px 0 rgba(0, 0, 0, 0.132), 0 1.2px 3.6px 0 rgba(0, 0, 0, 0.108);
+
+  /* Fluent Radius */
+  --fluent-radius: 8px;
+  --fluent-radius-lg: 12px;
+
+  /* Legacy compatibility */
+  --primary-color: var(--fluent-primary);
+  --bg-card: var(--fluent-bg-surface);
+  --bg-main: var(--fluent-bg-canvas);
+  --text-primary: var(--fluent-text-primary);
 }
 
 body.theme-dark {
-  --primary-color: #3d8bfd;
-  --primary-color-soft: rgba(61, 139, 253, 0.15);
-  --border-color: #334155;
+  --fluent-primary: #4784FF;
+  --fluent-primary-hover: #6094FF;
+  --fluent-primary-soft: rgba(71, 132, 255, 0.15);
 
-  --border-color-soft: #1e293b;
-  --bg-card: #1e293b;
-  --bg-main: #0f172a;
-  --bg-hover: #334155;
-  --bg-hover-soft: rgba(255, 255, 255, 0.05);
-  --bg-input: #0f172a;
-  
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
+  --fluent-bg-canvas: #111111;
+  --fluent-bg-surface: #201F1E;
+  --fluent-bg-subtle: #252423;
+  --fluent-bg-hover: #292827;
+
+  --fluent-text-primary: #F3F2F1;
+  --fluent-text-secondary: #D2D0CE;
+  --fluent-text-subtle: #A19F9D;
+
+  --fluent-border: #EDEBE9;
+  --fluent-border-strong: #D2D0CE;
+
+  --fluent-shadow: 0 1.6px 3.6px 0 rgba(0, 0, 0, 0.4), 0 0.3px 0.9px 0 rgba(0, 0, 0, 0.3);
 }
 
 
@@ -123,25 +131,31 @@ body.theme-dark {
   transition: all 0.2s ease;
   cursor: pointer;
   border: 1px solid transparent;
-  
+
   &.btn-primary {
     background: var(--primary-color);
     color: white;
-    &:hover { filter: brightness(1.1); }
+
+    &:hover {
+      filter: brightness(1.1);
+    }
   }
-  
+
   &.btn-secondary {
     background: var(--bg-card);
     border-color: var(--border-color);
     color: var(--text-primary);
-    &:hover { background: var(--bg-hover); }
+
+    &:hover {
+      background: var(--bg-hover);
+    }
   }
-  
+
   &.btn-danger {
     background: var(--danger-color);
     color: white;
   }
-  
+
   &.btn-icon {
     padding: 0.5rem;
     display: flex;
@@ -149,6 +163,10 @@ body.theme-dark {
     justify-content: center;
     background: transparent;
     color: var(--text-secondary);
-    &:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    &:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
   }
-}
+}
