@@ -30,7 +30,7 @@ export const routes: Routes = [
       { path: 'landing', component: LandingComponent },
       { path: 'join-meeting', component: JoinMeetingComponent },
       { path: 'chat', component: ChatComponent },
-      { path: 'activity', component: ActivityFeedComponent },
+      { path: 'activity', component: ChatComponent, data: { viewMode: 'activity' } },
       { path: 'notifications', component: NotificationsPanelComponent },
       { path: 'calls', component: CallsCenterComponent },
       { path: 'teams', component: TeamsPanelComponent },

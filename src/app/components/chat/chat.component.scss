@@ -2379,3 +2379,41 @@
     border-radius: inherit;
   }
 }
+/* =====================================================
+   ACTIVITY SIDEBAR
+===================================================== */
+.activity-sidebar-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: #ffffff;
+
+  .activity-list-container {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+}
+
+/* =====================================================
+   MESSAGE HIGHLIGHT
+===================================================== */
+.highlight-message {
+  animation: highlightAnimation 2.5s ease-out;
+  border-radius: 8px;
+}
+
+@keyframes highlightAnimation {
+  0% {
+    background-color: rgba(0, 71, 186, 0.2);
+    box-shadow: 0 0 15px rgba(0, 71, 186, 0.3);
+  }
+  70% {
+    background-color: rgba(0, 71, 186, 0.1);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}

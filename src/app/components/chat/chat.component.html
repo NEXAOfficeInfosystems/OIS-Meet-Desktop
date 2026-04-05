@@ -23,7 +23,8 @@
       <button class="btn btn-icon-sm"><i class="bi bi-plus-lg"></i></button>
     </div> -->
 
-    <div class="team-scroll-area">
+    <!-- CHAT SIDEBAR CONTENT -->
+    <div class="team-scroll-area" *ngIf="viewMode() === 'chat'">
       <!-- TEAMS SECTION -->
       <div class="dm-section">
         <div class="dm-header px-3 py-2 d-flex justify-content-between align-items-center cursor-pointer"
@@ -181,6 +182,12 @@
         </ul>
       </div>
     </div>
+
+    <!-- ACTIVITY SIDEBAR CONTENT -->
+    <div class="activity-scroll-area" *ngIf="viewMode() === 'activity'">
+      <app-activity-feed></app-activity-feed>
+    </div>
+
   </div>
 
   <!-- MAIN CONTENT AREA (Conversation Feed) -->
@@ -266,7 +273,7 @@
                 conversation!</p>
             </div>
 
-            <div class="message-group" *ngFor="let msg of messages"
+            <div class="message-group" *ngFor="let msg of messages" [id]="'msg-' + (msg.id || msg.Id)"
               [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
               <div class="message-avatar-col" *ngIf="msg.senderId?.toString() !== currentUserId?.toString()">
                 <img *ngIf="msg.senderAvatarUrl" [src]="fileService.getFileUrl(msg.senderAvatarUrl)" class="msg-avatar rounded-circle"

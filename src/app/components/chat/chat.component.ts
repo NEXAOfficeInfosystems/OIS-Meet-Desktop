@@ -1,12 +1,13 @@
 import {
   Component, OnInit, ViewChild, ElementRef,
-  AfterViewChecked, OnDestroy, ChangeDetectorRef, HostListener
+  AfterViewChecked, OnDestroy, ChangeDetectorRef, HostListener,
+  effect, signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, Subscription, takeUntil } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import * as signalR from '@microsoft/signalr';
 import { Store } from '@ngrx/store';
 import { messagesFeature } from '../../core/state/messages/messages.reducer';
@@ -31,6 +32,9 @@ import { CallService, CallType, IncomingCall } from '../../core/services/call.se
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { SettingsService, UserSettings } from '../../core/services/settings.service';
 import { PreviewService } from '../../core/services/preview.service';
+import { NotificationService } from '../../core/services/notification.service';
+import { NotificationRecipient } from '../../core/models/notification.models';
+import { ActivityFeedComponent } from '../activity-feed/activity-feed.component';
 
 
 declare var bootstrap: any;
@@ -46,7 +50,14 @@ interface InAppToast {
 @Component({
   selector: 'app-chat',
   standalone: true,
-  imports: [CommonModule, FormsModule, HttpClientModule, MeetingLinkPipe, SafeHtmlPipe],
+  imports: [
+    CommonModule, 
+    FormsModule, 
+    HttpClientModule, 
+    MeetingLinkPipe, 
+    SafeHtmlPipe,
+    ActivityFeedComponent
+  ],
   templateUrl: './chat.component.html',
   styleUrls: ['./chat.component.scss']
 })
@@ -54,7 +65,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   @ViewChild('chatMessages') private chatMessagesContainer!: ElementRef;
   @ViewChild('fileInput') fileInput!: ElementRef;
 
-  // â”€â”€ User / conversation state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————
+  viewMode = signal<'chat' | 'activity'>('chat');
   users: any[] = [];
   filteredUsers: any[] = [];
   selectedUser: any = null;
@@ -68,7 +80,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   mainActiveTab: 'chat' | 'attachments' | 'info' = 'chat';
   attachmentsSearchQuery: string = '';
   groupMembersSearchQuery: string = '';
-  // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————
   messages: any[] = [];
   newMessage: string = '';
   formattedMessage: string = '';
@@ -120,7 +132,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   isDraggingCrop = false;
   lastDragPos = { x: 0, y: 0 };
 
-  // â”€â”€ UI flags â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————
   isLoading: boolean = false;
   isSendingFile: boolean = false;
   isSendingMessage: boolean = false;
@@ -149,7 +161,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   };
 
 
-  // â”€â”€ Teams Workspace State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————
   activeView: 'chat' | 'teams' = 'teams';
   activeTeam: string = '';
   activeChannel: string = '';
@@ -162,14 +174,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   activityFeed: any[] = [];
 
-  // â”€â”€ In-app toasts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————
   toasts: InAppToast[] = [];
   private toastCounter = 0;
 
-  // â”€â”€ Image viewer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————
   selectedImage: any = null;
 
-  // â”€â”€ Private state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————
   private typingTimeout: any;
   private callTimeout: any;
   private shouldScroll: boolean = false;
@@ -201,22 +213,43 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private sanitizer: DomSanitizer,
     private cdr: ChangeDetectorRef,
     private router: Router,
+    private route: ActivatedRoute,
     private store: Store,
     private settingsService: SettingsService,
-    private previewService: PreviewService
+    private previewService: PreviewService,
+    public notificationService: NotificationService
   ) {
     this.currentUserId = this.sessionService.getOISMeetUserId();
+
+    // Wire up activity selection to chat loading
+    // Wire up notification selection to chat loading
+    effect(() => {
+      const selected = this.notificationService.selectedNotification();
+      const mode = this.viewMode();
+      if (selected && mode === 'activity') {
+        this.handleNotificationSelection(selected);
+      }
+    });
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ——————————————————————————————————————————————————————————————————————————————
   // LIFECYCLE
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ——————————————————————————————————————————————————————————————————————————————
 
   ngOnInit(): void {
     this.settingsService.settings$.pipe(takeUntil(this.destroy$)).subscribe(s => {
       this.settings = s;
       this.cdr.detectChanges();
     });
+
+    this.route.data.pipe(takeUntil(this.destroy$)).subscribe(data => {
+      this.viewMode.set(data['viewMode'] || 'chat');
+      if (this.viewMode() === 'activity') {
+        this.notificationService.loadInitial();
+      }
+      this.cdr.detectChanges();
+    });
+
     this.currentUserId = this.sessionService.getOISMeetUserId() || null;
 
     if (this.currentUserId) {
@@ -757,7 +790,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.editContent = '';
   }
 
-  // â”€â”€ FILE UPLOAD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————
+  // FILE UPLOAD
+  // ——————————————————————————————————————————————————————————————————————————————
 
   onFileSelected(event: any): void {
     const file: File = event.target.files[0];
@@ -787,9 +822,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
 
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ——————————————————————————————————————————————————————————————————————————————
   // COMPANY CHANGE
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ——————————————————————————————————————————————————————————————————————————————
 
   openPreview(file: any): void {
     const url = this.fileService.getFileUrl(file.fileUrl || file.FileUrl || file.url);
@@ -1272,8 +1307,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
             });
           }
 
-          // â”€â”€ FIX: force new array reference so Angular re-evaluates
-          //    unreadCount > 0 for bold and badge in the template â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // ——————————————————————————————————————————————————————————————————————————————
+          //    unreadCount > 0 for bold and badge in the template ——————————————————————
           this.totalUnreadCount = this.users.reduce(
             (s, u) => s + (u.unreadCount || 0), 0
           );
@@ -1282,7 +1317,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           this.sortUsersByLastMessage();
           this.applySearch();
 
-          if (!this.selectedUser) {
+          if (!this.selectedUser && this.viewMode() !== 'activity') {
             this.autoLoadFirstChat();
           }
         },
@@ -1424,19 +1459,62 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.selectChannel(team.channels[0]);
   }
 
+  private async handleNotificationSelection(recipient: NotificationRecipient) {
+    const notification = recipient.notification;
+    if (!notification || !notification.entityId) {
+      console.warn('Notification selection skipped: No entityId found.');
+      return;
+    }
+
+    // Ensure we are in activity mode
+    if (this.viewMode() !== 'activity') return;
+
+    const contextId = notification.contextId;
+    const entityId = notification.entityId;
+
+    let target = this.users.find(u => 
+      (contextId && (u.conversationId === contextId || u.id === contextId)) ||
+      (u.conversationId === entityId || u.id === entityId)
+    );
+    
+    if (target) {
+        await this.selectUser(target);
+    }
+
+    this.mainActiveTab = 'chat';
+    if (notification.entityType === 'Message') {
+      this.scrollToMessage(notification.entityId);
+    }
+  }
+
+  private scrollToMessage(messageId: string) {
+    setTimeout(() => {
+      let attempts = 0;
+      const interval = setInterval(() => {
+        const element = document.getElementById(`msg-${messageId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.classList.add('highlight-message');
+          setTimeout(() => element.classList.remove('highlight-message'), 5000);
+          clearInterval(interval);
+        }
+        if (++attempts > 20) clearInterval(interval);
+      }, 500);
+    }, 500);
+  }
+
   selectChannel(channel: string): void {
     this.activeChannel = channel;
     this.messages = [];
     this.currentPage = 1;
     this.hasMoreMessages = true;
 
-    const groupConv = this.users.find(u => u.name === this.activeTeam && u.isGroup);
+    const groupConv = this.users.find(u => (u.name === this.activeTeam || u.fullName === this.activeTeam) && u.isGroup);
 
     if (groupConv && groupConv.conversationId) {
       this.selectedConversation = { id: groupConv.conversationId };
       this.loadMessages(groupConv.conversationId);
 
-      // Populate mention list for channels
       this.mentionList = (groupConv.participants || [])
         .filter((p: any) => p.userId?.toString() !== this.currentUserId?.toString())
         .map((p: any) => ({
@@ -1447,7 +1525,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           avatarColor: this.getMemberAvatarColor(p.name || p.fullName)
         }));
     } else {
-      console.log(`No active conversation found for ${this.activeTeam}`);
       this.mentionList = [];
     }
   }
@@ -1458,10 +1535,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     return user?.avatarColor || '#3b82f6';
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-  // MEETING LINK CLICK â€” FIX: validate then join as participant
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ——————————————————————————————————————————————————————————————————————————————
+  // ——————————————————————————————————————————————————————————————————————————————
+  // MEETING LINK CLICK — FIX: validate then join as participant
+  // ——————————————————————————————————————————————————————————————————————————————
 
   /**
    * Event-delegation handler on each text-message bubble.
@@ -1572,15 +1649,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // SHARE MEETING ID â€” FIX: auto-select first user if none selected
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-  /**
-   * FIX for Issue 1:
-   * Called when the meet-now-dialog fires the 'ois-share-meeting-id' event.
-   *
-   * Priority:
-   *   1. Use the currently selected conversation (user already open in chat).
-   *   2. If no conversation is open, auto-select the FIRST user in the list,
-   *      create/get their conversation, then send the message.
-   */
+
+  // SEARCH
 
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // SEARCH

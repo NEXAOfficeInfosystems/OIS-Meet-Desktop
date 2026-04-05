@@ -1,4 +1,6 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu } = require('electron');
+const electron = require('electron');
+console.log('ELECTRON OBJECT KEYS:', Object.keys(electron));
+const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, session } = electron;
 const path = require('path');
 const fs = require('fs');
 // TEMP SSL BYPASS
@@ -177,7 +179,7 @@ function createTray() {
 
 app.whenReady().then(() => {
   // Automatically grant camera/microphone permissions in Electron
-  const { session } = require('electron');
+  
   
   session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
     if (permission === 'media') return true;
