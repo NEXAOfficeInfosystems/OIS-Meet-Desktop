@@ -88,7 +88,9 @@
           <!-- CAPTCHA Section -->
           <div class="captcha-row mb-2">
             <div class="captcha-display">
-              <span class="captcha-text">th0m9Q</span>
+              <span class="captcha-text">
+                <img [src]="captcha?.imageBase64" alt="Captcha">
+              </span>
             </div>
             <button type="button" class="refresh-btn" (click)="getCaptcha()" title="Refresh">
               <i class="bi bi-arrow-clockwise"></i>
