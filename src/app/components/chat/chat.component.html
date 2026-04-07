@@ -448,7 +448,7 @@
               </button>
               <span class="v-divider-v2"></span>
 
-              <div class="emoji-picker-container" style="position: relative;">
+              <!-- <div class="emoji-picker-container" style="position: relative;">
                 <button class="tool-btn-v2" id="emojiPickerBtn" (click)="showEmojiPicker($event)" title="Emoji">
                   <i class="bi bi-emoji-smile"></i>
                 </button>
@@ -457,7 +457,7 @@
                   <button class="btn btn-light emoji-btn p-1" *ngFor="let e of commonEmojis" (click)="addEmoji(e)"
                     (mousedown)="$event.preventDefault()">{{ e }}</button>
                 </div>
-              </div>
+              </div> -->
             </div>
 
             <div class="message-input-wrapper-v2">
@@ -492,9 +492,8 @@
                       <button class="action-btn-v2" id="emojiPickerBtn" (click)="showEmojiPicker($event)" title="Emoji">
                         <i class="bi bi-emoji-smile"></i>
                       </button>
-                      <div class="emoji-picker-popover shadow border rounded-3 p-2 bg-white"
-                        *ngIf="isEmojiPickerVisible"
-                        style="position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; min-width: 190px;">
+                      <div class="emoji-picker-popover shadow border rounded p-2 bg-white" *ngIf="isEmojiPickerVisible"
+                        style="position: absolute; bottom: calc(100% + 10px); left: -33px; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; min-width: 190px;">
                         <button class="btn btn-light emoji-btn p-1" *ngFor="let e of commonEmojis" (click)="addEmoji(e)"
                           (mousedown)="$event.preventDefault()">{{ e }}</button>
                       </div>
