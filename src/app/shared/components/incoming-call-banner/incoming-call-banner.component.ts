@@ -9,98 +9,121 @@ import { Router } from '@angular/router';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="call-banner shadow-lg animate-in" *ngIf="callService.incomingCall() as call">
-      <div class="banner-content">
-        <div class="user-avatar" [style.background-color]="'#4f46e5'">
+    <div class="global-call-banner shadow-lg animate-in" *ngIf="callService.incomingCall() as call">
+      <div class="global-call-banner__icon">
+        <div class="avatar-circle">
           {{ call.fromUserName.charAt(0).toUpperCase() }}
         </div>
-        <div class="call-info">
-          <span class="user-name">{{ call.fromUserName }}</span>
-          <span class="call-type">{{ call.isMeetingInvite ? 'Meeting Invite' : 'Incoming ' + call.callType + ' Call' }}</span>
+      </div>
+      <div class="global-call-banner__content">
+        <div class="global-call-banner__title">{{ call.fromUserName }}</div>
+        <div class="global-call-banner__meta">
+          {{ call.isMeetingInvite ? 'Meeting Invite' : 'Incoming ' + call.callType + ' Call' }}
         </div>
-        <div class="actions">
-          <button class="btn-action reject" (click)="reject()" title="Reject">
-            <i class="bi bi-telephone-x-fill"></i>
-          </button>
-          <button class="btn-action accept" (click)="accept()" title="Accept">
-            <i class="bi bi-telephone-fill"></i>
-          </button>
-        </div>
+      </div>
+      <div class="global-call-banner__actions">
+        <button class="action-btn action-btn--reject" type="button" (click)="reject()">
+          Decline
+        </button>
+        <button class="action-btn action-btn--accept" type="button" (click)="accept()">
+          Accept
+        </button>
       </div>
     </div>
   `,
   styles: [`
-    .call-banner {
+    .global-call-banner {
       position: fixed;
-      top: 60px; /* Below title bar */
+      top: 58px;
       left: 50%;
       transform: translateX(-50%);
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      padding: 12px 20px;
-      z-index: 10000;
-      width: 420px;
-      max-width: 90vw;
-    }
-
-    .banner-content {
+      z-index: 10950;
+      width: min(720px, calc(100vw - 32px));
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
+      padding: 12px 16px;
+      border: 1px solid #dbe7f7;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
     }
 
-    .user-avatar {
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: 700;
-      font-size: 18px;
-    }
-
-    .call-info {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      
-      .user-name {
-        font-weight: 700;
-        color: #1a202c;
-        font-size: 15px;
-      }
-      .call-type {
-        font-size: 13px;
-        color: #718096;
-      }
-    }
-
-    .actions {
-      display: flex;
-      gap: 12px;
-    }
-
-    .btn-action {
+    .global-call-banner__icon {
       width: 40px;
       height: 40px;
       border-radius: 50%;
-      border: none;
       display: flex;
       align-items: center;
       justify-content: center;
+      background: #ffffff;
+      border: 1px solid #dbe7f7;
+      flex-shrink: 0;
+    }
+
+    .avatar-circle {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: #4f46e5;
       color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+
+    .global-call-banner__content {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .global-call-banner__title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    .global-call-banner__meta {
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+
+    .global-call-banner__actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .action-btn {
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 0.82rem;
+      font-weight: 600;
       cursor: pointer;
-      transition: transform 0.2s;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+    }
+
+    .action-btn--reject {
+      border-color: #ef4444;
+      background: #ffffff;
+      color: #dc2626;
 
       &:hover {
-        transform: scale(1.1);
+        background: #fef2f2;
       }
+    }
 
-      &.reject { background: #ef4444; }
-      &.accept { background: #10b981; }
+    .action-btn--accept {
+      background: #10b981;
+      color: #ffffff;
+
+      &:hover {
+        background: #059669;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+      }
     }
 
     .animate-in {
