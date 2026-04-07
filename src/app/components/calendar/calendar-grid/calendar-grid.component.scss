@@ -75,14 +75,18 @@
     .week-grid {
       display: flex;
       flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
 
       .day-column {
         flex: 1;
         border-right: 1px solid var(--border-color);
         position: relative;
+        min-width: 0;
 
         .grid-cell {
-          height: 48px;
+          height: 52px; // Slightly taller for better readability
           border-bottom: 1px solid var(--border-color-soft);
           position: relative;
           cursor: pointer;
@@ -95,24 +99,34 @@
             position: absolute;
             left: 2px;
             right: 2px;
-            padding: 4px 8px;
-            border-radius: 4px;
+            padding: 4px 10px;
+            border-radius: 6px;
             color: white;
             z-index: 10;
             overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            font-size: 12px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+            font-size: 11px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.2s;
+
+            &:hover {
+              transform: scale(1.02);
+              z-index: 20;
+            }
 
             .event-title {
-              font-weight: 600;
+              font-weight: 700;
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
+              line-height: 1.2;
             }
 
             .event-time {
-              font-size: 10px;
+              font-size: 9px;
               opacity: 0.9;
+              display: block;
+              margin-top: 1px;
             }
           }
         }
@@ -122,33 +136,29 @@
     .month-grid {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
-      grid-auto-rows: 1fr;
+      grid-auto-rows: minmax(100px, 1fr);
       flex: 1;
-      // overflow: auto;
-      padding-left: 20px;
-
-      // &::-webkit-scrollbar {
-      //   width: 6px;
-      // }
-
-      // &::-webkit-scrollbar-thumb {
-      //   background: var(--border-color);
-      //   border-radius: 3px;
-      // }
+      min-height: 0;
+      overflow-y: auto;
+      border-top: 1px solid var(--border-color);
 
       .month-cell {
         border-right: 1px solid var(--border-color-soft);
         border-bottom: 1px solid var(--border-color-soft);
-        padding: 4px;
-        min-height: 80px;
+        padding: 6px;
         background: var(--bg-card);
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
 
         .cell-day {
-          font-weight: 500;
+          font-weight: 600;
           margin-bottom: 4px;
           color: var(--text-secondary);
-          font-size: 12px;
+          font-size: 11px;
           opacity: 0.7;
+          text-align: right;
         }
 
         &.other-month {
@@ -159,19 +169,21 @@
         .event-pill {
           background: var(--primary-color);
           color: white;
-          font-size: 11px;
-          padding: 2px 6px;
-          border-radius: 3px;
-          margin-bottom: 2px;
+          font-size: 10px;
+          font-weight: 600;
+          padding: 3px 8px;
+          border-radius: 4px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
           cursor: pointer;
-          transition: transform 0.1s ease;
+          transition: all 0.2s;
+          border-left: 3px solid rgba(0, 0, 0, 0.1);
 
           &:hover {
             filter: brightness(1.1);
-            transform: translateX(2px);
+            transform: translateX(4px);
+            box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
           }
         }
       }

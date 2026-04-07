@@ -71,6 +71,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   filteredInviteUsers: any[] = [];
   inviteSearchQuery: string = '';
   isInviting: boolean = false;
+  isVoiceMode: boolean = false;
+  showAddParticipantPanel: boolean = false;
 
   private readonly livekitEnabled: boolean = !!(environment as any)?.livekitEnabled;
   private livekitInitializing: boolean = false;
@@ -257,7 +259,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         this.ngZone.run(() => {
           this.liveTranscriptionStatus = status;
           if (status === 'error') {
-            this.liveTranscriptionError = 'Reconnecting to transcription server…';
+            this.liveTranscriptionError = 'Reconnecting to transcription server...';
           } else if (status === 'connected' || status === 'viewing') {
             this.liveTranscriptionError = null;
           }
@@ -1941,6 +1943,58 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+
+  toggleVoiceMode() {
+    this.isVoiceMode = true;
+    this.cdr.markForCheck();
+  }
+
+  toggleVideoMode() {
+    this.isVoiceMode = false;
+    this.cdr.markForCheck();
+  }
+
+  toggleParticipants() {
+    this.showParticipants = !this.showParticipants;
+    if (this.showParticipants) {
+      this.showChat = false;
+      this.showAddParticipantPanel = false;
+    }
+    this.cdr.markForCheck();
+  }
+
+  toggleChat() {
+    this.showChat = !this.showChat;
+    if (this.showChat) {
+      this.showParticipants = false;
+      this.showAddParticipantPanel = false;
+    }
+    this.cdr.markForCheck();
+  }
+
+  toggleLiveTranscriptionPanel() {
+    this.showLiveTranscriptionPanel = !this.showLiveTranscriptionPanel;
+    if (this.showLiveTranscriptionPanel) {
+      this.showChat = false;
+      this.showParticipants = false;
+      this.showAddParticipantPanel = false;
+    }
+    this.cdr.markForCheck();
+  }
+
+  openAddParticipantPanel() {
+    this.showAddParticipantPanel = true;
+    this.showChat = false;
+    this.showParticipants = false;
+    this.loadOisMeetUsers();
+    this.cdr.markForCheck();
+  }
+
+  closeAddParticipantPanel() {
+    this.showAddParticipantPanel = false;
+    this.cdr.markForCheck();
+  }
+
   private schedulePeerRestart(connectionId: string, targetName: string): void {
     const attempts = this.peerRestartAttempts.get(connectionId) ?? 0;
     if (attempts >= this.maxPeerRestartAttempts) {
@@ -2489,9 +2543,6 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       bridge,
       isHost
     ); 
-  }
-  toggleLiveTranscriptionPanel(): void {
-    this.showLiveTranscriptionPanel = !this.showLiveTranscriptionPanel;
   }
 
   clearLiveTranscription(): void {

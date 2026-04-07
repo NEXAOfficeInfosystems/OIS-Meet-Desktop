@@ -195,7 +195,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private callTimeout: any;
   private shouldScroll: boolean = false;
   private destroy$ = new Subject<void>();
-  private isCompanyChanging = false;
+  isCompanyChanging = false;
   private isSwitchingUser = false;
   private conversationSwitch$ = new Subject<void>();
   private companySubscription!: Subscription;
