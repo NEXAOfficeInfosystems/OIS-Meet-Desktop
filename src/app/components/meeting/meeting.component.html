@@ -2,11 +2,11 @@
 <div class="meeting-container" [class.sidebars-open]="showParticipants || showChat">
 
   <!-- Loading State -->
-  <div class="loading-overlay" *ngIf="isLoading" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #1a1a1a; display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; gap: 16px;">
+  <div class="loading-overlay" *ngIf="isLoading" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #f8fafc; display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; gap: 16px;">
     <div class="spinner-border text-primary" role="status">
       <span class="visually-hidden">Loading...</span>
     </div>
-    <p>Loading meeting...</p>
+    <p class="text-muted fw-medium">Loading meeting...</p>
   </div>
 
   <!-- Main Meeting Area -->
@@ -19,7 +19,7 @@
           <i class="bi bi-shield-check-fill text-primary fs-4"></i>
         </div>
         <div class="meeting-title-info">
-          <h6 class="mb-0 fw-bold text-white">{{ meetingTopic || 'OIS Meet Session' }}</h6>
+          <h6 class="mb-0 fw-bold">{{ meetingTopic || 'OIS Meet Session' }}</h6>
           <div class="d-flex align-items-center gap-2 mt-1">
             <span class="badge bg-danger-soft text-danger fs-xxs">● LIVE</span>
             <span class="meeting-timer fs-xs text-muted">{{ formattedDuration }}</span>
@@ -32,10 +32,10 @@
       </div>
 
       <div class="top-right d-flex align-items-center gap-2">
-        <div class="meeting-id-pill px-3 py-1 bg-dark rounded-pill border border-secondary fs-xs text-muted">
-          <i class="bi bi-lock-fill me-2 opacity-50"></i>{{ meetingId }}
+        <div class="meeting-id-pill px-3 py-1 bg-light rounded-pill border border-secondary fs-xs text-muted" style="max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          <i class="bi bi-lock-fill me-2 opacity-50"></i>ID: {{ (displayMeetingId || meetingId) | slice:0:20 }}
         </div>
-        <button class="btn btn-icon-sm text-white hover-bg-dark" (click)="copyMeetingLink($event)" title="Copy Link">
+        <button class="btn btn-icon-sm text-dark hover-bg-light" (click)="copyMeetingCode($event)" title="Copy Meeting Info">
           <i class="bi bi-link-45deg"></i>
         </button>
       </div>
@@ -53,48 +53,57 @@
       </div>
 
       <!-- Participant Videos Grid -->
-      <div class="modern-video-grid" [class.grid-compact]="participants.length > 4">
+      <div class="modern-video-grid" [class]="getGridLayout()">
 
         <!-- LOCAL VIDEO TILE -->
         <div class="video-card local-tile" [class.active-speaker]="isSpeaking">
           <video #localVideo autoplay playsinline [muted]="true"></video>
+          
+          <div class="avatar-view" *ngIf="isVideoOff">
+            <div class="avatar-circle" [style.background-color]="'#4f46e5'">
+              {{ getInitials(userFullName) }}
+            </div>
+          </div>
+
           <div class="card-overlay">
             <div class="user-label">
-              <span class="user-name">You</span>
               <i class="bi" [class.bi-mic-fill]="!isMuted" [class.bi-mic-mute-fill]="isMuted" [class.text-danger]="isMuted"></i>
-            </div>
-            <div class="avatar-view" *ngIf="isVideoOff">
-              <div class="avatar-circle" [style.background-color]="'#4f46e5'">
-                {{ getInitials(userFullName) }}
-              </div>
+              <span class="user-name">You</span>
             </div>
           </div>
         </div>
 
         <!-- REMOTE PARTICIPANTS -->
-        <div class="video-card" *ngFor="let p of participants" [class.active-speaker]="p.isSpeaking">
-          <video *ngIf="!p.isVideoOff" [id]="'video-' + p.id" autoplay playsinline></video>
+        <div class="video-card" *ngFor="let p of participants; trackBy: trackById" [class.active-speaker]="p.isSpeaking">
+
+          <video *ngIf="!p.isVideoOff" [id]="'video-' + p.id" [srcObject]="p.stream" autoplay playsinline></video>
+          
+          <div class="avatar-view" *ngIf="p.isVideoOff">
+            <div class="avatar-circle" [style.background-color]="p.avatarColor || '#3b82f6'">
+              {{ getInitials(p.name) }}
+            </div>
+          </div>
+
           <div class="card-overlay">
             <div class="user-label">
-              <span class="user-name">{{ p.name }}</span>
               <i class="bi" [class.bi-mic-fill]="!p.isMuted" [class.bi-mic-mute-fill]="p.isMuted" [class.text-danger]="p.isMuted"></i>
-            </div>
-            <div class="avatar-view" *ngIf="p.isVideoOff">
-              <div class="avatar-circle" [style.background-color]="p.avatarColor || '#3b82f6'">
-                {{ getInitials(p.name) }}
-              </div>
+              <span class="user-name">{{ p.name }}</span>
             </div>
           </div>
         </div>
 
-        <!-- Placeholder for symmetry if needed -->
-        <div class="video-card placeholder-tile" *ngIf="participants.length < 2">
-          <div class="placeholder-content text-center opacity-30">
-            <i class="bi bi-people-fill fs-1 mb-2 d-block"></i>
-            <p class="fs-xs mb-0">Waiting for others to join...</p>
+        <!-- Placeholder for symmetry / Invite prompt -->
+        <div class="video-card placeholder-tile" *ngIf="participants.length < 3">
+          <div class="placeholder-content">
+            <i class="bi bi-person-plus-fill"></i>
+            <p>Waiting for others...</p>
+            <button class="btn btn-primary btn-sm rounded-pill px-3 mt-2" (click)="openInviteDialog()">
+              Invite Friends
+            </button>
           </div>
         </div>
       </div>
+
     </div>
 
     <!-- Modern Bottom Control Bar -->
@@ -102,7 +111,43 @@
       <div class="controls-wrapper">
         
         <!-- Left Side: Interaction -->
-        <div class="ctrl-group">
+        <div class="ctrl-group position-relative">
+          <button class="icon-btn-circle" (click)="openInviteDialog()" title="Add Participant">
+            <i class="bi bi-person-plus"></i>
+          </button>
+          
+          <!-- Invite Friends Popover -->
+          <div class="invite-popover shadow-lg border rounded-4 animate-slide-up" *ngIf="showInvitePopover">
+            <div class="popover-header p-3 border-bottom d-flex align-items-center justify-content-between">
+              <h6 class="mb-0 fw-bold">Invite Participants</h6>
+              <button class="btn-close fs-xxs" (click)="showInvitePopover = false"></button>
+            </div>
+            <div class="popover-body p-0">
+              <div class="search-box p-2 border-bottom">
+                <div class="position-relative">
+                  <i class="bi bi-search position-absolute start-0 top-50 translate-middle-y ms-2 text-muted fs-xs"></i>
+                  <input type="text" class="form-control form-control-sm ps-4 bg-light border-0 rounded-pill" 
+                    placeholder="Search teammates..." [(ngModel)]="inviteSearchQuery" (input)="filterInviteUsers()">
+                </div>
+              </div>
+              <div class="invite-user-list overflow-auto" style="max-height: 280px; min-width: 300px;">
+                <div class="invite-user-item d-flex align-items-center gap-3 p-3 cursor-pointer" 
+                  *ngFor="let u of filteredInviteUsers" (click)="inviteUser(u)">
+                  <div class="avatar-sm" [style.background-color]="u.avatarColor || '#4f46e5'">
+                    {{ u.fullName.charAt(0).toUpperCase() }}
+                  </div>
+                  <div class="flex-grow-1 min-w-0">
+                    <div class="fw-bold fs-xs text-truncate">{{ u.fullName }}</div>
+                    <div class="fs-xxs text-muted text-truncate">{{ u.email || 'OIS Member' }}</div>
+                  </div>
+                  <button class="btn btn-primary btn-xs rounded-pill px-3" [disabled]="isInviting">Invite</button>
+                </div>
+                <div class="p-4 text-center text-muted fs-xs" *ngIf="filteredInviteUsers.length === 0">
+                  No users found
+                </div>
+              </div>
+            </div>
+          </div>
           <button class="icon-btn-circle" [class.active]="showParticipants" (click)="showParticipants = !showParticipants; showChat = false" title="Participants">
             <i class="bi bi-people"></i>
             <span class="badge" *ngIf="participants.length > 0">{{ participants.length }}</span>
@@ -141,7 +186,7 @@
             <button class="icon-btn-circle" data-bs-toggle="dropdown" title="More Options">
               <i class="bi bi-three-dots-vertical"></i>
             </button>
-            <ul class="dropdown-menu dropdown-menu-dark p-2 border-0 shadow-lg">
+            <ul class="dropdown-menu p-2 border-0 shadow-lg">
               <li><button class="dropdown-item rounded py-2" (click)="copyMeetingCode($event)"><i class="bi bi-clipboard me-2"></i>Copy Meeting ID</button></li>
               <li><button class="dropdown-item rounded py-2" (click)="toggleLiveTranscription()"><i class="bi bi-chat-square-text me-2"></i>Transcription</button></li>
               <li><hr class="dropdown-divider opacity-10"></li>
@@ -165,7 +210,7 @@
     <div class="sidebar-content h-100 overflow-auto p-3" *ngIf="showParticipants">
       <div class="sec-header mb-3 d-flex justify-content-between align-items-center">
         <span class="fs-xs fw-bold text-uppercase text-muted letter-spacing-1">In this meeting</span>
-        <span class="badge bg-dark rounded-pill">{{ participants.length + 1 }}</span>
+        <span class="badge bg-light text-dark border rounded-pill">{{ participants.length + 1 }}</span>
       </div>
       
       <div class="participant-meeting-item d-flex align-items-center gap-3 mb-3">
@@ -192,10 +237,10 @@
       <div class="chat-messages-container flex-grow-1 overflow-auto p-3">
         <div class="meeting-msg mb-4" *ngFor="let msg of chatMessages" [class.is-me]="msg.isMe">
           <div class="d-flex align-items-center gap-2 mb-1">
-            <span class="fw-bold fs-xxs">{{ msg.isMe ? 'You' : msg.sender }}</span>
+            <span class="fw-bold fs-xxs" [class.text-primary]="msg.isMe">{{ msg.isMe ? 'You' : msg.sender }}</span>
             <span class="text-muted fs-xxxs">{{ msg.timestamp | date:'shortTime' }}</span>
           </div>
-          <div class="msg-bubble p-2 rounded bg-dark border border-secondary fs-xs">{{ msg.message }}</div>
+          <div class="msg-bubble p-2 rounded chat-bubble-theme fs-xs">{{ msg.message }}</div>
         </div>
         <div *ngIf="chatMessages.length === 0" class="text-center py-5 opacity-30">
           <i class="bi bi-chat-dots fs-2 mb-2 d-block"></i>
@@ -204,8 +249,8 @@
       </div>
 
       <div class="chat-input-row p-3 border-top">
-        <div class="chat-input-wrapper d-flex align-items-center gap-2 bg-dark rounded-3 px-2 py-1 border border-secondary">
-          <input type="text" class="flex-grow-1 border-0 bg-transparent text-white fs-xs py-1 px-2" 
+        <div class="chat-input-wrapper d-flex align-items-center gap-2 chat-input-theme rounded-3 px-2 py-1 border">
+          <input type="text" class="flex-grow-1 border-0 bg-transparent theme-text fs-xs py-1 px-2" 
             placeholder="Send a message..." [(ngModel)]="newMessage" (keydown.enter)="sendMessage()">
           <button class="btn btn-icon-sm text-primary p-0" (click)="sendMessage()" [disabled]="!newMessage.trim()">
             <i class="bi bi-send-fill" style="transform: rotate(45deg);"></i>

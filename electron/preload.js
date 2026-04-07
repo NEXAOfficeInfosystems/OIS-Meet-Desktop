@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld('oisMeet', {
     ipcRenderer.send('open-meeting-window', payload);
   },
 
+  isMeetingActive: () => {
+    return ipcRenderer.invoke('is-meeting-active');
+  },
+
   // Allow renderer to persist auth data in main process and retrieve it
   // (used to restore auth state in newly opened meeting windows).
   setAuthData: (authData) => {

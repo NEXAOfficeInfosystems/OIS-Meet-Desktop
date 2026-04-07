@@ -5,6 +5,8 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { SessionService }  from '../../core/services/session.service';
 import { MeetingService }  from '../../core/services/meeting.service';
+import { CallService } from '../../core/services/call.service';
+
 
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
@@ -38,7 +40,9 @@ export class MeetNowDialogComponent implements OnInit {
     private router:         Router,
     private meetingService: MeetingService,
     private sessionService: SessionService,
+    private callService: CallService,
     @Inject(MAT_DIALOG_DATA) public data: any
+
   ) {
     this.mode = data.mode;
   }
@@ -164,13 +168,24 @@ export class MeetNowDialogComponent implements OnInit {
    * CHANGED: now calls openMeetingWindow() instead of router.navigate().
    * The meeting opens in a new Electron BrowserWindow (or browser tab).
    */
-  joinMeeting(meetingId: string): void {
+  async joinMeeting(meetingId: string): Promise<void> {
     const userId   = this.sessionService.getOISMeetUserId();
     const userName = this.sessionService.getFullName() || 'User';
 
     if (!userId) {
       this.snackBar.open('User not authenticated', 'Close', { duration: 3000 });
       return;
+    }
+
+    // Single-meeting guard
+    const electronApi = (window as any).oisMeet;
+    if (electronApi?.isElectron && typeof electronApi.isMeetingActive === 'function') {
+      const isActive = await electronApi.isMeetingActive();
+      if (isActive) {
+        this.snackBar.open('You are already in an active meeting. Please leave it before joining another.', 'Close', { duration: 5000 });
+        this.dialogRef.close();
+        return;
+      }
     }
 
     this.meetingService.joinMeeting({ meetingId, userId, userName }).subscribe({
@@ -191,13 +206,22 @@ export class MeetNowDialogComponent implements OnInit {
    * CHANGED: auto-shares the meeting ID to the active chat, then opens
    * the meeting in a dedicated window instead of navigating in-place.
    */
-  startMeeting(): void {
+  async startMeeting(): Promise<void> {
     if (!this.meetingId) return;
+
+    // Single-meeting guard
+    const electronApi = (window as any).oisMeet;
+    if (electronApi?.isElectron && typeof electronApi.isMeetingActive === 'function') {
+      const isActive = await electronApi.isMeetingActive();
+      if (isActive) {
+        this.snackBar.open('You are already in an active meeting. Please leave it before joining another.', 'Close', { duration: 5000 });
+        this.dialogRef.close();
+        return;
+      }
+    }
+
     this.meetingService.clearPendingMeeting();
     this.dialogRef.close();
-
-    // Send meeting ID to the currently open chat conversation automatically
-    // this.shareToChat();
 
     // Open meeting in its own window
     this.openMeetingWindow(this.meetingId, true, this.micOn, this.camOn);

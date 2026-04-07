@@ -93,6 +93,7 @@ ipcMain.handle('win:isMaximized', (event) => {
 });
 
 let mainWindow;
+let meetingWindow;
 let appTray;
 let storedAuthData = null;
 
@@ -110,7 +111,12 @@ ipcMain.handle('get-auth-data', async () => {
   return storedAuthData;
 });
 
+ipcMain.handle('is-meeting-active', () => {
+  return meetingWindow && !meetingWindow.isDestroyed();
+});
+
 app.setName('OIS Meet');
+
 
 function safeFileName(value, fallback) {
   const candidate = (typeof value === 'string' ? value : '').trim();
@@ -260,7 +266,13 @@ app.on('window-all-closed', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 ipcMain.on('open-meeting-window', (event, payload) => {
-  const meetingWindow = new BrowserWindow({
+  if (meetingWindow && !meetingWindow.isDestroyed()) {
+    meetingWindow.show();
+    meetingWindow.focus();
+    return;
+  }
+
+  meetingWindow = new BrowserWindow({
     width:     1280,
     height:    800,
     minWidth:  900,
@@ -296,6 +308,7 @@ ipcMain.on('open-meeting-window', (event, payload) => {
     void meetingWindow.loadURL(legacyUrl);
   } else {
     meetingWindow.destroy();
+    meetingWindow = null;
     return;
   }
 
@@ -309,6 +322,10 @@ ipcMain.on('open-meeting-window', (event, payload) => {
       cancelId:  1,
     });
     if (choice === 1) e.preventDefault();
+  });
+
+  meetingWindow.on('closed', () => {
+    meetingWindow = null;
   });
 
   meetingWindow.webContents.on('did-finish-load', () => {

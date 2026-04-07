@@ -9,9 +9,9 @@ export const environment = {
   // signalRUrl: 'https://www.nexaois.com/OISMeetAPI_DEV/hubs',
 
   // QA environment
-  apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_QA/api',
-  ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_QA/api',
-  signalRUrl: 'https://www.nexaois.com/OISMeetAPI_QA/hubs',
+  // apiBaseUrl: 'https://www.nexaois.com/OISMeetAPI_QA/api',
+  // ssoApiBaseUrl: 'https://www.nexaois.com/OIS_SSO_API_QA/api',
+  // signalRUrl: 'https://www.nexaois.com/OISMeetAPI_QA/hubs',
 
   //Live environment
   // apiBaseUrl: 'https://www.officeinfosystems.com/OISMeetAPI/api',
@@ -19,9 +19,9 @@ export const environment = {
   // signalRUrl: 'https://www.officeinfosystems.com/OISMeetAPI/hubs',
 
   // local environment
-  // apiBaseUrl: 'http://localhost:5242/api',
-  // ssoApiBaseUrl: 'https://www.officeinfosystems.com/OISSSOAPI/api',
-  // signalRUrl: 'http://localhost:5242/hubs',
+  apiBaseUrl: 'http://localhost:5242/api',
+  ssoApiBaseUrl: 'https://www.officeinfosystems.com/OISSSOAPI/api',
+  signalRUrl: 'http://localhost:5242/hubs',
 
   // WebRTC
   livekitEnabled: true,

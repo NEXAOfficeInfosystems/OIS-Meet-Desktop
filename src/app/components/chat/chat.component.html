@@ -281,13 +281,13 @@
           <div class="v-divider"></div>
 
           <button class="action-btn-v4 call-btn-v4" (click)="startCall('Audio')"
-            [disabled]="!selectedUser || !isCallHubConnected" title="Voice Call">
+            [disabled]="!selectedUser" title="Voice Call">
             <i class="bi bi-telephone" *ngIf="!isCalling"></i>
             <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Audio'"></div>
           </button>
 
           <button class="action-btn-v4 call-btn-v4" (click)="startCall('Video')"
-            [disabled]="!selectedUser || !isCallHubConnected" title="Video Call">
+            [disabled]="!selectedUser" title="Video Call">
             <i class="bi bi-camera-video" *ngIf="!isCalling"></i>
             <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Video'"></div>
           </button>
@@ -726,24 +726,6 @@
     </div>
   </div>
 
-  <!-- Incoming Call Overlay -->
-  <div class="incoming-call-overlay" *ngIf="incomingCall">
-    <div class="call-card shadow-lg bounce">
-      <div class="call-header">
-        <div class="call-avatar" [style.background-color]="getMemberAvatarColor(incomingCall.fromUserName)">
-          {{ incomingCall.fromUserName.charAt(0).toUpperCase() }}
-        </div>
-      </div>
-      <div class="call-body">
-        <h5>{{ incomingCall.fromUserName }}</h5>
-        <p>Incoming {{ incomingCall.callType }} call...</p>
-      </div>
-      <div class="call-footer">
-        <button class="btn-reject" (click)="rejectIncomingCall()"><i class="bi bi-telephone-x-fill"></i></button>
-        <button class="btn-accept" (click)="acceptIncomingCall()"><i class="bi bi-telephone-fill"></i></button>
-      </div>
-    </div>
-  </div>
 
   <!-- ═══════════════════════════════════════════════════════
      NEW GROUP CREATION MODAL (Angular-native, no Bootstrap)

@@ -246,4 +246,9 @@ export class TitleBarComponent implements OnInit {
     event.stopPropagation();
     this.isCompanyMenuOpen = !this.isCompanyMenuOpen;
   }
+
+  getSelectedCompanyName(): string {
+    const selected = this.companyList.find(c => c.companyId === this.selectedCompanyId);
+    return selected?.companyname || 'Select Company';
+  }
 }

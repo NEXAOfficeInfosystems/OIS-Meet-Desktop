@@ -17,31 +17,23 @@
   <div class="settings-grid">
     <!-- LEFT NAVIGATION (if needed for multiple sections) -->
     <aside class="settings-nav">
-      <div class="nav-item active">
+      <div class="nav-item" [class.active]="activeSection === 'chat'" (click)="scrollToSection('chat')">
         <i class="bi bi-chat-left-text"></i>
         <span>Chat Preferences</span>
       </div>
-      <div class="nav-item">
+      <div class="nav-item" [class.active]="activeSection === 'devices'" (click)="scrollToSection('devices')">
+        <i class="bi bi-cpu"></i>
+        <span>Devices & Calling</span>
+      </div>
+      <div class="nav-item" [class.active]="activeSection === 'notifications'" (click)="scrollToSection('notifications')">
         <i class="bi bi-bell"></i>
         <span>Notifications</span>
-      </div>
-      <div class="nav-item">
-        <i class="bi bi-shield-check"></i>
-        <span>Privacy & Security</span>
-      </div>
-      <div class="nav-item">
-        <i class="bi bi-palette"></i>
-        <span>Appearance</span>
-      </div>
-      <div class="nav-item">
-        <i class="bi bi-cpu"></i>
-        <span>Devices</span>
       </div>
     </aside>
 
     <!-- SETTINGS CONTENT -->
-    <main class="settings-content">
-      <section class="settings-section">
+    <main class="settings-content" #settingsContent>
+      <section class="settings-section" id="chat">
         <h3 class="section-title">Chat Preferences</h3>
         
         <div class="setting-card">
@@ -88,8 +80,7 @@
         </div>
       </section>
 
-      <!-- DEVICES SECTION -->
-      <section class="settings-section">
+      <section class="settings-section" id="devices">
         <h3 class="section-title">Devices & Calling</h3>
         <div class="setting-card">
           <div class="setting-info">
@@ -141,6 +132,16 @@
                 <small class="text-muted mt-2 d-block">Speak to test your microphone levels during preview.</small>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section" id="notifications">
+        <h3 class="section-title">Notifications</h3>
+        <div class="setting-card">
+          <div class="setting-info">
+            <div class="setting-label">Desktop Notifications</div>
+            <div class="setting-description">Enable system-level alerts for incoming messages and calls.</div>
           </div>
         </div>
       </section>

@@ -31,11 +31,21 @@ export class SettingsComponent implements OnInit {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private animationFrame: number | null = null;
+  activeSection: string = 'chat';
+  @ViewChild('settingsContent') settingsContent!: ElementRef<HTMLElement>;
 
   constructor(
     private settingsService: SettingsService,
     private cdr: ChangeDetectorRef
   ) {}
+
+  scrollToSection(sectionId: string): void {
+    this.activeSection = sectionId;
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
 
   ngOnInit(): void {
     this.settingsService.settings$.subscribe(settings => {

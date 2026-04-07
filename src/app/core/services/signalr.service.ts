@@ -424,6 +424,16 @@ public async publishMom(meetingId: string, mom: GenerateMomResponse): Promise<vo
   }
 }
 
+  public async inviteToMeeting(targetUserId: string, meetingId: string, fromUserName: string): Promise<void> {
+    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+      try {
+        await this.hubConnection.invoke('InviteToMeeting', targetUserId, meetingId, fromUserName);
+      } catch (err) {
+        console.error('Error inviting to meeting:', err);
+      }
+    }
+  }
+
   public getConnectionId(): string | null {
     return this.hubConnection?.connectionId || null;
   }

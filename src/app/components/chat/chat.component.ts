@@ -530,6 +530,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   private checkForMentions(event: any): void {
     if (this.suppressMentionCheck) return;
+    if (!this.selectedUser?.isGroup) {
+      this.mentionsVisible = false;
+      return;
+    }
     const selection = window.getSelection();
     if (!selection?.rangeCount) return;
 
@@ -615,13 +619,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       this.cdr.detectChanges();
     });
 
-    this.callService.incomingCall$.pipe(takeUntil(this.destroy$)).subscribe(call => {
-      this.incomingCall = call;
-      this.cdr.detectChanges();
-      this.playCallRingtone();
-      // Implementation: Show Windows Notification for incoming calls
-      this.showBrowserNotification(`Incoming ${call.callType} Call`, `${call.fromUserName} is calling you...`);
-    });
+
 
     this.callService.callAccepted$.pipe(takeUntil(this.destroy$)).subscribe(data => {
       console.log('✅ Call accepted by remote user');
@@ -642,10 +640,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   startCall(type: CallType): void {
     if (!this.selectedUser) return;
-    if (!this.isCallHubConnected) {
-      alert(this.callHubStatusMessage);
-      return;
-    }
 
     console.log(`🚀 Initiating ${type} call to user:`, this.selectedUser.userId);
     this.callType = type;
@@ -676,20 +670,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       });
   }
 
-  acceptIncomingCall(): void {
-    if (!this.incomingCall) return;
-    this.callService.acceptCall(this.incomingCall.fromUserId);
-    this.openCallWindow(this.incomingCall.fromUserId, this.incomingCall.callType, false);
-    this.incomingCall = null;
-    this.stopCallRingtone();
-  }
 
-  rejectIncomingCall(): void {
-    if (!this.incomingCall) return;
-    this.callService.rejectCall(this.incomingCall.fromUserId, 'Busy');
-    this.incomingCall = null;
-    this.stopCallRingtone();
-  }
 
   private openCallWindow(userId: string, type: CallType, isInitiator: boolean): void {
     // Generate a secure room ID based on both users
@@ -1603,13 +1584,23 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
    * calls joinMeeting so the participant is registered server-side,
    * then opens the meeting window.
    */
-  private validateAndJoinMeeting(meetingId: string): void {
+  private async validateAndJoinMeeting(meetingId: string): Promise<void> {
     const userId = this.sessionService.getOISMeetUserId();
     const userName = this.sessionService.getFullName() || 'User';
 
     if (!userId) {
       alert('User not authenticated. Please log in again.');
       return;
+    }
+
+    // Single-meeting guard
+    const electronApi = (window as any).oisMeet;
+    if (electronApi?.isElectron && typeof electronApi.isMeetingActive === 'function') {
+      const isActive = await electronApi.isMeetingActive();
+      if (isActive) {
+        alert('You are already in an active meeting. Please leave it before joining another.');
+        return;
+      }
     }
 
     // Validate first
@@ -1840,9 +1831,24 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+
+    // Handle mention popup
+    if (this.mentionsVisible) {
+      const isInsideEditor = this.messageEditor?.nativeElement.contains(target);
+      const isInsidePopover = target.closest('.mention-popover');
+      
+      if (!isInsideEditor && !isInsidePopover) {
+        this.mentionsVisible = false;
+        this.cdr.detectChanges();
+      }
+    }
+
+    // Handle emoji picker popup
     if (this.isEmojiPickerVisible) {
-      const target = event.target as HTMLElement;
-      if (!target.closest('.emoji-picker-container')) {
+      const isEmojiBtn = target.closest('#emojiPickerBtn');
+      const isEmojiPicker = target.closest('.emoji-picker-container') || target.closest('.emoji-picker-popover');
+      if (!isEmojiBtn && !isEmojiPicker) {
         this.isEmojiPickerVisible = false;
         this.cdr.detectChanges();
       }
@@ -2411,4 +2417,5 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       }
     });
   }
+
 }
