@@ -1,10 +1,69 @@
 const electron = require('electron');
-console.log('ELECTRON OBJECT KEYS:', Object.keys(electron));
-const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, session } = electron;
+const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, session, nativeImage } = electron;
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
+
+// Auto Updater Configuration
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+
+// Define global app icon path for consistency
+const APP_ICON_PATH = path.join(__dirname, 'assets', 'icon.ico');
+const APP_ICON = fs.existsSync(APP_ICON_PATH) ? nativeImage.createFromPath(APP_ICON_PATH) : null;
+const APP_ID = 'com.ois.meet.desktop';
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_ID);
+}
+
 // TEMP SSL BYPASS
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── AUTO UPDATER LOGIC ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+
+autoUpdater.on('checking-for-update', () => {
+  console.log('[Updater] Checking for update...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('[Updater] Update available:', info.version);
+  if (mainWindow) {
+    mainWindow.webContents.send('update-available', info);
+  }
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('[Updater] Update not available.');
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('[Updater] Error in auto-updater:', err);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  let log_message = 'Download speed: ' + progressObj.bytesPerSecond;
+  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
+  log_message = log_message + ' (' + progressObj.transferred + '/' + progressObj.total + ')';
+  console.log('[Updater]', log_message);
+  if (mainWindow) {
+    mainWindow.webContents.send('update-download-progress', progressObj);
+  }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('[Updater] Update downloaded');
+  if (mainWindow) {
+    mainWindow.webContents.send('update-downloaded', info);
+  }
+});
+
+ipcMain.on('restart-app', () => {
+  autoUpdater.quitAndInstall();
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ── CUSTOM WINDOW CONTROLS ───────────────────────────────────────────────────
@@ -37,7 +96,6 @@ let mainWindow;
 let appTray;
 let storedAuthData = null;
 
-
 ipcMain.handle('set-auth-data', async (event, authData) => {
   try {
     storedAuthData = authData || null;
@@ -53,9 +111,6 @@ ipcMain.handle('get-auth-data', async () => {
 });
 
 app.setName('OIS Meet');
-if (process.platform === 'win32') {
-  app.setAppUserModelId('com.ois.meet.desktop');
-}
 
 function safeFileName(value, fallback) {
   const candidate = (typeof value === 'string' ? value : '').trim();
@@ -87,8 +142,6 @@ function normalizeHttpBaseUrl(value, fallback) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function createMainWindow() {
-  const iconPath = path.join(__dirname, 'assets', 'icon.ico');
-
   mainWindow = new BrowserWindow({
     width:  1200,
     height: 800,
@@ -98,14 +151,11 @@ function createMainWindow() {
     titleBarStyle: 'hidden',
     autoHideMenuBar: true,
     resizable: true,
-    icon: fs.existsSync(iconPath) ? iconPath : undefined,
+    icon: APP_ICON || undefined,
     webPreferences: {
       preload:          path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration:  false,
-      // ── ADDED: allows window.open() calls inside Angular to be intercepted
-      //           by the 'did-create-window' / setWindowOpenHandler API and
-      //           also ensures our IPC-based openMeetingWindow works correctly.
       nativeWindowOpen: true,
     }
   });
@@ -134,12 +184,9 @@ function createMainWindow() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, 'assets', 'icon.ico');
-  if (!fs.existsSync(iconPath)) {
-    return;
-  }
+  if (!APP_ICON) return;
 
-  appTray = new Tray(iconPath);
+  appTray = new Tray(APP_ICON);
   appTray.setToolTip('OIS Meet');
   appTray.setContextMenu(Menu.buildFromTemplate([
     {
@@ -178,9 +225,6 @@ function createTray() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
-  // Automatically grant camera/microphone permissions in Electron
-  
-  
   session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
     if (permission === 'media') return true;
     return false;
@@ -197,6 +241,11 @@ app.whenReady().then(() => {
   createMainWindow();
   createTray();
 
+  // Initialize auto-update check on startup (after 5 seconds to let the app load)
+  setTimeout(() => {
+    autoUpdater.checkForUpdatesAndNotify();
+  }, 5000);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
@@ -208,23 +257,9 @@ app.on('window-all-closed', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ── Open a dedicated BrowserWindow for a meeting ─────────────────────────────
-//
-// Payload shape sent from preload.js → Angular:
-//   { routePath: string, queryString: string }
-//     routePath   – e.g.  "/meeting/OIS-XXXX"
-//     queryString – e.g.  "host=false&topic=OIS+Meet&mic=false&cam=false"
-//
-// OR (legacy / dev-server):
-//   A full http(s):// URL string
-//
-// In production (loadFile) window.location.origin is "null" so Angular can
-// no longer build a proper absolute URL. We therefore accept the structured
-// payload and resolve the path ourselves using loadFile() + URLSearchParams.
 // ─────────────────────────────────────────────────────────────────────────────
 
 ipcMain.on('open-meeting-window', (event, payload) => {
-  const iconPath = path.join(__dirname, 'assets', 'icon.ico');
-
   const meetingWindow = new BrowserWindow({
     width:     1280,
     height:    800,
@@ -234,7 +269,7 @@ ipcMain.on('open-meeting-window', (event, payload) => {
     titleBarStyle: 'hidden',
     title:     'OIS Meet — Meeting',
     autoHideMenuBar: true,
-    icon: fs.existsSync(iconPath) ? iconPath : undefined,
+    icon: APP_ICON || undefined,
     webPreferences: {
       preload:          path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -245,42 +280,25 @@ ipcMain.on('open-meeting-window', (event, payload) => {
 
   meetingWindow.setMenuBarVisibility(false);
 
-  // ── Determine how to load the meeting route ──────────────────────────────
   if (payload && typeof payload === 'object' && payload.routePath) {
-    // Structured payload — used by production EXE (file:// context)
     const { routePath, queryString } = payload;
-
     if (process.env.ELECTRON_START_URL) {
-      // Dev server — Angular uses HashLocationStrategy, so prefix route with '/#'
       const devBase = process.env.ELECTRON_START_URL.replace(/\/$/, '');
-      const fullUrl = queryString
-        ? `${devBase}/#${routePath}?${queryString}`
-        : `${devBase}/#${routePath}`;
-      console.log('[main] Meeting window loadURL (dev, hash):', fullUrl);
+      const fullUrl = queryString ? `${devBase}/#${routePath}?${queryString}` : `${devBase}/#${routePath}`;
       void meetingWindow.loadURL(fullUrl);
     } else {
-      // Production — load Angular entry point via loadFile, then navigate
-      const indexPath = path.join(
-        app.getAppPath(), 'dist', 'ois-meet-desktop', 'browser', 'index.html'
-      );
-      const hashPath = queryString
-        ? `${routePath}?${queryString}`
-        : routePath;
-      console.log('[main] Meeting window loadFile (prod), hash:', hashPath);
+      const indexPath = path.join(app.getAppPath(), 'dist', 'ois-meet-desktop', 'browser', 'index.html');
+      const hashPath = queryString ? `${routePath}?${queryString}` : routePath;
       void meetingWindow.loadFile(indexPath, { hash: hashPath });
     }
   } else if (typeof payload === 'string' && /^https?:\/\//i.test(payload)) {
-    // Legacy string URL — inject '#' for HashLocationStrategy if missing
     const legacyUrl = payload.replace(/(https?:\/\/[^/#]+)(\/)/, '$1/#/');
-    console.log('[main] Meeting window loadURL (legacy):', legacyUrl);
     void meetingWindow.loadURL(legacyUrl);
   } else {
-    console.warn('[main] open-meeting-window: invalid payload, ignoring:', payload);
     meetingWindow.destroy();
     return;
   }
 
-  // ── Warn before closing a live meeting window ────────────────────────────
   meetingWindow.on('close', (e) => {
     const choice = dialog.showMessageBoxSync(meetingWindow, {
       type:      'question',
@@ -290,16 +308,10 @@ ipcMain.on('open-meeting-window', (event, payload) => {
       defaultId: 1,
       cancelId:  1,
     });
-
-    if (choice === 1) {
-      e.preventDefault(); // User clicked Cancel → keep window open
-    }
+    if (choice === 1) e.preventDefault();
   });
 
   meetingWindow.webContents.on('did-finish-load', () => {
-    console.log('[main] Meeting window finished loading.');
-    // Forward any cached auth data to the meeting window renderer so it
-    // can restore session/localStorage before Angular boot logic runs.
     try {
       if (storedAuthData) {
         meetingWindow.webContents.send('electron-auth-data', storedAuthData);
@@ -308,32 +320,21 @@ ipcMain.on('open-meeting-window', (event, payload) => {
       console.error('[main] Failed to forward auth data to meeting window:', err);
     }
   });
-
-  meetingWindow.webContents.on('did-fail-load', (ev, code, desc) => {
-    console.error('[main] Meeting window failed to load:', code, desc);
-  });
 });
 
-// Close the meeting window from renderer without showing the "Leave Meeting" dialog.
 ipcMain.on('close-meeting-window', (event, { force } = { force: false }) => {
   try {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
-
-    if (force) {
-      // Forcefully destroy (no close events)
-      win.destroy();
-    } else {
-      // Normal close (will trigger 'close' handler which may prompt)
-      win.close();
-    }
+    if (force) win.destroy();
+    else win.close();
   } catch (err) {
     console.error('[main] Error closing meeting window:', err);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXISTING IPC HANDLERS (unchanged)
+// NOTIFICATIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
 ipcMain.handle('show-native-notification', async (event, { title, body }) => {
@@ -341,23 +342,24 @@ ipcMain.handle('show-native-notification', async (event, { title, body }) => {
     if (!Notification.isSupported()) {
       return { success: false, error: 'Notifications are not supported on this system' };
     }
-
-    const iconPath = path.join(__dirname, 'assets', 'icon.ico');
     const notification = new Notification({
       title:  typeof title === 'string' && title.trim() ? title.trim() : 'OIS Meet',
       body:   typeof body  === 'string' ? body : '',
-      icon:   fs.existsSync(iconPath) ? iconPath : undefined,
-      appID:  'com.ois.meet.desktop',
+      icon:   APP_ICON || undefined,
+      appID:  APP_ID,
       silent: false
     });
-
     notification.show();
     return { success: true };
   } catch (error) {
     console.error('Error showing native notification:', error);
-    return { success: false, error: error && error.message ? error.message : 'Failed to show notification' };
+    return { success: false, error: error.message };
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILITY HANDLERS
+// ─────────────────────────────────────────────────────────────────────────────
 
 ipcMain.handle('save-audio-file', async (event, { buffer, defaultFileName }) => {
   try {
@@ -369,14 +371,9 @@ ipcMain.handle('save-audio-file', async (event, { buffer, defaultFileName }) => 
         { name: 'All Files',  extensions: ['*']   }
       ]
     });
-
-    if (result.canceled || !result.filePath) {
-      return { success: false, canceled: true };
-    }
-
+    if (result.canceled || !result.filePath) return { success: false, canceled: true };
     const uint8Array = new Uint8Array(buffer);
     fs.writeFileSync(result.filePath, Buffer.from(uint8Array));
-
     return { success: true, filePath: result.filePath };
   } catch (error) {
     console.error('Error saving audio file:', error);
@@ -386,152 +383,59 @@ ipcMain.handle('save-audio-file', async (event, { buffer, defaultFileName }) => 
 
 ipcMain.handle('get-recordings-path', () => {
   const recordingsPath = path.join(app.getPath('documents'), 'OIS-Meet-Recordings');
-  if (!fs.existsSync(recordingsPath)) {
-    fs.mkdirSync(recordingsPath, { recursive: true });
-  }
+  if (!fs.existsSync(recordingsPath)) fs.mkdirSync(recordingsPath, { recursive: true });
   return recordingsPath;
 });
 
 ipcMain.handle('save-transcript-text-file', async (event, { content, defaultFileName }) => {
   try {
     const recordingsPath = path.join(app.getPath('documents'), 'OIS-Meet-Recordings');
-    if (!fs.existsSync(recordingsPath)) {
-      fs.mkdirSync(recordingsPath, { recursive: true });
-    }
-
+    if (!fs.existsSync(recordingsPath)) fs.mkdirSync(recordingsPath, { recursive: true });
     const fileName = safeFileName(defaultFileName, `meeting-transcript-${Date.now()}.txt`);
     const filePath = path.join(recordingsPath, fileName);
-
-    const text = typeof content === 'string' ? content : '';
-    fs.writeFileSync(filePath, text, { encoding: 'utf8' });
-
+    fs.writeFileSync(filePath, content || '', { encoding: 'utf8' });
     return { success: true, filePath };
   } catch (error) {
-    console.error('Error saving transcript text file:', error);
-    return { success: false, error: error && error.message ? error.message : 'Failed to save transcript file' };
+    console.error('Error saving transcript file:', error);
+    return { success: false, error: error.message };
   }
 });
 
 ipcMain.handle('generate-mom', async (event, { meetingId, date, momTemplateName, transcriptFilePath, aiApiBaseUrl }) => {
   try {
-    const normalizedAiApiBaseUrl = normalizeHttpBaseUrl(
-      aiApiBaseUrl,
-      process.env.AI_API_BASE_URL || 'https://ai.nexaois.com:4433'
-    );
+    const normalizedAiApiBaseUrl = normalizeHttpBaseUrl(aiApiBaseUrl, 'https://ai.nexaois.com:4433');
     const generateMomUrl = `${normalizedAiApiBaseUrl}/generate-mom`;
-
-    const resolvedTranscriptPath = typeof transcriptFilePath === 'string' ? transcriptFilePath : '';
-    if (!resolvedTranscriptPath || !fs.existsSync(resolvedTranscriptPath)) {
-      return { status: 'error', error: 'Transcript file not found' };
-    }
-
-    const transcriptBuffer     = fs.readFileSync(resolvedTranscriptPath);
-    const transcriptUploadName = safeFileName(path.basename(resolvedTranscriptPath), 'meeting-transcription.txt');
-
-    const boundary        = `----oismeet-mom-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
-    const meetingIdValue  = typeof meetingId === 'string' ? meetingId : '';
-    const dateValue       = typeof date === 'string' && date.trim() ? date.trim() : formatDateDdMmYyyy(new Date());
-    const momTemplateValue = typeof momTemplateName === 'string' && momTemplateName.trim() ? momTemplateName.trim() : 'investor';
-
+    if (!transcriptFilePath || !fs.existsSync(transcriptFilePath)) return { status: 'error', error: 'Transcript not found' };
+    const transcriptBuffer = fs.readFileSync(transcriptFilePath);
+    const boundary = `----oismeet-mom-${Date.now().toString(16)}`;
     const parts = [];
-    const addField = (name, value) => {
-      parts.push(Buffer.from(
-        `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="${name}"\r\n\r\n` +
-        `${value}\r\n`,
-        'utf8'
-      ));
-    };
-
-    addField('meeting_id',        meetingIdValue);
-    addField('date',              dateValue);
-    addField('mom_template_name', momTemplateValue);
-
-    parts.push(Buffer.from(
-      `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="transcript_file"; filename="${transcriptUploadName}"\r\n` +
-      `Content-Type: text/plain\r\n\r\n`,
-      'utf8'
-    ));
-    parts.push(Buffer.from(transcriptBuffer));
-    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'));
-
-    const body = Buffer.concat(parts);
-
-    const response = await fetch(generateMomUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-      body
-    });
-
-    const contentType = response.headers.get('content-type') || '';
-    const payload     = contentType.includes('application/json')
-      ? await response.json().catch(() => null)
-      : await response.text().catch(() => '');
-
-    if (!response.ok) {
-      return {
-        status: 'error',
-        error:  `Generate MoM request failed (${response.status} ${response.statusText})`,
-        details: payload
-      };
-    }
-
-    return { status: 'success', result: payload };
-  } catch (error) {
-    console.error('Error calling generate-mom service (main):', error);
-    return { status: 'error', error: error && error.message ? error.message : 'Error calling generate-mom service' };
+    const addField = (n, v) => parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${n}"\r\n\r\n${v}\r\n`));
+    addField('meeting_id', meetingId || '');
+    addField('date', date || formatDateDdMmYyyy(new Date()));
+    addField('mom_template_name', momTemplateName || 'investor');
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="transcript_file"; filename="transcript.txt"\r\nContent-Type: text/plain\r\n\r\n`));
+    parts.push(transcriptBuffer);
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+    const response = await fetch(generateMomUrl, { method: 'POST', headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` }, body: Buffer.concat(parts) });
+    const payload = await (response.headers.get('content-type')?.includes('json') ? response.json() : response.text());
+    return response.ok ? { status: 'success', result: payload } : { status: 'error', error: 'Request failed', details: payload };
+  } catch (err) {
+    return { status: 'error', error: err.message };
   }
 });
 
 ipcMain.handle('transcribe-audio-file', async (event, { buffer, fileName, aiApiBaseUrl }) => {
   try {
-    const normalizedAiApiBaseUrl = normalizeHttpBaseUrl(
-      aiApiBaseUrl,
-      process.env.AI_API_BASE_URL || 'https://ai.nexaois.com:4433'
-    );
-    const transcriptionUrl = `${normalizedAiApiBaseUrl}/transcribe`;
-    console.log('AI Base URL used for transcription Main.js:', transcriptionUrl);
-
-    const uint8Array     = new Uint8Array(buffer);
-    const safeFile       = fileName || 'meeting-recording.wav';
-    const boundary       = `----oismeet-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
-    const header =
-      `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="${safeFile}"\r\n` +
-      `Content-Type: audio/wav\r\n\r\n`;
-    const footer = `\r\n--${boundary}--\r\n`;
-
+    const normalizedAiApiBaseUrl = normalizeHttpBaseUrl(aiApiBaseUrl, 'https://ai.nexaois.com:4433');
+    const boundary = `----oismeet-${Date.now().toString(16)}`;
     const body = Buffer.concat([
-      Buffer.from(header, 'utf8'),
-      Buffer.from(uint8Array),
-      Buffer.from(footer, 'utf8')
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName || 'audio.wav'}"\r\nContent-Type: audio/wav\r\n\r\n`),
+      Buffer.from(new Uint8Array(buffer)),
+      Buffer.from(`\r\n--${boundary}--\r\n`)
     ]);
-
-    const response = await fetch(transcriptionUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-      body
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      return {
-        filename: fileName,
-        status:   'error',
-        error:    `Transcription request failed (${response.status} ${response.statusText})${text ? `: ${text}` : ''}`
-      };
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error calling transcription service (main):', error);
-    return {
-      filename: fileName,
-      status:   'error',
-      error:    error && error.message ? error.message : 'Error calling transcription service'
-    };
+    const response = await fetch(`${normalizedAiApiBaseUrl}/transcribe`, { method: 'POST', headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` }, body });
+    return response.ok ? await response.json() : { status: 'error', error: 'Transcription failed' };
+  } catch (err) {
+    return { status: 'error', error: err.message };
   }
 });
-

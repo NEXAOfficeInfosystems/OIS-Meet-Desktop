@@ -619,6 +619,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       this.incomingCall = call;
       this.cdr.detectChanges();
       this.playCallRingtone();
+      // Implementation: Show Windows Notification for incoming calls
+      this.showBrowserNotification(`Incoming ${call.callType} Call`, `${call.fromUserName} is calling you...`);
     });
 
     this.callService.callAccepted$.pipe(takeUntil(this.destroy$)).subscribe(data => {
@@ -886,7 +888,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           if (res.success && res.data) {
             const transformed = res.data.map((u: any) => ({
               id: u.id?.toString(),
-              userId: u.ssoUserId || u.id?.toString(),
+              userId: u.id?.toString(), // FIX: Use Guid Id as userId for consistent signaling and activities
+              ssoUserId: u.ssoUserId || u.id?.toString(), // Preserve SsoUserId separately if needed
               name: u.fullName || u.name || u.userName || 'Unknown',
               fullName: u.fullName || u.name || u.userName || 'Unknown',
               email: u.email || '',
@@ -933,7 +936,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
             const allUsers = transformed;
 
-            // Merge with existing state to preserve conversationId / lastMessage
+            // Merge with existing state to preserve conversationId / lastMessage / participants
             allUsers.forEach((newUser: any) => {
               const existing = this.users.find(u => u.id === newUser.id);
               if (existing) {
@@ -943,6 +946,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
                 newUser.lastMessageAt = existing.lastMessageAt;
                 newUser.unreadCount = existing.unreadCount;
                 newUser.isGroup = existing.isGroup;
+                newUser.participants = existing.participants; // FIX: Preserve participants for mentions
               }
             });
             this.users = allUsers;
@@ -1088,7 +1092,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           (message.messageType || message.MessageType) === 'Image' ? '📷 Image' : '📎 File Shared') : 'New message received';
 
       this.showInAppToast(senderName, preview, avatarColor);
-      this.showBrowserNotification(senderName, preview);
+      this.showBrowserNotification(senderName, preview, conversationId); // Pass conversationId
     }
 
     this.cdr.detectChanges();
@@ -1226,8 +1230,12 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
 
-  private showBrowserNotification(title: string, body: string): void {
-    if (document.visibilityState === 'visible' && document.hasFocus()) return;
+  private showBrowserNotification(title: string, body: string, conversationId?: string): void {
+    // Only skip if app is visible, has focus, AND this is the current active conversation
+    const isAppActive = document.visibilityState === 'visible' && document.hasFocus();
+    const isCurrentConv = conversationId && this.selectedConversation?.id?.toString() === conversationId.toString();
+    
+    if (isAppActive && isCurrentConv) return;
 
     const electronApi = (window as any).oisMeet;
     if (electronApi?.isElectron && typeof electronApi.showNotification === 'function') {
@@ -1468,6 +1476,39 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.selectChannel(team.channels[0]);
   }
 
+  selectChannel(channel: string): void {
+    this.activeChannel = channel;
+    this.messages = [];
+    this.currentPage = 1;
+    this.hasMoreMessages = true;
+
+    // Use current selectedUser (Team) to find participants
+    const groupConv = this.selectedUser?.isGroup ? this.selectedUser : 
+      this.users.find(u => (u.name === this.activeTeam || u.fullName === this.activeTeam) && u.isGroup);
+
+    if (groupConv && groupConv.conversationId) {
+      this.selectedConversation = { id: groupConv.conversationId };
+      this.loadMessages(groupConv.conversationId);
+
+      this.mentionList = (groupConv.participants || [])
+        .filter((p: any) => p.userId?.toString() !== this.currentUserId?.toString())
+        .map((p: any) => ({
+          id: p.userId?.toString(),
+          userId: p.userId?.toString(),
+          fullName: p.name || p.fullName,
+          name: p.name || p.fullName,
+          avatarColor: this.getMemberAvatarColor(p.name || p.fullName)
+        }));
+    } else {
+      this.mentionList = [];
+    }
+  }
+
+  openGroupInfo(): void {
+    this.mainActiveTab = 'info';
+    this.cdr.detectChanges();
+  }
+
   private async handleNotificationSelection(recipient: NotificationRecipient) {
     const notification = recipient.notification;
     if (!notification || !notification.entityId) {
@@ -1512,36 +1553,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }, 500);
   }
 
-  selectChannel(channel: string): void {
-    this.activeChannel = channel;
-    this.messages = [];
-    this.currentPage = 1;
-    this.hasMoreMessages = true;
-
-    const groupConv = this.users.find(u => (u.name === this.activeTeam || u.fullName === this.activeTeam) && u.isGroup);
-
-    if (groupConv && groupConv.conversationId) {
-      this.selectedConversation = { id: groupConv.conversationId };
-      this.loadMessages(groupConv.conversationId);
-
-      this.mentionList = (groupConv.participants || [])
-        .filter((p: any) => p.userId?.toString() !== this.currentUserId?.toString())
-        .map((p: any) => ({
-          id: p.userId?.toString(),
-          userId: p.userId?.toString(),
-          fullName: p.name || p.fullName,
-          name: p.name || p.fullName,
-          avatarColor: this.getMemberAvatarColor(p.name || p.fullName)
-        }));
-    } else {
-      this.mentionList = [];
-    }
-  }
 
   getMemberAvatarColor(senderName: string): string {
     // Look up in users list or generate consistent color based on name
-    const user = this.users.find(u => u.name === senderName);
-    return user?.avatarColor || '#3b82f6';
+    const user = this.users.find(u => u.name === senderName || u.fullName === senderName);
+    return user?.avatarColor || this.commonService.getRandomColor();
   }
 
   // ——————————————————————————————————————————————————————————————————————————————

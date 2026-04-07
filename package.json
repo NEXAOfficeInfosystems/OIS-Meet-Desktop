@@ -33,6 +33,7 @@
     "bootstrap": "^5.3.3",
     "bootstrap-icons": "^1.11.3",
     "crypto-js": "^4.2.0",
+    "electron-updater": "^6.8.3",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
     "livekit-client": "^2.17.3",
@@ -71,6 +72,12 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.ois.com/meet"
+      }
+    ],
     "files": [
       "dist/**",
       "electron/**",

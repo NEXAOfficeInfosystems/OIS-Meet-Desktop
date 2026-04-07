@@ -54,6 +54,23 @@ contextBridge.exposeInMainWorld('oisMeet', {
 
   showNotification: ({ title, body }) => {
     return ipcRenderer.invoke('show-native-notification', { title, body });
+  },
+
+  // ── Auto Updater Events ───────────────────────────────────────────────
+  onUpdateAvailable: (callback) => {
+    ipcRenderer.on('update-available', (event, info) => callback(info));
+  },
+  onUpdateDownloaded: (callback) => {
+    ipcRenderer.on('update-downloaded', (event, info) => callback(info));
+  },
+  onUpdateError: (callback) => {
+    ipcRenderer.on('update-error', (event, error) => callback(error));
+  },
+  onDownloadProgress: (callback) => {
+    ipcRenderer.on('update-download-progress', (event, progress) => callback(progress));
+  },
+  restartApp: () => {
+    ipcRenderer.send('restart-app');
   }
 });
 
