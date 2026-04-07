@@ -203,7 +203,7 @@
 
     <!-- Chat Tab Content -->
     <div class="sidebar-content h-100 d-flex flex-column" *ngIf="showChat">
-      <div class="chat-messages-container flex-grow-1 overflow-auto p-3">
+      <div #chatMessagesContainer class="chat-messages-container flex-grow-1 overflow-auto p-3">
         <div class="meeting-msg mb-4" *ngFor="let msg of chatMessages" [class.is-me]="msg.isMe">
           <div class="d-flex align-items-center gap-2 mb-1">
             <span class="fw-bold fs-xxs" [class.text-primary]="msg.isMe">{{ msg.isMe ? 'You' : msg.sender }}</span>
@@ -299,7 +299,7 @@
     </div>
 
     <!-- Scroll area -->
-    <div class="lt-body" id="live-transcription-scroll">
+    <div #liveTranscriptionScroll class="lt-body" id="live-transcription-scroll">
 
       <!-- Empty state -->
       <div class="lt-empty" *ngIf="liveTranscriptionSegments.length === 0 && !liveTranscriptionError">

@@ -12,6 +12,7 @@
   padding: 0;
   border-bottom: 1px solid var(--fluent-border);
   transition: all 0.2s ease;
+  -webkit-app-region: drag;
 
   /* SEARCH BAR IN TITLE BAR */
   .search-container {
@@ -156,7 +157,6 @@
   flex: 1;
   height: 100%;
   padding: 0 16px;
-  -webkit-app-region: no-drag;
 }
 
 .meet-controls {
@@ -177,6 +177,7 @@
   gap: 8px;
   border: 1px solid transparent;
   transition: all 0.2s;
+  -webkit-app-region: no-drag;
 
   i {
     font-size: 16px;
@@ -208,6 +209,7 @@
   display: flex;
   align-items: center;
   gap: 20px;
+  -webkit-app-region: no-drag;
 }
 
 .action-group {
@@ -248,6 +250,7 @@
   background: transparent;
   cursor: pointer;
   transition: all 0.2s;
+  -webkit-app-region: no-drag;
 
   &:hover,
   &.active {
@@ -466,7 +469,6 @@
 .window-controls {
   display: flex;
   height: 100%;
-  -webkit-app-region: no-drag;
 }
 
 .control-btn {
@@ -480,6 +482,7 @@
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
+  -webkit-app-region: no-drag;
 
   &:hover {
     background: rgba(0, 0, 0, 0.06);

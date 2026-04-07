@@ -281,13 +281,13 @@
           <div class="v-divider"></div>
 
           <button class="action-btn-v4 call-btn-v4" (click)="startCall('Audio')"
-            [disabled]="!selectedUser || isCalling" title="Voice Call">
+            [disabled]="!selectedUser || selectedUser?.isGroup || isCalling" title="Voice Call">
             <i class="bi bi-telephone" *ngIf="!(isCalling && callType === 'Audio')"></i>
             <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Audio'"></div>
           </button>
-          
+
           <button class="action-btn-v4 call-btn-v4" (click)="startCall('Video')"
-            [disabled]="!selectedUser || isCalling" title="Video Call">
+            [disabled]="!selectedUser || selectedUser?.isGroup || isCalling" title="Video Call">
             <i class="bi bi-camera-video" *ngIf="!(isCalling && callType === 'Video')"></i>
             <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Video'"></div>
           </button>
@@ -302,15 +302,27 @@
       <div class="main-view-container flex-grow-1 d-flex flex-column overflow-hidden">
 
         <!-- Global Loader for Calling / Joining / Company Change / Initial Loading -->
-        <div class="loading-overlay" *ngIf="isCalling || isCompanyChanging || (isLoading && messages.length === 0)" 
-             style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; gap: 16px;">
+        <div class="loading-overlay" *ngIf="isCompanyChanging || (isLoading && messages.length === 0)"
+          style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; gap: 16px;">
           <div class="spinner-border text-primary" role="status"></div>
           <p class="text-dark fw-bold mb-0">
-             {{ isCalling ? 'Initiating ' + callType + ' call...' : 
-                isCompanyChanging ? 'Switching company...' : 'Loading...' }}
+            {{ isCompanyChanging ? 'Switching company...' : 'Loading...' }}
           </p>
           <p class="text-muted fs-xs">Please wait a moment while we prepare your workspace...</p>
         </div>
+
+        <!-- <div class="outgoing-call-banner" *ngIf="isCalling">
+          <div class="outgoing-call-banner__icon">
+            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+          </div>
+          <div class="outgoing-call-banner__content">
+            <div class="outgoing-call-banner__title">Calling {{ activeCallUserName || 'participant' }}</div>
+            <div class="outgoing-call-banner__meta">
+              {{ callType }} call in progress
+              <span *ngIf="callHubStatusMessage">· {{ callHubStatusMessage }}</span>
+            </div>
+          </div>
+        </div> -->
 
         <!-- MAIN TAB CONTENT -->
         <div class="main-tab-content flex-grow-1 d-flex flex-column overflow-hidden min-vh-0"

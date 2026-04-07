@@ -62,20 +62,28 @@ export class AudioRecorderService {
    * - Mixes local microphone audio
    * - Mixes all current remote participant audio elements (audio[id^="remote-audio-"])
    */
-  async startRecordingFromMeeting(localStream: MediaStream): Promise<boolean> {
+  async startRecordingFromMeeting(localStream: MediaStream, trackedRemoteStreams?: Map<string, MediaStream>): Promise<boolean> {
     try {
-      // Collect remote streams from existing hidden <audio> elements
       const remoteStreams = new Map<string, MediaStream>();
-      const remoteAudioElements = document.querySelectorAll<HTMLAudioElement>('audio[id^="remote-audio-"]');
 
-      remoteAudioElements.forEach((el) => {
-        const stream = el.srcObject as MediaStream | null;
-        if (stream) {
-          // Use connectionId as key so it matches addRemoteStream/removeRemoteStream
-          const key = el.id.startsWith('remote-audio-') ? el.id.replace('remote-audio-', '') : el.id;
-          remoteStreams.set(key, stream);
-        }
-      });
+      if (trackedRemoteStreams?.size) {
+        trackedRemoteStreams.forEach((stream, key) => {
+          if (stream) {
+            remoteStreams.set(key, stream);
+          }
+        });
+      } else {
+        // Fallback for older call sites that still rely on hidden audio elements.
+        const remoteAudioElements = document.querySelectorAll<HTMLAudioElement>('audio[id^="remote-audio-"]');
+
+        remoteAudioElements.forEach((el) => {
+          const stream = el.srcObject as MediaStream | null;
+          if (stream) {
+            const key = el.id.startsWith('remote-audio-') ? el.id.replace('remote-audio-', '') : el.id;
+            remoteStreams.set(key, stream);
+          }
+        });
+      }
 
       console.log(`🎙️ Found ${remoteStreams.size} remote audio element(s) for recording`);
 

@@ -16,7 +16,7 @@ import { Router } from '@angular/router';
         </div>
         <div class="call-info">
           <span class="user-name">{{ call.fromUserName }}</span>
-          <span class="call-type">{{ call.roomId ? 'Meeting Invite' : 'Incoming ' + call.callType + ' Call' }}</span>
+          <span class="call-type">{{ call.isMeetingInvite ? 'Meeting Invite' : 'Incoming ' + call.callType + ' Call' }}</span>
         </div>
         <div class="actions">
           <button class="btn-action reject" (click)="reject()" title="Reject">
@@ -132,14 +132,14 @@ export class IncomingCallBannerComponent {
       }
     }
 
-    if (call.roomId) {
+    if (call.isMeetingInvite) {
       // Meeting invite
-      this.openMeetingWindow(call.roomId, false, call.callType === 'Video');
+      this.openMeetingWindow(call.roomId || '', false, call.callType === 'Video');
     } else {
       // 1:1 Call
-      this.callService.acceptCall(call.fromUserId);
+      await this.callService.acceptCall(call.fromUserId);
       const sorted = [this.sessionService.getOISMeetUserId(), call.fromUserId].sort();
-      const roomId = `call_${sorted[0]}_${sorted[1]}`;
+      const roomId = call.roomId || `call_${sorted[0]}_${sorted[1]}`;
       this.openMeetingWindow(roomId, false, call.callType === 'Video');
     }
     
@@ -148,7 +148,7 @@ export class IncomingCallBannerComponent {
 
   reject(): void {
     const call = this.callService.incomingCall();
-    if (call && !call.roomId) {
+    if (call && !call.isMeetingInvite) {
       this.callService.rejectCall(call.fromUserId, 'Busy');
     }
     this.callService.incomingCall.set(null);

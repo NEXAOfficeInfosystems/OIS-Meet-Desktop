@@ -45,6 +45,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('screenShareVideo') screenShareVideo!: ElementRef<HTMLVideoElement>;
   @ViewChild('remoteVideosContainer') remoteVideosContainer!: ElementRef<HTMLDivElement>;
   @ViewChild('chatMessagesContainer') chatMessagesContainer!: ElementRef<HTMLDivElement>;
+  @ViewChild('liveTranscriptionScroll') liveTranscriptionScroll?: ElementRef<HTMLDivElement>;
 
   // Meeting Info
   meetingId: string = '';
@@ -64,7 +65,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   showParticipants: boolean = false;
   showChat: boolean = false;
   isLoading: boolean = true;
-  
+
   // Real-time Invites Support
   showInvitePopover: boolean = false;
   oisMeetUsers: any[] = [];
@@ -123,12 +124,12 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private screenStream: MediaStream | null = null;
 
   // ── Live Transcription ────────────────────────────────────────────
-    isLiveTranscriptionOn:      boolean = false;
-    liveTranscriptionIsHost:    boolean = false;
-    showLiveTranscriptionPanel: boolean = false;
-    liveTranscriptionStatus:    LiveTranscriptionStatus = 'idle';
-    liveTranscriptionSegments:  LiveTranscriptionSegment[] = [];
-    liveTranscriptionError:     string | null = null;
+  isLiveTranscriptionOn: boolean = false;
+  liveTranscriptionIsHost: boolean = false;
+  showLiveTranscriptionPanel: boolean = false;
+  liveTranscriptionStatus: LiveTranscriptionStatus = 'idle';
+  liveTranscriptionSegments: LiveTranscriptionSegment[] = [];
+  liveTranscriptionError: string | null = null;
   // ───────────────────────────────────────────────────────────────────────
 
   // User Info
@@ -138,6 +139,17 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private processedMessageIds: Set<string> = new Set();
   private processedTranscriptionFiles: Set<string> = new Set();
+  private signalRListenersInitialized: boolean = false;
+  private isDestroying: boolean = false;
+  private pendingSignalFlushTimeouts: Map<string, any> = new Map();
+  private speakingDetectionHandles: Map<string, { audioContext: AudioContext; frameId: number | null }> = new Map();
+  private participantByConnectionId: Map<string, Participant> = new Map();
+  private pendingChatScrollFrame: number | null = null;
+  private pendingLiveTranscriptionScrollFrame: number | null = null;
+  private pendingTooltipInitTimeout: any = null;
+  private pendingTooltipRefreshTimeout: any = null;
+  private meetingEndedCloseTimeout: any = null;
+  private preservedCameraTrack: MediaStreamTrack | null = null;
 
   private destroy$ = new Subject<void>();
 
@@ -207,7 +219,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
                     status: data.status,
                     result: data.result
                   })
-                  .catch(() => {});
+                  .catch(() => { });
               }
 
               this.momGeneratorService
@@ -226,7 +238,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
                   // Share MoM with all participants so they can download the PDF.
                   if (this.isHost) {
-                    this.signalRService.publishMom(this.meetingId, momResponse as any).catch(() => {});
+                    this.signalRService.publishMom(this.meetingId, momResponse as any).catch(() => { });
                   }
                 })
                 .catch((err) => {
@@ -814,22 +826,32 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngAfterViewInit() {
-    setTimeout(() => this.initializeTooltips(), 500);
+    this.pendingTooltipInitTimeout = setTimeout(() => {
+      this.pendingTooltipInitTimeout = null;
+      this.initializeTooltips();
+    }, 500);
   }
 
   ngOnDestroy() {
+    if (this.isDestroying) {
+      return;
+    }
+
     console.log('Destroying meeting component');
+    this.isDestroying = true;
     this.destroy$.next();
     this.destroy$.complete();
+    this.performComponentCleanup(true);
+    return;
 
     this.stopTimer();
     this.tooltips.forEach(t => t.dispose());
 
     if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(track => track.stop());
+      this.mediaStream?.getTracks().forEach(track => track.stop());
     }
     if (this.screenStream) {
-      this.screenStream.getTracks().forEach(track => track.stop());
+      this.screenStream?.getTracks().forEach(track => track.stop());
     }
 
     this.peers.forEach(peer => peer.destroy());
@@ -845,10 +867,10 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     // LiveKit media cleanup
     this.livekitService.disconnect();
     // ── Live Transcription teardown  ──────────────────────────────────
-  if (this.liveTranscriptionIsHost && this.isLiveTranscriptionOn) {
-    this.signalRService.notifyLiveTranscriptionStopped(this.meetingId).catch(() => {});
-  }
-  this.liveTranscriptionService.stop();
+    if (this.liveTranscriptionIsHost && this.isLiveTranscriptionOn) {
+      this.signalRService.notifyLiveTranscriptionStopped(this.meetingId).catch(() => { });
+    }
+    this.liveTranscriptionService.stop();
     this.signalRService.stopConnection();
   }
 
@@ -1054,12 +1076,12 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private async initializeMedia() {
     try {
       const settings = this.settingsService.currentSettings;
-      const audioConstraints: any = { 
-        echoCancellation: true, 
-        noiseSuppression: true, 
-        autoGainControl: true 
+      const audioConstraints: any = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
       };
-      
+
       if (settings.preferredAudioInputId && settings.preferredAudioInputId !== 'default') {
         audioConstraints.deviceId = { exact: settings.preferredAudioInputId };
       }
@@ -1107,7 +1129,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         startWithVideo
       );
       this.connectionId = this.signalRService.getConnectionId();
-      
+
       // Start local speaking detection
       this.setupSpeakingDetection(this.connectionId!, this.mediaStream, true);
     } catch (err) {
@@ -1131,10 +1153,15 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log('=========================');
   }
   private setupSignalRListeners() {
+    if (this.signalRListenersInitialized) {
+      return;
+    }
+
+    this.signalRListenersInitialized = true;
     console.log('Setting up SignalR listeners');
 
     // Handle current participants list (sent immediately after joining)
-    this.signalRService.currentParticipants$.subscribe((participants: MeetingParticipant[]) => {
+    this.signalRService.currentParticipants$.pipe(takeUntil(this.destroy$)).subscribe((participants: MeetingParticipant[]) => {
       console.log('📋 SignalR current participants received:', participants.length);
       this.ngZone.run(() => {
         // Filter out current user
@@ -1153,7 +1180,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             this.addParticipant(p);
           } else {
             // Update ALL properties
-            existingParticipant.connectionId = p.connectionId;
+            this.registerParticipantConnection(existingParticipant, p.connectionId);
             existingParticipant.isMuted = !p.isAudioEnabled;
             existingParticipant.isVideoOff = !p.isVideoEnabled;
             existingParticipant.isScreenSharing = p.isScreenSharing;
@@ -1175,7 +1202,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     // Handle new participant joining
-    this.signalRService.participantJoined$.subscribe((participant: MeetingParticipant) => {
+    this.signalRService.participantJoined$.pipe(takeUntil(this.destroy$)).subscribe((participant: MeetingParticipant) => {
       console.log('👤 SignalR participant joined:', participant);
       this.ngZone.run(() => {
         // Don't add self
@@ -1217,7 +1244,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           });
         } else {
           // Update existing participant's connectionId and media states
-          existingParticipant.connectionId = participant.connectionId;
+          this.registerParticipantConnection(existingParticipant, participant.connectionId);
           existingParticipant.isMuted = !participant.isAudioEnabled;
           existingParticipant.isVideoOff = !participant.isVideoEnabled;
 
@@ -1229,25 +1256,25 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             'VideoOff:', existingParticipant.isVideoOff);
         }
       });
-          // if (this.liveTranscriptionService.isHostMode) {
+      // if (this.liveTranscriptionService.isHostMode) {
 
-          //   const tryAddAudio = (key: string) => {
-          //     const audioEl = document.getElementById(`remote-audio-${key}`) as HTMLAudioElement | null;
+      //   const tryAddAudio = (key: string) => {
+      //     const audioEl = document.getElementById(`remote-audio-${key}`) as HTMLAudioElement | null;
 
-          //     if (audioEl?.srcObject) {
-          //       this.liveTranscriptionService.addRemoteStream(key, audioEl.srcObject as MediaStream);
-          //     }
-          //   };
-          //   setTimeout(() => {
-          //     tryAddAudio(participant.userId);
-          //     tryAddAudio(participant.connectionId);
-          //   }, 800);
+      //     if (audioEl?.srcObject) {
+      //       this.liveTranscriptionService.addRemoteStream(key, audioEl.srcObject as MediaStream);
+      //     }
+      //   };
+      //   setTimeout(() => {
+      //     tryAddAudio(participant.userId);
+      //     tryAddAudio(participant.connectionId);
+      //   }, 800);
 
-          // }
+      // }
     });
 
     // Handle participant leaving
-    this.signalRService.participantLeft$.subscribe(({ connectionId, userId }) => {
+    this.signalRService.participantLeft$.pipe(takeUntil(this.destroy$)).subscribe(({ connectionId, userId }) => {
       console.log('👋 Participant left:', connectionId);
       this.ngZone.run(() => {
         const participant = this.participants.find(p => p.connectionId === connectionId);
@@ -1270,7 +1297,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       // }
     });
 
-    this.signalRService.participantDisconnected$.subscribe(({ connectionId, userId }) => {
+    this.signalRService.participantDisconnected$.pipe(takeUntil(this.destroy$)).subscribe(({ connectionId, userId }) => {
       console.log('🔌 Participant disconnected:', connectionId);
       this.ngZone.run(() => {
         this.removeParticipant(connectionId);
@@ -1281,21 +1308,21 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     // WebRTC signaling
-    this.signalRService.receiveOffer$.subscribe(({ fromConnectionId, offer }) => {
+    this.signalRService.receiveOffer$.pipe(takeUntil(this.destroy$)).subscribe(({ fromConnectionId, offer }) => {
       console.log('📞 Received offer from:', fromConnectionId);
       this.ngZone.run(() => {
         this.handleOffer(fromConnectionId, offer);
       });
     });
 
-    this.signalRService.receiveAnswer$.subscribe(({ fromConnectionId, answer }) => {
+    this.signalRService.receiveAnswer$.pipe(takeUntil(this.destroy$)).subscribe(({ fromConnectionId, answer }) => {
       console.log('📞 Received answer from:', fromConnectionId);
       this.ngZone.run(() => {
         this.handleAnswer(fromConnectionId, answer);
       });
     });
 
-    this.signalRService.receiveIceCandidate$.subscribe(({ fromConnectionId, candidate }) => {
+    this.signalRService.receiveIceCandidate$.pipe(takeUntil(this.destroy$)).subscribe(({ fromConnectionId, candidate }) => {
       console.log('🧊 Received ICE candidate from:', fromConnectionId);
       this.ngZone.run(() => {
         this.handleIceCandidate(fromConnectionId, candidate);
@@ -1303,7 +1330,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     // Media toggles
-    this.signalRService.audioToggled$.subscribe(({ connectionId, userId, isEnabled }) => {
+    this.signalRService.audioToggled$.pipe(takeUntil(this.destroy$)).subscribe(({ connectionId, userId, isEnabled }) => {
       console.log('🔊 Audio toggled:', { connectionId, userId, isEnabled });
       this.ngZone.run(() => {
         // Find participant by connectionId OR userId
@@ -1329,7 +1356,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     });
 
-    this.signalRService.videoToggled$.subscribe(({ connectionId, userId, isEnabled }) => {
+    this.signalRService.videoToggled$.pipe(takeUntil(this.destroy$)).subscribe(({ connectionId, userId, isEnabled }) => {
       console.log('📹 Video toggled:', { connectionId, userId, isEnabled });
       this.ngZone.run(() => {
         // Find participant by connectionId OR userId
@@ -1356,16 +1383,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     // Screen sharing
-    this.signalRService.screenShareStarted$.subscribe(({ connectionId, userId }) => {
+    this.signalRService.screenShareStarted$.pipe(takeUntil(this.destroy$)).subscribe(({ connectionId, userId }) => {
       console.log('🖥️ Screen share started by:', userId);
     });
 
-    this.signalRService.screenShareStopped$.subscribe(({ connectionId, userId }) => {
+    this.signalRService.screenShareStopped$.pipe(takeUntil(this.destroy$)).subscribe(({ connectionId, userId }) => {
       console.log('🖥️ Screen share stopped by:', userId);
     });
 
     // Chat messages
-    this.signalRService.meetingMessageReceived$.subscribe((data: any) => {
+    this.signalRService.meetingMessageReceived$.pipe(takeUntil(this.destroy$)).subscribe((data: any) => {
       console.log('💬 Chat message received:', data);
       this.ngZone.run(() => {
         // Skip messages from self
@@ -1374,9 +1401,15 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           return;
         }
 
+        const messageId = this.getChatMessageId(data);
+        if (this.processedMessageIds.has(messageId)) {
+          return;
+        }
+        this.processedMessageIds.add(messageId);
+
         // Add message to chat (only for other users)
         this.chatMessages.push({
-          id: data.id || Date.now().toString(),
+          id: messageId,
           sender: data.userName,
           senderId: data.userId,
           message: data.message,
@@ -1403,12 +1436,18 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     // Meeting ended
-    this.signalRService.meetingEnded$.subscribe(() => {
+    this.signalRService.meetingEnded$.pipe(takeUntil(this.destroy$)).subscribe(() => {
       console.log('🏁 Meeting ended by host');
       this.ngZone.run(() => {
         this.snackBar.open('Meeting ended by host', 'Close', { duration: 5000 });
         // setTimeout(() => this.router.navigate(['/chat']), 3000);
-        setTimeout(() => this.closeMeetingWindow(), 3000);
+        if (this.meetingEndedCloseTimeout) {
+          clearTimeout(this.meetingEndedCloseTimeout);
+        }
+        this.meetingEndedCloseTimeout = setTimeout(() => {
+          this.meetingEndedCloseTimeout = null;
+          this.closeMeetingWindow();
+        }, 3000);
       });
     });
 
@@ -1446,9 +1485,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         });
       });
 
-      // ── Live Transcription SignalR events ──────────────────────────────────────
+    // ── Live Transcription SignalR events ──────────────────────────────────────
 
-  // Another participant started live transcription → become a subscriber
+    // Another participant started live transcription → become a subscriber
     this.signalRService.liveTranscriptionStarted$
       .pipe(takeUntil(this.destroy$))
       .subscribe(async (evt: any) => {
@@ -1473,23 +1512,23 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       });
 
 
-  // Host stopped → if we're a subscriber, mark as stopped
-  this.signalRService.liveTranscriptionStopped$
-    .pipe(takeUntil(this.destroy$))
-    .subscribe(() => {
-      this.ngZone.run(() => {
-        if (!this.liveTranscriptionIsHost) {
-          // Viewers: session ended → stop own capture and close panel
-          this.isLiveTranscriptionOn      = false;
-          this.showLiveTranscriptionPanel = false;
-          this.liveTranscriptionService.stop();
-          this.snackBar.open('Live transcription ended', 'Close',
-            { duration: 2500, verticalPosition: 'bottom' });
-        }
+    // Host stopped → if we're a subscriber, mark as stopped
+    this.signalRService.liveTranscriptionStopped$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.ngZone.run(() => {
+          if (!this.liveTranscriptionIsHost) {
+            // Viewers: session ended → stop own capture and close panel
+            this.isLiveTranscriptionOn = false;
+            this.showLiveTranscriptionPanel = false;
+            this.liveTranscriptionService.stop();
+            this.snackBar.open('Live transcription ended', 'Close',
+              { duration: 2500, verticalPosition: 'bottom' });
+          }
+        });
       });
-    });
 
-  // Receive a live transcription segment broadcast by the host machine
+    // Receive a live transcription segment broadcast by the host machine
     this.signalRService.liveTranscriptionSegment$
       .pipe(takeUntil(this.destroy$))
       .subscribe((evt: any) => {
@@ -1503,7 +1542,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         });
       });
-  // ──────────────────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────────────
   }
 
   private addParticipant(participant: MeetingParticipant) {
@@ -1532,15 +1571,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       };
 
       this.participants = [...this.participants, newParticipant];
+      this.registerParticipantConnection(newParticipant, participant.connectionId);
       console.log('✅ Added participant:', newParticipant.name,
         'Muted:', newParticipant.isMuted,
         'VideoOff:', newParticipant.isVideoOff,
         'Host:', newParticipant.isHost);
     } else {
       // Update existing participant's media states
+      this.registerParticipantConnection(existingParticipant, participant.connectionId);
       existingParticipant.isMuted = !participant.isAudioEnabled;
       existingParticipant.isVideoOff = !participant.isVideoEnabled;
-      existingParticipant.connectionId = participant.connectionId;
       existingParticipant.isHost = participant.userId === this.meetingDetails?.hostId;
 
       // Force change detection
@@ -1554,6 +1594,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   removeParticipant(connectionId: string) {
+    this.participantByConnectionId.delete(connectionId);
+    this.stopSpeakingDetection(connectionId);
     this.participants = this.participants.filter(p => p.connectionId !== connectionId);
     console.log('Participants after removal:', this.participants.length);
   }
@@ -1680,43 +1722,14 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       }
 
       // Offer will be flushed from the queue once peer exists.
-      setTimeout(() => this.flushPendingSignals(fromConnectionId), 50);
+      this.schedulePendingSignalFlush(fromConnectionId);
 
     } else {
-      console.log('Participant not found yet, checking participants list:',
-        this.participants.map(p => ({ id: p.connectionId, name: p.name })));
-
-      // The participant list should arrive very soon
-      // Check every 200ms for up to 3 seconds
-      let attempts = 0;
-      const maxAttempts = 15; // 3 seconds total
-
-      const checkInterval = setInterval(() => {
-        attempts++;
-        participant = this.participants.find(p => p.connectionId === fromConnectionId);
-
-        if (participant) {
-          clearInterval(checkInterval);
-          console.log(`Found participant after ${attempts * 200}ms:`, participant.name);
-
-          if (!this.peers.has(fromConnectionId)) {
-            this.createPeer(fromConnectionId, participant.name, false);
-          }
-
-          setTimeout(() => this.flushPendingSignals(fromConnectionId), 50);
-
-        } else if (attempts >= maxAttempts) {
-          clearInterval(checkInterval);
-          console.log('Timed out waiting for participant, creating peer with connectionId');
-
-          // Create peer with connectionId as name as last resort
-          if (!this.peers.has(fromConnectionId)) {
-            this.createPeer(fromConnectionId, `User-${fromConnectionId.substring(0, 5)}`, false);
-          }
-
-          setTimeout(() => this.flushPendingSignals(fromConnectionId), 50);
-        }
-      }, 200);
+      console.log('Participant not found yet, creating peer with connectionId fallback');
+      if (!this.peers.has(fromConnectionId)) {
+        this.createPeer(fromConnectionId, `User-${fromConnectionId.substring(0, 5)}`, false);
+      }
+      this.schedulePendingSignalFlush(fromConnectionId);
     }
   }
 
@@ -1771,7 +1784,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         // Trigger change detection by spreading the array
         this.participants = [...this.participants];
         console.log('Successfully attached stream to participant:', userName);
-        
+
         // Start speaking detection for this participant
         this.setupSpeakingDetection(connectionId, stream);
       } else {
@@ -1801,7 +1814,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           console.warn('Error playing remote audio stream:', err);
         });
       };
-      
+
       // Attempt immediate play
       audioElement.play().catch(err => {
         console.warn('Immediate play failed, waiting for metadata:', err);
@@ -1838,6 +1851,12 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private cleanupPeer(connectionId: string, destroy: boolean): void {
+    const pendingSignalFlush = this.pendingSignalFlushTimeouts.get(connectionId);
+    if (pendingSignalFlush) {
+      clearTimeout(pendingSignalFlush);
+      this.pendingSignalFlushTimeouts.delete(connectionId);
+    }
+
     const peer = this.peers.get(connectionId);
     if (peer) {
       try {
@@ -2032,6 +2051,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           const newTrack = stream.getAudioTracks()[0];
           if (newTrack) {
             this.mediaStream.addTrack(newTrack);
+            newTrack.enabled = true;
           }
 
           if (this.localVideo) {
@@ -2081,17 +2101,20 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         try {
           const settings = this.settingsService.currentSettings;
           const videoConstraints: any = { width: { ideal: 1280 }, height: { ideal: 720 } };
-          
+
           if (settings.preferredVideoInputId && settings.preferredVideoInputId !== 'default') {
             videoConstraints.deviceId = { exact: settings.preferredVideoInputId };
           }
 
-          const newStream = await navigator.mediaDevices.getUserMedia({ 
-            video: videoConstraints, 
-            audio: false 
+          const newStream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: false
           });
           const videoTrack = newStream.getVideoTracks()[0];
-          this.mediaStream.addTrack(videoTrack);
+          if (videoTrack) {
+            videoTrack.enabled = true;
+            this.mediaStream.addTrack(videoTrack);
+          }
 
           if (this.localVideo) {
             this.localVideo.nativeElement.muted = true;
@@ -2150,20 +2173,35 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       try {
         console.log('Starting screen share');
         this.screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: true
+          video: {
+            displaySurface: "application", // optional: monitor | window | application
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 44100,          // optional but useful
+            channelCount: 2             // stereo
+          }
         });
 
         this.isScreenSharing = true;
+        this.screenShareOwnerName = 'Your Screen';
         if (this.screenShareVideo) {
           this.screenShareVideo.nativeElement.srcObject = this.screenStream;
         }
 
-        const videoTrack = this.mediaStream?.getVideoTracks()[0];
-        if (videoTrack) this.mediaStream?.removeTrack(videoTrack);
+        const existingCameraTrack = this.mediaStream?.getVideoTracks()[0] ?? null;
+        this.preservedCameraTrack = existingCameraTrack;
+        if (existingCameraTrack) {
+          this.mediaStream?.removeTrack(existingCameraTrack);
+        }
 
         const screenTrack = this.screenStream.getVideoTracks()[0];
-        this.mediaStream?.addTrack(screenTrack);
+        if (screenTrack) {
+          screenTrack.enabled = true;
+          this.mediaStream?.addTrack(screenTrack);
+        }
 
         await this.signalRService.startScreenShare(this.meetingId);
         console.log('Screen share started');
@@ -2174,6 +2212,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         };
       } catch (error) {
         console.error('Error sharing screen:', error);
+        this.isScreenSharing = false;
+        this.screenShareOwnerName = 'Your Screen';
+        this.snackBar.open('Could not start screen share', 'Close', { duration: 3000 });
       }
     } else {
       await this.stopScreenSharing();
@@ -2209,15 +2250,34 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     await this.signalRService.stopScreenShare(this.meetingId);
 
     if (this.mediaStream) {
-      const screenTrack = this.mediaStream.getVideoTracks()[0];
-      if (screenTrack) this.mediaStream.removeTrack(screenTrack);
+      const activeVideoTrack = this.mediaStream.getVideoTracks()[0];
+      if (activeVideoTrack) {
+        this.mediaStream.removeTrack(activeVideoTrack);
+      }
 
-      try {
-        const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        const videoTrack = newStream.getVideoTracks()[0];
-        this.mediaStream.addTrack(videoTrack);
-      } catch (err) {
-        console.error('Error restarting camera:', err);
+      const restoredCameraTrack = this.preservedCameraTrack;
+      this.preservedCameraTrack = null;
+
+      if (restoredCameraTrack && restoredCameraTrack.readyState === 'live') {
+        restoredCameraTrack.enabled = !this.isVideoOff;
+        this.mediaStream.addTrack(restoredCameraTrack);
+      } else if (!this.isVideoOff) {
+        try {
+          const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          const videoTrack = newStream.getVideoTracks()[0];
+          if (videoTrack) {
+            videoTrack.enabled = true;
+            this.mediaStream.addTrack(videoTrack);
+          }
+        } catch (err) {
+          console.error('Error restarting camera:', err);
+          this.isVideoOff = true;
+          this.snackBar.open('Camera could not be restored after screen share', 'Close', { duration: 3000 });
+        }
+      }
+
+      if (this.localVideo) {
+        this.localVideo.nativeElement.srcObject = this.mediaStream;
       }
     }
 
@@ -2264,7 +2324,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log(`🎙️ Starting recording with local audio: ${hasLocalAudio}, remote streams: ${this.remoteAudioStreams.size}`);
 
-    const started = await this.audioRecorderService.startRecordingFromMeeting(this.mediaStream);
+    const started = await this.audioRecorderService.startRecordingFromMeeting(this.mediaStream, this.remoteAudioStreams);
 
     // Fallback: also add any already-tracked remote streams (covers edge cases where
     // DOM audio elements aren't found yet even though streams are present).
@@ -2409,12 +2469,17 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private scrollChatToBottom() {
-    setTimeout(() => {
+    if (this.pendingChatScrollFrame !== null) {
+      return;
+    }
+
+    this.pendingChatScrollFrame = requestAnimationFrame(() => {
+      this.pendingChatScrollFrame = null;
       if (this.chatMessagesContainer) {
         this.chatMessagesContainer.nativeElement.scrollTop =
           this.chatMessagesContainer.nativeElement.scrollHeight;
       }
-    }, 100);
+    });
   }
 
   private initializeTooltips(): void {
@@ -2435,7 +2500,14 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private refreshTooltips(): void {
     this.tooltips.forEach(t => t.dispose());
     this.tooltips = [];
-    setTimeout(() => this.initializeTooltips(), 100);
+    if (this.pendingTooltipRefreshTimeout) {
+      clearTimeout(this.pendingTooltipRefreshTimeout);
+    }
+
+    this.pendingTooltipRefreshTimeout = setTimeout(() => {
+      this.pendingTooltipRefreshTimeout = null;
+      this.initializeTooltips();
+    }, 100);
   }
 
   getInitials(name: string): string {
@@ -2494,10 +2566,10 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
-      this.isLiveTranscriptionOn      = true;
-      this.liveTranscriptionIsHost    = true;
+      this.isLiveTranscriptionOn = true;
+      this.liveTranscriptionIsHost = true;
       this.showLiveTranscriptionPanel = true;
-      this.liveTranscriptionError     = null;
+      this.liveTranscriptionError = null;
 
       // Start own mic capture first
       await this.startOwnLiveTranscription(true);
@@ -2507,8 +2579,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     } else if (this.liveTranscriptionIsHost) {
       // ── HOST: stop the session for everyone ──────────────────────────────
-      this.isLiveTranscriptionOn      = false;
-      this.liveTranscriptionIsHost    = false;
+      this.isLiveTranscriptionOn = false;
+      this.liveTranscriptionIsHost = false;
       this.showLiveTranscriptionPanel = false;
       this.liveTranscriptionService.stop();
       await this.signalRService.notifyLiveTranscriptionStopped(this.meetingId);
@@ -2542,7 +2614,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       this.meetingId,
       bridge,
       isHost
-    ); 
+    );
   }
 
   clearLiveTranscription(): void {
@@ -2552,10 +2624,17 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     return seg.id;
   }
   private scrollLiveTranscriptionToBottom(): void {
-    setTimeout(() => {
-      const el = document.getElementById('live-transcription-scroll');
-      if (el) el.scrollTop = el.scrollHeight;
-    }, 60);
+    if (this.pendingLiveTranscriptionScrollFrame !== null) {
+      return;
+    }
+
+    this.pendingLiveTranscriptionScrollFrame = requestAnimationFrame(() => {
+      this.pendingLiveTranscriptionScrollFrame = null;
+      const el = this.liveTranscriptionScroll?.nativeElement;
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
   }
 
   trackById(_index: number, p: Participant): string {
@@ -2594,7 +2673,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   // --- Actions ---
   openInviteDialog(): void {
     this.showInvitePopover = !this.showInvitePopover;
-    
+
     if (this.showInvitePopover && this.oisMeetUsers.length === 0) {
       this.loadOisMeetUsers();
     }
@@ -2604,7 +2683,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     const clientId = this.sessionService.getClientId();
     const companyId = this.sessionService.getCompanyId();
     const appId = this.sessionService.getMeetAppId() || (environment as any).appId || 'OISMEET';
-    
+
     if (!clientId || !companyId) return;
 
     this.userService.getOisMeetUsers(
@@ -2627,7 +2706,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       this.filteredInviteUsers = [...this.oisMeetUsers];
     } else {
       const q = this.inviteSearchQuery.toLowerCase();
-      this.filteredInviteUsers = this.oisMeetUsers.filter(u => 
+      this.filteredInviteUsers = this.oisMeetUsers.filter(u =>
         u.fullName.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
       );
     }
@@ -2636,7 +2715,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   inviteUser(user: any): void {
     if (this.isInviting) return;
     this.isInviting = true;
-    
+
     // Use CallService to "call" the participant into the meeting
     this.callService.startCall(user.oisMeetUserId, this.userFullName, 'Video', this.meetingId)
       .then(() => {
@@ -2660,12 +2739,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private setupSpeakingDetection(connectionId: string, stream: MediaStream, isLocal: boolean = false) {
     try {
+      this.stopSpeakingDetection(connectionId);
+
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const source = audioContext.createMediaStreamSource(stream);
       const analyzer = audioContext.createAnalyser();
       source.connect(analyzer);
       analyzer.fftSize = 256;
       const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+      const handle = { audioContext, frameId: null as number | null };
+      this.speakingDetectionHandles.set(connectionId, handle);
 
       const checkSpeaking = () => {
         if (audioContext.state === 'closed') return;
@@ -2685,7 +2768,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             });
           }
         } else {
-          const participant = this.participants.find(p => p.connectionId === connectionId);
+          const participant = this.participantByConnectionId.get(connectionId);
           if (participant && participant.isSpeaking !== isSpeaking) {
             this.ngZone.run(() => {
               participant.isSpeaking = isSpeaking;
@@ -2693,18 +2776,140 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         }
 
-        requestAnimationFrame(checkSpeaking);
+        handle.frameId = requestAnimationFrame(checkSpeaking);
       };
 
       checkSpeaking();
-
-      // Ensure we close audio context when done
-      this.destroy$.subscribe(() => {
-        if (audioContext.state !== 'closed') audioContext.close();
-      });
     } catch (e) {
       console.warn('Speaking detection failed:', e);
     }
+  }
+
+  private performComponentCleanup(leaveMeeting: boolean): void {
+    this.stopTimer();
+
+    if (this.connectPeersTimeout) {
+      clearTimeout(this.connectPeersTimeout);
+      this.connectPeersTimeout = null;
+    }
+
+    this.pendingSignalFlushTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
+    this.pendingSignalFlushTimeouts.clear();
+
+    if (this.pendingTooltipInitTimeout) {
+      clearTimeout(this.pendingTooltipInitTimeout);
+      this.pendingTooltipInitTimeout = null;
+    }
+    if (this.pendingTooltipRefreshTimeout) {
+      clearTimeout(this.pendingTooltipRefreshTimeout);
+      this.pendingTooltipRefreshTimeout = null;
+    }
+    if (this.meetingEndedCloseTimeout) {
+      clearTimeout(this.meetingEndedCloseTimeout);
+      this.meetingEndedCloseTimeout = null;
+    }
+    if (this.pendingChatScrollFrame !== null) {
+      cancelAnimationFrame(this.pendingChatScrollFrame);
+      this.pendingChatScrollFrame = null;
+    }
+    if (this.pendingLiveTranscriptionScrollFrame !== null) {
+      cancelAnimationFrame(this.pendingLiveTranscriptionScrollFrame);
+      this.pendingLiveTranscriptionScrollFrame = null;
+    }
+
+    this.tooltips.forEach(t => t.dispose());
+    this.tooltips = [];
+
+    Array.from(this.speakingDetectionHandles.keys()).forEach((connectionId) => this.stopSpeakingDetection(connectionId));
+
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(track => track.stop());
+      this.mediaStream = null;
+    }
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach(track => track.stop());
+      this.screenStream = null;
+    }
+    this.preservedCameraTrack = null;
+
+    this.peers.forEach(peer => {
+      try {
+        peer.destroy();
+      } catch {
+        // ignore teardown errors during shutdown
+      }
+    });
+    this.peers.clear();
+
+    this.remoteVideoElements.forEach(video => video.remove());
+    this.remoteVideoElements.clear();
+    this.remoteAudioStreams.clear();
+    this.participantByConnectionId.clear();
+
+    if (leaveMeeting && this.meetingId && this.oisMeetUserId) {
+      this.signalRService.leaveMeeting(this.meetingId, this.oisMeetUserId);
+    }
+
+    this.livekitService.disconnect();
+    if (this.liveTranscriptionIsHost && this.isLiveTranscriptionOn) {
+      this.signalRService.notifyLiveTranscriptionStopped(this.meetingId).catch(() => { });
+    }
+    this.liveTranscriptionService.stop();
+    this.audioRecorderService.dispose();
+    this.signalRService.stopConnection();
+  }
+
+  private registerParticipantConnection(participant: Participant, connectionId: string): void {
+    if (participant.connectionId && participant.connectionId !== connectionId) {
+      this.participantByConnectionId.delete(participant.connectionId);
+      this.stopSpeakingDetection(participant.connectionId);
+    }
+
+    participant.connectionId = connectionId;
+    if (connectionId) {
+      this.participantByConnectionId.set(connectionId, participant);
+    }
+  }
+
+  private getChatMessageId(data: any): string {
+    if (data?.id) {
+      return String(data.id);
+    }
+
+    return [
+      data?.userId ?? 'unknown',
+      data?.timestamp ?? '',
+      data?.message ?? ''
+    ].join('::');
+  }
+
+  private schedulePendingSignalFlush(connectionId: string): void {
+    const existingTimeout = this.pendingSignalFlushTimeouts.get(connectionId);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
+    const timeoutId = setTimeout(() => {
+      this.pendingSignalFlushTimeouts.delete(connectionId);
+      this.flushPendingSignals(connectionId);
+    }, 50);
+
+    this.pendingSignalFlushTimeouts.set(connectionId, timeoutId);
+  }
+
+  private stopSpeakingDetection(connectionId: string): void {
+    const handle = this.speakingDetectionHandles.get(connectionId);
+    if (!handle) {
+      return;
+    }
+
+    if (handle.frameId !== null) {
+      cancelAnimationFrame(handle.frameId);
+    }
+    if (handle.audioContext.state !== 'closed') {
+      handle.audioContext.close().catch(() => { });
+    }
+    this.speakingDetectionHandles.delete(connectionId);
   }
 }
 

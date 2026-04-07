@@ -12,6 +12,14 @@ export interface IncomingCall {
   fromUserName: string;
   callType: CallType;
   roomId?: string;
+  isMeetingInvite?: boolean;
+}
+
+export interface OutgoingCallBannerState {
+  targetUserId: string;
+  targetUserName: string;
+  callType: CallType;
+  statusText: string;
 }
 
 @Injectable({
@@ -25,6 +33,7 @@ export class CallService {
   // Reactive Signals for global access
   public incomingCall = signal<IncomingCall | null>(null);
   public isCalling = signal<boolean>(false);
+  public outgoingCall = signal<OutgoingCallBannerState | null>(null);
   private currentUserId: string | null = null;
   
   private callAcceptedSubject = new Subject<{ byUserId: string, peerId: string }>();
@@ -106,7 +115,7 @@ export class CallService {
     hub.on('IncomingCall', (fromUserId, fromUserName, callType, roomId) => {
       this.ngZone.run(() => {
         console.log(`📞 Incoming Call banner: From ${fromUserName} (${fromUserId}) Type: ${callType} Room: ${roomId}`);
-        this.incomingCall.set({ fromUserId, fromUserName, callType, roomId });
+        this.incomingCall.set({ fromUserId, fromUserName, callType, roomId, isMeetingInvite: false });
 
         if (this.callTimeout) clearTimeout(this.callTimeout);
         this.callTimeout = setTimeout(() => {
@@ -125,7 +134,8 @@ export class CallService {
           fromUserId: payload.userId,
           fromUserName: payload.fromUserName || 'Inbound Call',
           callType: 'Video',
-          roomId: payload.callId
+          roomId: payload.callId,
+          isMeetingInvite: false
         });
       });
     });
@@ -134,6 +144,7 @@ export class CallService {
       this.ngZone.run(() => {
         console.log(`✅ Call Accepted: By ${byUserId}`);
         this.isCalling.set(false);
+        this.outgoingCall.set(null);
         this.callAcceptedSubject.next({ byUserId, peerId });
       });
     });
@@ -142,6 +153,7 @@ export class CallService {
       this.ngZone.run(() => {
         console.log(`❌ Call Rejected: By ${byUserId} Reason: ${reason}`);
         this.isCalling.set(false);
+        this.outgoingCall.set(null);
         this.incomingCall.set(null);
         this.callRejectedSubject.next({ byUserId, reason });
       });
@@ -152,6 +164,7 @@ export class CallService {
         console.log(`🏁 Call Ended: By ${byUserId}`);
         this.incomingCall.set(null);
         this.isCalling.set(false);
+        this.outgoingCall.set(null);
         this.callEndedSubject.next(byUserId);
       });
     });
@@ -163,7 +176,8 @@ export class CallService {
           fromUserId: 'system',
           fromUserName,
           callType: 'Video',
-          roomId: meetingId
+          roomId: meetingId,
+          isMeetingInvite: true
         });
       });
     });
@@ -218,6 +232,13 @@ export class CallService {
 
   public async startCall(targetUserId: string, fromUserName: string, callType: CallType, roomId?: string): Promise<void> {
     await this.ensureConnected();
+    this.isCalling.set(true);
+    this.outgoingCall.set({
+      targetUserId,
+      targetUserName: 'participant',
+      callType,
+      statusText: this.isConnected() ? 'Connected' : 'Connecting... Please wait'
+    });
 
     if (this.currentUserId) {
       const request: StartCallRequest = {
@@ -248,6 +269,31 @@ export class CallService {
       }
     } else {
       throw new Error('User context missing. Please re-authenticate.');
+    }
+  }
+
+  public setOutgoingCallDisplay(targetUserId: string, targetUserName: string, callType: CallType): void {
+    this.outgoingCall.set({
+      targetUserId,
+      targetUserName,
+      callType,
+      statusText: this.isConnected() ? 'Connected' : 'Connecting... Please wait'
+    });
+  }
+
+  public async cancelOutgoingCall(): Promise<void> {
+    const outgoing = this.outgoingCall();
+    this.isCalling.set(false);
+    this.outgoingCall.set(null);
+
+    if (!outgoing?.targetUserId) {
+      return;
+    }
+
+    try {
+      await this.endCall(outgoing.targetUserId);
+    } catch (err) {
+      console.warn('Failed to cancel outgoing call cleanly:', err);
     }
   }
 

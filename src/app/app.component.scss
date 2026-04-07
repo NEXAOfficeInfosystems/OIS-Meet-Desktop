@@ -8,6 +8,67 @@
   }
 }
 
+.global-call-banner {
+  position: fixed;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10950;
+  width: min(720px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid #dbe7f7;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+}
+
+.global-call-banner__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #dbe7f7;
+  flex-shrink: 0;
+}
+
+.global-call-banner__content {
+  min-width: 0;
+  flex: 1;
+}
+
+.global-call-banner__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.global-call-banner__meta {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.global-call-banner__cancel {
+  border: 1px solid #ef4444;
+  background: #ffffff;
+  color: #dc2626;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.global-call-banner__cancel:hover {
+  background: #fef2f2;
+}
+
 .global-toasts {
   position: fixed;
   bottom: 24px;

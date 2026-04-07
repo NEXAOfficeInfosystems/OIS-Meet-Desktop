@@ -92,6 +92,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   incomingCall: IncomingCall | null = null;
   isCalling: boolean = false;
   activeCallUserId: string | null = null;
+  activeCallUserName: string = '';
   callType: CallType = 'Audio';
   isCallHubConnected: boolean = false;
   callHubStatusMessage: string = 'Connecting...';
@@ -237,6 +238,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       const mode = this.viewMode();
       if (selected && mode === 'activity') {
         this.handleNotificationSelection(selected);
+      }
+    });
+
+    effect(() => {
+      const outgoingCall = this.callService.outgoingCall();
+
+      if (!outgoingCall && this.isCalling) {
+        this.resetOutgoingCallState();
       }
     });
   }
@@ -623,51 +632,67 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     this.callService.callAccepted$.pipe(takeUntil(this.destroy$)).subscribe(data => {
       console.log('✅ Call accepted by remote user');
-      if (this.callTimeout) clearTimeout(this.callTimeout);
-      this.isCalling = false;
+      this.resetOutgoingCallState();
       this.openCallWindow(data.byUserId, this.callType, true);
       this.cdr.detectChanges();
     });
 
     this.callService.callRejected$.pipe(takeUntil(this.destroy$)).subscribe(data => {
       console.log('❌ Call rejected by remote user', data.reason);
-      if (this.callTimeout) clearTimeout(this.callTimeout);
-      this.isCalling = false;
+      this.resetOutgoingCallState();
       alert(`Call rejected: ${data.reason}`);
       this.cdr.detectChanges();
     });
   }
 
   startCall(type: CallType): void {
-    if (!this.selectedUser) return;
+    if (!this.selectedUser || this.selectedUser.isGroup) return;
+
+    const targetUserId = this.selectedUser.userId || this.selectedUser.id;
+    if (!targetUserId) return alert('Selected user is missing a valid call identity.');
 
     console.log(`🚀 Initiating ${type} call to user:`, this.selectedUser.userId);
     this.callType = type;
     this.isCalling = true;
+    this.activeCallUserId = targetUserId;
+    this.activeCallUserName = this.selectedUser.fullName || this.selectedUser.name || 'participant';
+    this.callService.setOutgoingCallDisplay(targetUserId, this.activeCallUserName, type);
 
     // Set a fallback timeout (45 seconds) to prevent infinite loading state
     if (this.callTimeout) clearTimeout(this.callTimeout);
     this.callTimeout = setTimeout(() => {
       if (this.isCalling) {
         console.log('⚠️ Call invitation timed out (no response from receiver)');
-        this.isCalling = false;
+        this.resetOutgoingCallState();
+        this.callService.outgoingCall.set(null);
         alert('The user did not answer the call. Please try again later.');
         this.cdr.detectChanges();
       }
     }, 45000);
 
     const name = this.sessionService.getFullName() || 'User';
-    this.callService.startCall(this.selectedUser.userId, name, type)
+    this.callService.startCall(targetUserId, name, type)
       .then(() => {
         console.log('✅ StartCall request sent to hub');
       })
       .catch(err => {
         console.error('❌ Failed to start call invocation:', err);
-        if (this.callTimeout) clearTimeout(this.callTimeout);
-        this.isCalling = false;
+        this.resetOutgoingCallState();
+        this.callService.outgoingCall.set(null);
         alert('Could not start call. Please ensure you are connected and try again.');
         this.cdr.detectChanges();
       });
+  }
+
+  private resetOutgoingCallState(): void {
+    if (this.callTimeout) {
+      clearTimeout(this.callTimeout);
+      this.callTimeout = null;
+    }
+
+    this.isCalling = false;
+    this.activeCallUserId = null;
+    this.activeCallUserName = '';
   }
 
 
