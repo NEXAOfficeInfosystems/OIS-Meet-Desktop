@@ -2717,7 +2717,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isInviting = true;
 
     // Use CallService to "call" the participant into the meeting
-    this.callService.startCall(user.oisMeetUserId, this.userFullName, 'Video', this.meetingId)
+    this.callService.startCall(user.oisMeetUserId, user.fullName, this.userFullName, 'Video', this.meetingId)
       .then(() => {
         this.snackBar.open(`Calling ${user.fullName}...`, 'OK', { duration: 2000 });
         this.isInviting = false;

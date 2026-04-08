@@ -161,8 +161,11 @@ export class IncomingCallBannerComponent {
     } else {
       // 1:1 Call
       await this.callService.acceptCall(call.fromUserId);
-      const sorted = [this.sessionService.getOISMeetUserId(), call.fromUserId].sort();
-      const roomId = call.roomId || `call_${sorted[0]}_${sorted[1]}`;
+      
+      const currentUserId = this.sessionService.getOISMeetUserId() || this.sessionService.getUserId();
+      const sorted = [currentUserId, call.fromUserId].sort();
+      const roomId = call.roomId || `call_${sorted?.[0]}_${sorted?.[1]}`;
+      
       this.openMeetingWindow(roomId, false, call.callType === 'Video');
     }
     

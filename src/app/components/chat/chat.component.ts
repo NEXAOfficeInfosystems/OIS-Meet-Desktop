@@ -648,10 +648,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   startCall(type: CallType): void {
     if (!this.selectedUser || this.selectedUser.isGroup) return;
 
-    const targetUserId = this.selectedUser.userId || this.selectedUser.id;
+    // Use GUID for signaling
+    const targetUserId = this.selectedUser.id; 
     if (!targetUserId) return alert('Selected user is missing a valid call identity.');
 
-    console.log(`🚀 Initiating ${type} call to user:`, this.selectedUser.userId);
+    console.log(`🚀 Initiating ${type} call to user: ${this.selectedUser.fullName} (ID: ${targetUserId})`);
     this.callType = type;
     this.isCalling = true;
     this.activeCallUserId = targetUserId;
@@ -663,6 +664,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.callTimeout = setTimeout(() => {
       if (this.isCalling) {
         console.log('⚠️ Call invitation timed out (no response from receiver)');
+        this.callService.stopRingtones();
         this.resetOutgoingCallState();
         this.callService.outgoingCall.set(null);
         alert('The user did not answer the call. Please try again later.');
@@ -671,12 +673,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }, 45000);
 
     const name = this.sessionService.getFullName() || 'User';
-    this.callService.startCall(targetUserId, name, type)
+    this.callService.startCall(targetUserId, this.activeCallUserName, name, type)
       .then(() => {
         console.log('✅ StartCall request sent to hub');
       })
       .catch(err => {
         console.error('❌ Failed to start call invocation:', err);
+        this.callService.stopRingtones();
         this.resetOutgoingCallState();
         this.callService.outgoingCall.set(null);
         alert('Could not start call. Please ensure you are connected and try again.');
@@ -1133,11 +1136,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const convId = conversationId?.toString();
     const sender = senderId?.toString();
 
+    if (!convId && !sender) return null;
+
     return (
       this.users.find(u => u.conversationId?.toString() === convId) ||
       (sender && this.users.find(u =>
         u.id?.toString() === sender ||
-        u.userId?.toString() === sender
+        u.userId?.toString() === sender ||
+        u.ssoUserId?.toString() === sender
       )) ||
       null
     );
@@ -1271,12 +1277,25 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           (res.data as any[]).forEach((conv: any) => {
             const isGroup = conv.conversationType === 'Group';
             const participants = conv.participants || [];
-            const other = participants.find((p: any) => p.userId?.toString() !== this.currentUserId?.toString()) || (participants.length > 0 ? participants[0] : {});
+            const currentUserIdStr = this.currentUserId?.toString();
+            
+            // Find 'other' participant by checking both GUID and SSO ID
+            const other = participants.find((p: any) => {
+              const pid = p.userId?.toString();
+              const pSsoId = p.ssoUserId?.toString();
+              return pid !== currentUserIdStr && pSsoId !== currentUserIdStr;
+            }) || (participants.length > 0 ? participants[0] : {});
 
-            // For groups, uniquely identify by conversationId. For direct, by other user's id.
+            // Match against existing users list using both GUID and SSO ID
+            const otherUserId = other.userId?.toString();
+            const otherSsoId = other.ssoUserId?.toString() || other.userId?.toString();
+
             let user = isGroup
               ? this.users.find(u => u.conversationId === conv.id?.toString())
-              : this.users.find(u => u.id?.toString() === other.userId?.toString());
+              : this.users.find(u => 
+                  (otherUserId && u.id?.toString() === otherUserId) || 
+                  (otherSsoId && u.ssoUserId?.toString() === otherSsoId)
+                );
 
             if (user) {
               user.conversationId = conv.id?.toString();
@@ -1299,6 +1318,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
               this.users.push({
                 id: isGroup ? conv.id?.toString() : other.userId?.toString(),
                 userId: isGroup ? null : other.userId?.toString(),
+                ssoUserId: isGroup ? null : (other.ssoUserId?.toString() || other.userId?.toString()),
                 name: isGroup ? (conv.groupName || '') : (other.name || other.fullName || ''),
                 fullName: isGroup ? (conv.groupName || '') : (other.name || other.fullName || ''),
                 email: other.email || '',
@@ -1411,7 +1431,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         if (user.isGroup) {
           // Use participants list from the conversation object
           this.mentionList = (user.participants || [])
-            .filter((p: any) => p.userId?.toString() !== this.currentUserId?.toString())
+            .filter((p: any) => {
+              const pid = p.userId?.toString();
+              const pSsoId = p.ssoUserId?.toString();
+              return pid !== this.currentUserId?.toString() && pSsoId !== this.currentUserId?.toString();
+            })
             .map((p: any) => ({
               id: p.userId?.toString(),
               userId: p.userId?.toString(),

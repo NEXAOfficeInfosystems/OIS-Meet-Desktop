@@ -58,6 +58,9 @@ export class CallService {
   public iceCandidate$ = this.iceCandidateSubject.asObservable();
 
   private callTimeout: any;
+  private ringingSound: HTMLAudioElement | null = null;
+  public callStatus = signal<'Idle' | 'Calling' | 'Ringing' | 'Connected' | 'Busy' | 'Rejected'>('Idle');
+  public callTypeState = signal<CallType>('Audio');
 
   constructor() {}
 
@@ -117,6 +120,13 @@ export class CallService {
         const callerName = fromUserName || 'Unknown User';
         console.log(`📞 Incoming Call Event: From ${callerName} (${fromUserId}) Type: ${callType} Room: ${roomId}`);
         
+        // Auto-reject if already in a call
+        if (this.isCalling() || this.incomingCall()) {
+          console.log(`🚫 Auto-rejecting call from ${callerName} (Already busy)`);
+          this.rejectCall(fromUserId, 'Busy');
+          return;
+        }
+
         this.incomingCall.set({ 
           fromUserId, 
           fromUserName: callerName, 
@@ -125,14 +135,32 @@ export class CallService {
           isMeetingInvite: false 
         });
 
+        // Notify caller that we are ringing
+        this.hubConnection?.invoke('NotifyRinging', fromUserId).catch(err => {
+          console.warn('Failed to notify ringing:', err);
+        });
+
+        this.playIncomingRingtone();
+
         if (this.callTimeout) clearTimeout(this.callTimeout);
         this.callTimeout = setTimeout(() => {
           if (this.incomingCall()) {
             console.log(`⌛ Call from ${callerName} timed out (no response)`);
+            this.stopRingtones();
             this.rejectCall(fromUserId, 'Timed out');
             this.incomingCall.set(null);
           }
         }, 60000);
+      });
+    });
+
+    hub.on('CallRinging', (byUserId) => {
+      this.ngZone.run(() => {
+        console.log(`🔔 Remote user ${byUserId} is ringing`);
+        if (this.isCalling()) {
+          this.callStatus.set('Ringing');
+          this.playOutgoingRingtone();
+        }
       });
     });
 
@@ -153,7 +181,9 @@ export class CallService {
     hub.on('CallAccepted', (byUserId, peerId) => {
       this.ngZone.run(() => {
         console.log(`✅ Call Accepted: By ${byUserId}`);
+        this.stopRingtones();
         this.isCalling.set(false);
+        this.callStatus.set('Connected');
         this.outgoingCall.set(null);
         this.callAcceptedSubject.next({ byUserId, peerId });
       });
@@ -162,7 +192,9 @@ export class CallService {
     hub.on('CallRejected', (byUserId, reason) => {
       this.ngZone.run(() => {
         console.log(`❌ Call Rejected: By ${byUserId} Reason: ${reason}`);
+        this.stopRingtones();
         this.isCalling.set(false);
+        this.callStatus.set(reason === 'Busy' ? 'Busy' : 'Rejected');
         this.outgoingCall.set(null);
         this.incomingCall.set(null);
         this.callRejectedSubject.next({ byUserId, reason });
@@ -241,12 +273,15 @@ export class CallService {
     }
   }
 
-  public async startCall(targetUserId: string, fromUserName: string, callType: CallType, roomId?: string): Promise<void> {
+  public async startCall(targetUserId: string, targetUserName: string, fromUserName: string, callType: CallType, roomId?: string): Promise<void> {
     await this.ensureConnected();
     this.isCalling.set(true);
+    this.callStatus.set('Calling');
+    this.callTypeState.set(callType);
+    
     this.outgoingCall.set({
       targetUserId,
-      targetUserName: 'participant',
+      targetUserName: targetUserName || 'participant',
       callType,
       statusText: this.isConnected() ? 'Connected' : 'Connecting... Please wait'
     });
@@ -339,10 +374,35 @@ export class CallService {
   }
 
   public stopConnection(): void {
+    this.stopRingtones();
     if (this.hubConnection) {
       this.hubConnection.stop()
         .then(() => console.log('Call SignalR Stopped'))
         .catch(err => console.error('Error stopping Call SignalR: ', err));
+    }
+  }
+
+  // --- Ringtone Logic ---
+
+  private playIncomingRingtone(): void {
+    this.stopRingtones();
+    this.ringingSound = new Audio('assets/sounds/incoming-call.mp3');
+    this.ringingSound.loop = true;
+    this.ringingSound.play().catch(e => console.warn('Could not play ringtone (interaction required?):', e));
+  }
+
+  private playOutgoingRingtone(): void {
+    this.stopRingtones();
+    this.ringingSound = new Audio('assets/sounds/outgoing-call.mp3');
+    this.ringingSound.loop = true;
+    this.ringingSound.play().catch(e => console.warn('Could not play ringtone:', e));
+  }
+
+  public stopRingtones(): void {
+    if (this.ringingSound) {
+      this.ringingSound.pause();
+      this.ringingSound.currentTime = 0;
+      this.ringingSound = null;
     }
   }
 

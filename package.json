@@ -1,6 +1,6 @@
 {
   "name": "ois-meet-desktop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "OIS Meet desktop application",
   "author": "OIS Meet",
   "main": "electron/main.js",
@@ -91,9 +91,15 @@
       "icon": "electron/assets/icon.ico"
     },
     "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true
+      "oneClick": true,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": false,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OIS Meet",
+      "artifactName": "${productName} Setup ${version}.${ext}",
+      "uninstallDisplayName": "${productName}"
     }
   }
 }

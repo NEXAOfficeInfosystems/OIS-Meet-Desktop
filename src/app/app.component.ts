@@ -25,9 +25,15 @@ import * as signalR from '@microsoft/signalr';
         <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
       </div>
       <div class="global-call-banner__content">
-        <div class="global-call-banner__title">Calling {{ call.targetUserName }}</div>
+        <div class="global-call-banner__title">
+          <span *ngIf="callService.callStatus() === 'Calling'">Calling {{ call.targetUserName }}...</span>
+          <span *ngIf="callService.callStatus() === 'Ringing'">{{ call.targetUserName }} is ringing...</span>
+          <span *ngIf="callService.callStatus() === 'Connected'">Connected to {{ call.targetUserName }}</span>
+          <span *ngIf="callService.callStatus() === 'Busy'">{{ call.targetUserName }} is busy</span>
+          <span *ngIf="callService.callStatus() === 'Rejected'">Call declined</span>
+        </div>
         <div class="global-call-banner__meta">
-          {{ call.callType }} call in progress - {{ getOutgoingCallStatusText() }}
+          {{ call.callType }} call · {{ getOutgoingCallStatusText() }}
         </div>
       </div>
       <button class="global-call-banner__cancel" type="button" (click)="cancelOutgoingCall()">
