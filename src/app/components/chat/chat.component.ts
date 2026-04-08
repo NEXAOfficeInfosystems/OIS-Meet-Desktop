@@ -1767,7 +1767,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   private deleteMessageFromUI(messageId: string): void {
-    this.messages = this.messages.filter(m => m.id?.toString() !== messageId?.toString());
+    const filtered = this.messages.filter(m => m.id?.toString() !== messageId?.toString());
+    this.messages = this.decorateMessagesWithDates(filtered);
     this.displayedMessageIds.delete(messageId);
   }
 
@@ -1905,11 +1906,17 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const now = new Date();
     const d = date instanceof Date ? date : this.parseDate(date as any);
     if (!d) return '';
-    const dm = Math.floor((now.getTime() - d.getTime()) / 60000);
-    if (dm < 1) return 'Just now';
-    if (dm < 60) return `${dm}m ago`;
-    if (dm < 1440) return `${Math.floor(dm / 60)}h ago`;
-    if (dm < 2880) return 'Yesterday';
+
+    if (d.toDateString() === now.toDateString()) {
+      return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    }
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) {
+      return "Yesterday";
+    }
+
     return d.toLocaleDateString();
   }
 
@@ -1939,15 +1946,15 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const now = new Date();
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);
+
     if (d.toDateString() === now.toDateString()) return 'Today';
     if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    const opts: Intl.DateTimeFormatOptions = {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {})
-    };
-    return d.toLocaleDateString(undefined, opts);
+
+    return d.toLocaleDateString(undefined, {
+      year: d.getFullYear() === now.getFullYear() ? undefined : "numeric",
+      month: "long",
+      day: "numeric"
+    });
   }
 
   private decorateMessagesWithDates(msgs: any[]): any[] {

@@ -114,12 +114,21 @@ export class CallService {
 
     hub.on('IncomingCall', (fromUserId, fromUserName, callType, roomId) => {
       this.ngZone.run(() => {
-        console.log(`📞 Incoming Call banner: From ${fromUserName} (${fromUserId}) Type: ${callType} Room: ${roomId}`);
-        this.incomingCall.set({ fromUserId, fromUserName, callType, roomId, isMeetingInvite: false });
+        const callerName = fromUserName || 'Unknown User';
+        console.log(`📞 Incoming Call Event: From ${callerName} (${fromUserId}) Type: ${callType} Room: ${roomId}`);
+        
+        this.incomingCall.set({ 
+          fromUserId, 
+          fromUserName: callerName, 
+          callType: callType || 'Video', 
+          roomId, 
+          isMeetingInvite: false 
+        });
 
         if (this.callTimeout) clearTimeout(this.callTimeout);
         this.callTimeout = setTimeout(() => {
           if (this.incomingCall()) {
+            console.log(`⌛ Call from ${callerName} timed out (no response)`);
             this.rejectCall(fromUserId, 'Timed out');
             this.incomingCall.set(null);
           }
@@ -129,10 +138,11 @@ export class CallService {
 
     hub.on('InviteToCall', (payload: { userId: string; callId: string; fromUserName?: string }) => {
       this.ngZone.run(() => {
-        console.log(`📞 Received InviteToCall: ${payload.callId} From: ${payload.fromUserName}`);
+        const callerName = payload.fromUserName || 'Inbound Call';
+        console.log(`📞 Received InviteToCall: ${payload.callId} From: ${callerName}`);
         this.incomingCall.set({
           fromUserId: payload.userId,
-          fromUserName: payload.fromUserName || 'Inbound Call',
+          fromUserName: callerName,
           callType: 'Video',
           roomId: payload.callId,
           isMeetingInvite: false
@@ -171,10 +181,11 @@ export class CallService {
 
     hub.on('InviteToMeeting', (meetingId, fromUserName) => {
       this.ngZone.run(() => {
-        console.log(`🚀 Invited to join meeting ${meetingId} by ${fromUserName}`);
+        const hostName = fromUserName || 'Meeting Host';
+        console.log(`🚀 Invited to join meeting ${meetingId} by ${hostName}`);
         this.incomingCall.set({
           fromUserId: 'system',
-          fromUserName,
+          fromUserName: hostName,
           callType: 'Video',
           roomId: meetingId,
           isMeetingInvite: true

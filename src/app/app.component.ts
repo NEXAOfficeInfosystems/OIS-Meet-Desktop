@@ -68,14 +68,20 @@ export class AppComponent {
     // Inject to ensure ElectronAuthService is instantiated early
     this.notifications.requestPermission();
 
-    // Trigger browser notification when a call arrives via Signal effect
+    // Trigger browser notification and focus window when a call arrives
     effect(() => {
       const call = this.callService.incomingCall();
       if (call) {
+        // Show notification
         this.notifications.notify(
           call.isMeetingInvite ? 'Meeting Invite' : 'Incoming Call',
           `${call.fromUserName} is inviting you...`
         );
+
+        // Focus the application window so the user sees the incoming call banner
+        if (this.isElectron && (window as any).windowAPI?.focus) {
+          (window as any).windowAPI.focus();
+        }
       }
     });
     
@@ -95,15 +101,13 @@ export class AppComponent {
 
     this.realtime.notificationReceived$.subscribe(notification => {
       if (notification?.title) {
+        console.log('🔔 Generic Notification Received:', notification.title);
         this.notifications.notify(notification.title, notification.body || 'New notification');
       }
     });
 
-    this.realtime.inviteToCall$.subscribe(invite => {
-      if (invite?.callId) {
-        this.notifications.notify('Incoming call', `You were invited to call ${invite.callId}`);
-      }
-    });
+    // Note: Removed redundant realtime.inviteToCall$ subscription here.
+    // Call invitations are now handled centrally via CallService to ensure the UI banner is triggered.
   }
 
   getOutgoingCallStatusText(): string {

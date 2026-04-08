@@ -1,6 +1,6 @@
 {
   "name": "ois-meet-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "OIS Meet desktop application",
   "author": "OIS Meet",
   "main": "electron/main.js",
@@ -75,7 +75,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://updates.ois.com/meet"
+        "url": "https://raw.githubusercontent.com/NEXAOfficeInfosystems/OIS-Meet-Desktop/main/updates"
       }
     ],
     "files": [
@@ -88,8 +88,7 @@
         "nsis"
       ],
       "publisherName": "OIS Meet",
-      "icon": "electron/assets/icon.ico",
-      "signAndEditExecutable": false
+      "icon": "electron/assets/icon.ico"
     },
     "nsis": {
       "oneClick": false,

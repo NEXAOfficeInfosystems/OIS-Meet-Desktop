@@ -336,8 +336,14 @@
                 conversation!</p>
             </div>
 
-            <div class="message-group" *ngFor="let msg of messages" [id]="'msg-' + (msg.id || msg.Id)"
-              [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
+            <ng-container *ngFor="let msg of messages; let i = index">
+              <!-- Date Separator -->
+              <div class="date-separator" *ngIf="msg.showDateSeparator">
+                <span class="date-label">{{ msg.dateSeparatorLabel }}</span>
+              </div>
+
+              <div class="message-group" [id]="'msg-' + (msg.id || msg.Id)"
+                [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
               <div class="message-avatar-col" *ngIf="msg.senderId?.toString() !== currentUserId?.toString()">
                 <img *ngIf="msg.senderAvatarUrl" [src]="fileService.getFileUrl(msg.senderAvatarUrl)"
                   class="msg-avatar rounded-circle" alt="avatar">
@@ -396,7 +402,8 @@
                   </span>
                 </div>
               </div>
-            </div>
+              </div>
+            </ng-container>
 
             <div *ngIf="isLoading" class="text-center py-3">
               <div class="spinner-border spinner-border-sm text-primary" role="status">

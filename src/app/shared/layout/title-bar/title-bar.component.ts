@@ -11,6 +11,7 @@ import { StorageService } from '../../../core/services/storage.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog.component';
 import { switchMap, filter } from 'rxjs';
 import { UserService } from '../../../core/services/user.service';
+import { NativeNotificationService } from '../../../core/services/native-notification.service';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -31,6 +32,7 @@ export class TitleBarComponent implements OnInit {
 
   theme: ThemeMode = (localStorage.getItem('ois.theme') as ThemeMode) ?? 'light';
   isUserMenuOpen = false;
+  isSettingsMenuOpen = false;
   isCompanyMenuOpen = false;
   userFullName: string | null = null;
   selectedCompanyId: number | null = null;
@@ -45,6 +47,7 @@ export class TitleBarComponent implements OnInit {
     private ssoApiService: SsoApiService,
     private storageService: StorageService,
     private userService: UserService,
+    private nativeNotify: NativeNotificationService,
     private dialog: MatDialog
   ) {
     this.userFullName = this.sessionService.getFullName();
@@ -203,14 +206,38 @@ export class TitleBarComponent implements OnInit {
   toggleUserMenu(event: MouseEvent) {
     event.stopPropagation();
     this.isUserMenuOpen = !this.isUserMenuOpen;
+    if (this.isUserMenuOpen) this.isSettingsMenuOpen = false;
+  }
+
+  toggleSettingsMenu(event: MouseEvent) {
+    event.stopPropagation();
+    this.isSettingsMenuOpen = !this.isSettingsMenuOpen;
+    if (this.isSettingsMenuOpen) this.isUserMenuOpen = false;
+  }
+
+  async checkForUpdates() {
+    this.isSettingsMenuOpen = false;
+    if (this.isElectron) {
+      try {
+        const response = await (window as any).oisMeet.checkForUpdates();
+        if (response.success) {
+          this.nativeNotify.notify('Info', 'Update check initiated. You will be notified if an update is available.');
+        } else {
+          this.nativeNotify.notify('Error', 'Failed to check for updates: ' + response.error);
+        }
+      } catch (err) {
+        this.nativeNotify.notify('Error', 'Err: ' + err);
+      }
+    }
   }
 
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent) {
-    if (!this.isUserMenuOpen) return;
+    if (!this.isUserMenuOpen && !this.isSettingsMenuOpen) return;
     const target = event.target as Node | null;
     if (target && this.hostEl.nativeElement.contains(target)) return;
     this.isUserMenuOpen = false;
+    this.isSettingsMenuOpen = false;
   }
 
   private applyThemeToDocument() {

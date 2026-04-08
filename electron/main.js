@@ -61,6 +61,16 @@ autoUpdater.on('update-downloaded', (info) => {
   }
 });
 
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdatesAndNotify();
+    return { success: true, result };
+  } catch (error) {
+    console.error('[Updater] Manual check failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.on('restart-app', () => {
   autoUpdater.quitAndInstall();
 });
@@ -90,6 +100,14 @@ ipcMain.on('win:close', (event) => {
 ipcMain.handle('win:isMaximized', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   return win ? win.isMaximized() : false;
+});
+
+ipcMain.on('win:focus', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
 });
 
 let mainWindow;
@@ -366,6 +384,15 @@ ipcMain.handle('show-native-notification', async (event, { title, body }) => {
       appID:  APP_ID,
       silent: false
     });
+
+    notification.on('click', () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+
     notification.show();
     return { success: true };
   } catch (error) {

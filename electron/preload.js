@@ -73,6 +73,9 @@ contextBridge.exposeInMainWorld('oisMeet', {
   onDownloadProgress: (callback) => {
     ipcRenderer.on('update-download-progress', (event, progress) => callback(progress));
   },
+  checkForUpdates: () => {
+    return ipcRenderer.invoke('check-for-updates');
+  },
   restartApp: () => {
     ipcRenderer.send('restart-app');
   }
@@ -82,6 +85,7 @@ contextBridge.exposeInMainWorld('windowAPI', {
   minimize: () => ipcRenderer.send('win:minimize'),
   maximize: () => ipcRenderer.send('win:maximize'),
   close: () => ipcRenderer.send('win:close'),
+  focus: () => ipcRenderer.send('win:focus'),
   isMaximized: () => ipcRenderer.invoke('win:isMaximized')
 });
 
