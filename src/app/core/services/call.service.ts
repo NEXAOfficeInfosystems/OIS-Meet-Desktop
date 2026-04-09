@@ -39,7 +39,7 @@ export class CallService {
   public isCalling = signal<boolean>(false);
   public outgoingCall = signal<OutgoingCallBannerState | null>(null);
   private currentUserId: string | null = null;
-  private callAcceptedSubject = new Subject<{ byUserId: string, peerId: string }>();
+  private callAcceptedSubject = new Subject<{ byUserId: string, peerId: string, roomId: string | null }>();
   private callRejectedSubject = new Subject<{ byUserId: string, reason: string }>();
   private callEndedSubject = new Subject<string>();
 
@@ -65,6 +65,10 @@ export class CallService {
   private ringingSound: HTMLAudioElement | null = null;
   public callStatus = signal<'Idle' | 'Calling' | 'Ringing' | 'Connected' | 'Busy' | 'Rejected'>('Idle');
   public callTypeState = signal<CallType>('Audio');
+
+  /** The room ID returned by the API when the caller initiates a call. Used to ensure
+   *  the caller opens the same LiveKit room as the callee after CallAccepted fires. */
+  public activeCallRoomId: string | null = null;
 
   constructor() { }
 
@@ -253,7 +257,7 @@ export class CallService {
         this.callStatus.set('Connected');
         this.outgoingCall.set(null);
         this._clearIncomingCallState();
-        this.callAcceptedSubject.next({ byUserId, peerId });
+        this.callAcceptedSubject.next({ byUserId, peerId, roomId: this.activeCallRoomId });
       });
     });
 
@@ -361,6 +365,9 @@ export class CallService {
         const activeRoomId = roomId || res?.data?.callId;
         console.log('✅ API Call Session Started:', activeRoomId);
 
+        // Store so the caller can join the same room when CallAccepted fires.
+        this.activeCallRoomId = activeRoomId ?? null;
+
         // Step 2: Formally invite the callee via the backend REST API
         // This securely orchestrates the SignalR push notification from the server natively
         if (activeRoomId) {
@@ -406,6 +413,7 @@ export class CallService {
     const outgoing = this.outgoingCall();
     this.isCalling.set(false);
     this.outgoingCall.set(null);
+    this.activeCallRoomId = null;
 
     if (!outgoing?.targetUserId) {
       return;
@@ -472,28 +480,7 @@ export class CallService {
 
   private playIncomingRingtone(): void {
     this.stopRingtones();
-
-    // Try MP3 first; fall back to Web Audio API tone on error
-    const audio = new Audio('assets/sounds/incoming-call.mp3');
-    audio.loop = true;
-    audio.play().then(() => {
-      this.ringingSound = audio;
-    }).catch(() => {
-      // MP3 not available — generate a phone-ring tone via Web Audio API
-      this.playWebAudioRingtone('incoming');
-    });
-  }
-
-  private playOutgoingRingtone(): void {
-    this.stopRingtones();
-
-    const audio = new Audio('assets/sounds/outgoing-call.mp3');
-    audio.loop = true;
-    audio.play().then(() => {
-      this.ringingSound = audio;
-    }).catch(() => {
-      this.playWebAudioRingtone('outgoing');
-    });
+    this.playWebAudioRingtone('incoming');
   }
 
   /**

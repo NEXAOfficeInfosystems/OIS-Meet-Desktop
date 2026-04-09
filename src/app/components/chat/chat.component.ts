@@ -635,7 +635,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.callService.callAccepted$.pipe(takeUntil(this.destroy$)).subscribe(data => {
       console.log('✅ Call accepted by remote user');
       this.resetOutgoingCallState();
-      this.openCallWindow(data.byUserId, this.callType, true);
+      // Use the API-assigned room ID so both sides join the same LiveKit room.
+      // Fall back to the derived room ID only when the server didn't return one.
+      const roomId = data.roomId || (() => {
+        const sorted = [this.currentUserId, data.byUserId].sort();
+        return `call_${sorted[0]}_${sorted[1]}`;
+      })();
+      this.openMeetingWindow(roomId, true, true, this.callType === 'Video');
       this.cdr.detectChanges();
     });
 
@@ -700,15 +706,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
 
-
-  private openCallWindow(userId: string, type: CallType, isInitiator: boolean): void {
-    // Generate a secure room ID based on both users
-    const sorted = [this.currentUserId, userId].sort();
-    const roomId = `call_${sorted[0]}_${sorted[1]}`;
-
-    // Use existing meeting logic to open a dedicated 1:1 room
-    this.openMeetingWindow(roomId, isInitiator, true, type === 'Video');
-  }
 
   private playCallRingtone(): void {
     // Ringtone logic
