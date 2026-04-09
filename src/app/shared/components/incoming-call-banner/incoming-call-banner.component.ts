@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CallService } from '../../../core/services/call.service';
 import { SessionService } from '../../../core/services/session.service';
@@ -9,7 +9,12 @@ import { Router } from '@angular/router';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="global-call-banner shadow-lg animate-in" *ngIf="callService.incomingCall() as call">
+    <!--
+      CALLEE-ONLY BANNER: Rendered only when:
+        1. There is an active incomingCall signal set by the service
+        2. AND the current logged-in user is NOT the caller (defense-in-depth guard)
+    -->
+    <div class="global-call-banner shadow-lg animate-in" *ngIf="showBanner() as call">
       <div class="global-call-banner__icon">
         <div class="avatar-circle">
           {{ call.fromUserName.charAt(0).toUpperCase() }}
@@ -141,6 +146,26 @@ export class IncomingCallBannerComponent {
   private sessionService = inject(SessionService);
   private router = inject(Router);
 
+  /**
+   * Returns the incoming call only when the current user is the callee.
+   * This is a defense-in-depth check — the primary guard lives in CallService.
+   * Returns null (falsy) if the current user IS the caller, suppressing the banner.
+   */
+  public showBanner = computed(() => {
+    const call = this.callService.incomingCall();
+    if (!call) return null;
+
+    const currentUserId = this.sessionService.getOISMeetUserId() || this.sessionService.getUserId();
+
+    // If we can identify the current user AND they are the caller → suppress.
+    if (currentUserId && call.fromUserId !== 'system' && call.fromUserId === currentUserId) {
+      console.warn('[IncomingCallBanner] Defense-in-depth: suppressing banner – current user is the caller.');
+      return null;
+    }
+
+    return call;
+  });
+
   async accept(): Promise<void> {
     const call = this.callService.incomingCall();
     if (!call) return;
@@ -161,14 +186,14 @@ export class IncomingCallBannerComponent {
     } else {
       // 1:1 Call
       await this.callService.acceptCall(call.fromUserId);
-      
+
       const currentUserId = this.sessionService.getOISMeetUserId() || this.sessionService.getUserId();
       const sorted = [currentUserId, call.fromUserId].sort();
       const roomId = call.roomId || `call_${sorted?.[0]}_${sorted?.[1]}`;
-      
+
       this.openMeetingWindow(roomId, false, call.callType === 'Video');
     }
-    
+
     this.callService.incomingCall.set(null);
   }
 

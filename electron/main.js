@@ -8,6 +8,46 @@ const fs = require('fs');
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 
+// Dynamic Update URL Override (e.g. for OneDrive updates)
+const updateConfigPath = path.join(app.getPath('userData'), 'update-config.json');
+if (fs.existsSync(updateConfigPath)) {
+  try {
+    const config = JSON.parse(fs.readFileSync(updateConfigPath, 'utf8'));
+    if (config.updateUrl) {
+      console.log('[Updater] Overriding update URL:', config.updateUrl);
+      autoUpdater.setFeedURL({
+        provider: 'generic',
+        url: config.updateUrl
+      });
+    }
+  } catch (err) {
+    console.error('[Updater] Failed to parse update-config.json:', err);
+  }
+}
+
+// ── OPTION B: SharePoint/OneDrive Direct Link Support ──
+// Intercept update requests to transform SharePoint sharing links into direct download streams.
+app.whenReady().then(() => {
+  const sharepointDomain = 'netorgft12643612-my.sharepoint.com';
+  session.defaultSession.webRequest.onBeforeRequest(
+    { urls: [`*://${sharepointDomain}/*`] },
+    (details, callback) => {
+      let url = details.url;
+      // If it's an update check or download, ensure it's a direct download request
+      if (url.includes('latest.yml') || url.includes('.exe') || url.includes('.blockmap')) {
+        // Clean up any double slashes or query parameter issues
+        url = url.replace(/\/\//g, '/').replace(':/', '://');
+        if (!url.includes('download=1')) {
+          url += (url.includes('?') ? '&' : '?') + 'download=1';
+        }
+        console.log('[Updater] Redirecting to Direct Download:', url);
+        return callback({ redirectURL: url });
+      }
+      callback({});
+    }
+  );
+});
+
 
 // Define global app icon path for consistency
 const APP_ICON_PATH = path.join(__dirname, 'assets', 'icon.ico');

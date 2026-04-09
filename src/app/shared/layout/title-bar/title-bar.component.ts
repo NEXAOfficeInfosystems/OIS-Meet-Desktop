@@ -196,7 +196,7 @@ export class TitleBarComponent implements OnInit {
   setTheme(theme: ThemeMode) {
     this.theme = theme;
     localStorage.setItem('ois.theme', theme);
-    this.applyThemeToDocument();
+    window.dispatchEvent(new CustomEvent('ois-theme-changed', { detail: theme }));
   }
 
   toggleTheme() {
@@ -241,9 +241,8 @@ export class TitleBarComponent implements OnInit {
   }
 
   private applyThemeToDocument() {
-    const body = document.body;
-    body.classList.toggle('theme-dark', this.theme === 'dark');
-    body.classList.toggle('theme-light', this.theme === 'light');
+    // Logic moved to AppComponent for global consistency (including login page)
+    window.dispatchEvent(new CustomEvent('ois-theme-changed', { detail: this.theme }));
   }
 
   navigateToHome() {

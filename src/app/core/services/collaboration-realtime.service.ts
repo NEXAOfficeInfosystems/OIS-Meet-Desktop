@@ -29,7 +29,7 @@ export class CollaborationRealtimeService {
   constructor(
     private readonly ngZone: NgZone,
     private readonly session: SessionService
-  ) {}
+  ) { }
 
   start(userId?: string | null): void {
     const resolvedUserId = userId || this.session.getOISMeetUserId() || this.session.getUserId();
@@ -48,7 +48,7 @@ export class CollaborationRealtimeService {
 
   private startNotificationHub(userId: string): void {
     if (this.notificationHub?.state === signalR.HubConnectionState.Connected ||
-        this.notificationHub?.state === signalR.HubConnectionState.Connecting) {
+      this.notificationHub?.state === signalR.HubConnectionState.Connecting) {
       return;
     }
 
@@ -66,16 +66,19 @@ export class CollaborationRealtimeService {
       this.ngZone.run(() => this.inviteToCallSubject.next(payload));
     });
 
-    this.notificationHub.on('UserStatusChanged', (payload: { userId: string; status: string }) => {
+    const handleUserStatus = (payload: { userId: string; status: string }) => {
       this.ngZone.run(() => this.userStatusChangedSubject.next(payload));
-    });
+    };
+    this.notificationHub.on('UserStatusChanged', handleUserStatus);
+    this.notificationHub.on('userStatusChanged', handleUserStatus);
+    this.notificationHub.on('userstatuschanged', handleUserStatus);
 
     void this.notificationHub.start();
   }
 
   private startCallHub(userId: string): void {
     if (this.callHub?.state === signalR.HubConnectionState.Connected ||
-        this.callHub?.state === signalR.HubConnectionState.Connecting) {
+      this.callHub?.state === signalR.HubConnectionState.Connecting) {
       return;
     }
 
@@ -85,29 +88,47 @@ export class CollaborationRealtimeService {
       .withAutomaticReconnect([0, 2000, 5000, 10000])
       .build();
 
-    this.callHub.on('CallStarted', (payload: any) => {
+    const handleCallStarted = (payload: any) => {
       this.ngZone.run(() => this.callStartedSubject.next(payload));
-    });
+    };
+    this.callHub.on('CallStarted', handleCallStarted);
+    this.callHub.on('callStarted', handleCallStarted);
+    this.callHub.on('callstarted', handleCallStarted);
 
-    this.callHub.on('UserJoinedCall', (payload: any) => {
+    const handleUserJoinedCall = (payload: any) => {
       this.ngZone.run(() => this.userJoinedCallSubject.next(payload));
-    });
+    };
+    this.callHub.on('UserJoinedCall', handleUserJoinedCall);
+    this.callHub.on('userJoinedCall', handleUserJoinedCall);
+    this.callHub.on('userjoinedcall', handleUserJoinedCall);
 
-    this.callHub.on('UserLeftCall', (payload: any) => {
+    const handleUserLeftCall = (payload: any) => {
       this.ngZone.run(() => this.userLeftCallSubject.next(payload));
-    });
+    };
+    this.callHub.on('UserLeftCall', handleUserLeftCall);
+    this.callHub.on('userLeftCall', handleUserLeftCall);
+    this.callHub.on('userleftcall', handleUserLeftCall);
 
-    this.callHub.on('CallEnded', (payload: any) => {
+    const handleCallEnded = (payload: any) => {
       this.ngZone.run(() => this.callEndedSubject.next(payload));
-    });
+    };
+    this.callHub.on('CallEnded', handleCallEnded);
+    this.callHub.on('callEnded', handleCallEnded);
+    this.callHub.on('callended', handleCallEnded);
 
-    this.callHub.on('InviteToCall', (payload: { userId: string; callId: string }) => {
+    const handleInviteToCall = (payload: { userId: string; callId: string }) => {
       this.ngZone.run(() => this.inviteToCallSubject.next(payload));
-    });
+    };
+    this.callHub.on('InviteToCall', handleInviteToCall);
+    this.callHub.on('inviteToCall', handleInviteToCall);
+    this.callHub.on('invitetocall', handleInviteToCall);
 
-    this.callHub.on('UserStatusChanged', (payload: { userId: string; status: string }) => {
+    const handleCallUserStatus = (payload: { userId: string; status: string }) => {
       this.ngZone.run(() => this.userStatusChangedSubject.next(payload));
-    });
+    };
+    this.callHub.on('UserStatusChanged', handleCallUserStatus);
+    this.callHub.on('userStatusChanged', handleCallUserStatus);
+    this.callHub.on('userstatuschanged', handleCallUserStatus);
 
     void this.callHub.start();
   }

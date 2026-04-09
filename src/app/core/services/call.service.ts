@@ -3,7 +3,9 @@ import * as signalR from '@microsoft/signalr';
 import { Subject, BehaviorSubject } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { CollaborationService } from './collaboration.service';
+import { CollaborationRealtimeService } from './collaboration-realtime.service';
 import { StartCallRequest } from '../models/collaboration.models';
+import { SignalRService } from './signalr.service';
 
 export type CallType = 'Audio' | 'Video';
 
@@ -29,13 +31,14 @@ export class CallService {
   private hubConnection: signalR.HubConnection | null = null;
   private ngZone = inject(NgZone);
   private collaborationService = inject(CollaborationService);
-  
+  private legacySignalRService = inject(SignalRService);
+  private realtimeService = inject(CollaborationRealtimeService);
+
   // Reactive Signals for global access
   public incomingCall = signal<IncomingCall | null>(null);
   public isCalling = signal<boolean>(false);
   public outgoingCall = signal<OutgoingCallBannerState | null>(null);
   private currentUserId: string | null = null;
-  
   private callAcceptedSubject = new Subject<{ byUserId: string, peerId: string }>();
   private callRejectedSubject = new Subject<{ byUserId: string, reason: string }>();
   private callEndedSubject = new Subject<string>();
@@ -58,11 +61,12 @@ export class CallService {
   public iceCandidate$ = this.iceCandidateSubject.asObservable();
 
   private callTimeout: any;
+  private _bannerShownForCallId: string | null = null; // de-duplication key
   private ringingSound: HTMLAudioElement | null = null;
   public callStatus = signal<'Idle' | 'Calling' | 'Ringing' | 'Connected' | 'Busy' | 'Rejected'>('Idle');
   public callTypeState = signal<CallType>('Audio');
 
-  constructor() {}
+  constructor() { }
 
   public isConnected(): boolean {
     return this.hubConnection?.state === signalR.HubConnectionState.Connected;
@@ -70,7 +74,6 @@ export class CallService {
 
   public async startConnection(userId: string): Promise<void> {
     this.currentUserId = userId;
-    
     if (this.hubConnection && (
       this.hubConnection.state === signalR.HubConnectionState.Connected ||
       this.hubConnection.state === signalR.HubConnectionState.Connecting
@@ -80,7 +83,11 @@ export class CallService {
 
     const baseUrl = environment.apiBaseUrl.replace('/api', '');
     const url = `${baseUrl}/hubs/calls?userId=${encodeURIComponent(userId)}`;
-    console.log(`🔌 Initializing Call Hub at: ${url}`);
+    console.log(`🔌 [CallService] Initializing Call Hub for [${userId}] at: ${url}`);
+    
+    if (url.includes('localhost')) {
+      console.warn('⚠️ [CallService] Connection is directed to LOCALHOST. Multi-machine testing will NOT work unless both machines share a remote backend server.');
+    }
 
     this.hubConnection = new signalR.HubConnectionBuilder()
       .withUrl(url)
@@ -92,7 +99,7 @@ export class CallService {
 
     try {
       await this.hubConnection.start();
-      console.log('✅ Call Signaling Hub Connected');
+      console.log('✅ [CallService] Call Hub Connected. Listening for IncomingCall / InviteToCall events...');
       this.connectionStateSubject.next(signalR.HubConnectionState.Connected);
     } catch (err) {
       console.error('❌ Call Hub Connection Error:', err);
@@ -115,69 +122,129 @@ export class CallService {
       this.ngZone.run(() => this.connectionStateSubject.next(signalR.HubConnectionState.Disconnected));
     });
 
-    hub.on('IncomingCall', (fromUserId, fromUserName, callType, roomId) => {
+    // ── ROBUST EVENT HANDLERS ───────────────────────────────────────────
+    // The backend may sent positional arguments OR a single payload object.
+    const handleIncomingCall = (arg1: any, arg2?: any, arg3?: any, arg4?: any) => {
       this.ngZone.run(() => {
-        const callerName = fromUserName || 'Unknown User';
-        console.log(`📞 Incoming Call Event: From ${callerName} (${fromUserId}) Type: ${callType} Room: ${roomId}`);
+        // Handle payload object vs positional args
+        const data = (arg1 && typeof arg1 === 'object' && !arg2) ? arg1 : {
+          fromUserId: arg1,
+          fromUserName: arg2,
+          callType: arg3,
+          roomId: arg4
+        };
+
+        const fromUserId = data.fromUserId;
+        const callerName = data.fromUserName || 'Inbound Call';
+        const callType = data.callType || 'Video';
+        const roomId = data.roomId;
+
+        console.log(`📞 [CallHub] Incoming Call Event: From ${callerName} (${fromUserId}) Type: ${callType} Room: ${roomId}`);
+
+        // De-duplication & Guard
+        const dupeKey = `${fromUserId}::${roomId ?? ''}`;
+        if (this._bannerShownForCallId === dupeKey) return;
         
-        // Auto-reject if already in a call
         if (this.isCalling() || this.incomingCall()) {
-          console.log(`🚫 Auto-rejecting call from ${callerName} (Already busy)`);
+          console.log(`🚫 Busy: Auto-rejecting call.`);
           this.rejectCall(fromUserId, 'Busy');
           return;
         }
 
+        this._bannerShownForCallId = dupeKey;
         this.incomingCall.set({ 
           fromUserId, 
           fromUserName: callerName, 
-          callType: callType || 'Video', 
+          callType, 
           roomId, 
           isMeetingInvite: false 
         });
-
-        // Notify caller that we are ringing
-        this.hubConnection?.invoke('NotifyRinging', fromUserId).catch(err => {
-          console.warn('Failed to notify ringing:', err);
-        });
-
+        
         this.playIncomingRingtone();
-
         if (this.callTimeout) clearTimeout(this.callTimeout);
         this.callTimeout = setTimeout(() => {
-          if (this.incomingCall()) {
-            console.log(`⌛ Call from ${callerName} timed out (no response)`);
+          if (this.incomingCall()?.roomId === roomId) {
             this.stopRingtones();
-            this.rejectCall(fromUserId, 'Timed out');
-            this.incomingCall.set(null);
+            this._clearIncomingCallState();
           }
         }, 60000);
       });
-    });
+    };
 
-    hub.on('CallRinging', (byUserId) => {
+    const handleInviteToCall = (payload: any) => {
       this.ngZone.run(() => {
-        console.log(`🔔 Remote user ${byUserId} is ringing`);
-        if (this.isCalling()) {
-          this.callStatus.set('Ringing');
-          this.playOutgoingRingtone();
-        }
-      });
-    });
-
-    hub.on('InviteToCall', (payload: { userId: string; callId: string; fromUserName?: string }) => {
-      this.ngZone.run(() => {
+        // Correctly identify targeted user and sender
+        const targetUserId = payload.userId;
+        const senderId = payload.fromUserId || payload.invitedBy;
         const callerName = payload.fromUserName || 'Inbound Call';
-        console.log(`📞 Received InviteToCall: ${payload.callId} From: ${callerName}`);
+        const callType = payload.callType || 'Video';
+        const roomId = payload.callId || payload.roomId;
+
+        console.log(`📞 [CallHub] InviteToCall Event: From ${callerName} (${senderId}) Target: ${targetUserId} Room: ${roomId}`);
+
+        // SECURITY: Only show if I am the target
+        if (targetUserId && this.currentUserId && targetUserId !== this.currentUserId) {
+          console.log(`⏭️ [CallHub] Skipping InviteToCall: Not intended for me (Me: ${this.currentUserId}, Target: ${targetUserId})`);
+          return;
+        }
+
+        const dupeKey = `${senderId}::${roomId}`;
+        if (this._bannerShownForCallId === dupeKey) return;
+
+        this._bannerShownForCallId = dupeKey;
         this.incomingCall.set({
-          fromUserId: payload.userId,
+          fromUserId: senderId,
           fromUserName: callerName,
-          callType: 'Video',
-          roomId: payload.callId,
+          callType: callType,
+          roomId: roomId,
           isMeetingInvite: false
         });
+        this.playIncomingRingtone();
       });
-    });
+    };
 
+    const handleIncomingMeetingInvite = (meetingId: string, fromUserName: string, fromUserId?: string) => {
+      this.ngZone.run(() => {
+        const hostName = fromUserName || 'Meeting Host';
+        const callerId = fromUserId || 'system';
+        console.log(`🚀 [CallHub/MeetingHub] Invited to join: ${meetingId} by ${hostName}`);
+
+        const dupeKey = `system::${meetingId}`;
+        if (this._bannerShownForCallId === dupeKey) return;
+        this._bannerShownForCallId = dupeKey;
+
+        this.incomingCall.set({
+          fromUserId: callerId,
+          fromUserName: hostName,
+          callType: 'Video',
+          roomId: meetingId,
+          isMeetingInvite: true
+        });
+        
+        this.playIncomingRingtone();
+        if (this.callTimeout) clearTimeout(this.callTimeout);
+        this.callTimeout = setTimeout(() => {
+          if (this.incomingCall()) {
+            this.stopRingtones();
+            this._clearIncomingCallState();
+          }
+        }, 60000);
+      });
+    };
+
+    // Register listeners for all case variants and potential event names
+    hub.on('IncomingCall', handleIncomingCall);
+    hub.on('incomingCall', handleIncomingCall);
+    
+    hub.on('InviteToCall', handleInviteToCall);
+    hub.on('inviteToCall', handleInviteToCall);
+    hub.on('invitetocall', handleInviteToCall);
+
+    hub.on('InviteToMeeting', handleIncomingMeetingInvite);
+    this.legacySignalRService.inviteToMeeting$.subscribe(p => p && handleIncomingMeetingInvite(p.meetingId, p.fromUserName, p.fromUserId));
+    this.realtimeService.inviteToCall$.subscribe(p => p && handleInviteToCall(p));
+
+    // Standard control events
     hub.on('CallAccepted', (byUserId, peerId) => {
       this.ngZone.run(() => {
         console.log(`✅ Call Accepted: By ${byUserId}`);
@@ -185,18 +252,19 @@ export class CallService {
         this.isCalling.set(false);
         this.callStatus.set('Connected');
         this.outgoingCall.set(null);
+        this._clearIncomingCallState();
         this.callAcceptedSubject.next({ byUserId, peerId });
       });
     });
 
     hub.on('CallRejected', (byUserId, reason) => {
       this.ngZone.run(() => {
-        console.log(`❌ Call Rejected: By ${byUserId} Reason: ${reason}`);
+        console.log(`❌ Call Rejected: By ${byUserId}`);
         this.stopRingtones();
         this.isCalling.set(false);
         this.callStatus.set(reason === 'Busy' ? 'Busy' : 'Rejected');
         this.outgoingCall.set(null);
-        this.incomingCall.set(null);
+        this._clearIncomingCallState();
         this.callRejectedSubject.next({ byUserId, reason });
       });
     });
@@ -204,24 +272,11 @@ export class CallService {
     hub.on('CallEnded', (byUserId) => {
       this.ngZone.run(() => {
         console.log(`🏁 Call Ended: By ${byUserId}`);
-        this.incomingCall.set(null);
+        this.stopRingtones();
         this.isCalling.set(false);
         this.outgoingCall.set(null);
+        this._clearIncomingCallState();
         this.callEndedSubject.next(byUserId);
-      });
-    });
-
-    hub.on('InviteToMeeting', (meetingId, fromUserName) => {
-      this.ngZone.run(() => {
-        const hostName = fromUserName || 'Meeting Host';
-        console.log(`🚀 Invited to join meeting ${meetingId} by ${hostName}`);
-        this.incomingCall.set({
-          fromUserId: 'system',
-          fromUserName: hostName,
-          callType: 'Video',
-          roomId: meetingId,
-          isMeetingInvite: true
-        });
       });
     });
 
@@ -240,8 +295,15 @@ export class CallService {
     const statusHandler = (userId: string, status: string) => {
       console.log(`👤 User status changed (CallsHub): ${userId} -> ${status}`);
     };
+    hub.on('UserStatusChanged', statusHandler);
     hub.on('userStatusChanged', statusHandler);
     hub.on('userstatuschanged', statusHandler);
+
+    // Dummy silent no-ops
+    const silentNoOp = () => {};
+    hub.on('CallStarted', silentNoOp);
+    hub.on('callStarted', silentNoOp);
+    hub.on('callstarted', silentNoOp);
   }
 
   private async ensureConnected(): Promise<void> {
@@ -278,7 +340,6 @@ export class CallService {
     this.isCalling.set(true);
     this.callStatus.set('Calling');
     this.callTypeState.set(callType);
-    
     this.outgoingCall.set({
       targetUserId,
       targetUserName: targetUserName || 'participant',
@@ -297,16 +358,20 @@ export class CallService {
       try {
         // Step 1: Formal API Start (Handles DB creation and permission checks)
         const res = await this.collaborationService.startCall(request).toPromise();
-        console.log('✅ API Call Session Started:', res?.data?.callId);
-        
-        // Step 2: Signal the Hub (Ensures immediate UI popup on the other side)
-        if (this.hubConnection) {
+        const activeRoomId = roomId || res?.data?.callId;
+        console.log('✅ API Call Session Started:', activeRoomId);
+
+        // Step 2: Formally invite the callee via the backend REST API
+        // This securely orchestrates the SignalR push notification from the server natively
+        if (activeRoomId) {
           try {
-            await this.hubConnection.invoke('StartCall', targetUserId, fromUserName, callType, roomId || res?.data?.callId);
-          } catch (invokeErr) {
-            // Some server environments might rely SOLELY on the API to trigger the hub event.
-            // If invoke fails with "method not found", we treat it as non-fatal.
-            console.warn('⚠️ Hub StartCall invoke failed (possibly API-only trigger):', invokeErr);
+            await this.collaborationService.inviteToCall(activeRoomId, {
+              userId: targetUserId,
+              invitedBy: this.currentUserId
+            }).toPromise();
+            console.log('✅ Backend successfully processed and broadcasted the ring to target user.');
+          } catch (invErr) {
+            console.error('❌ Failed to push the call ring via REST API:', invErr);
           }
         }
       } catch (apiErr) {
@@ -327,6 +392,16 @@ export class CallService {
     });
   }
 
+  /** Clears incoming call signal + timeout + de-duplication key atomically. */
+  private _clearIncomingCallState(): void {
+    if (this.callTimeout) {
+      clearTimeout(this.callTimeout);
+      this.callTimeout = null;
+    }
+    this._bannerShownForCallId = null;
+    this.incomingCall.set(null);
+  }
+
   public async cancelOutgoingCall(): Promise<void> {
     const outgoing = this.outgoingCall();
     this.isCalling.set(false);
@@ -345,11 +420,13 @@ export class CallService {
 
   public async acceptCall(targetUserId: string): Promise<void> {
     await this.ensureConnected();
+    this._clearIncomingCallState(); // Clear banner immediately on accept
     await this.hubConnection?.invoke('AcceptCall', targetUserId);
   }
 
   public async rejectCall(targetUserId: string, reason: string): Promise<void> {
     await this.ensureConnected();
+    this._clearIncomingCallState(); // Clear banner immediately on reject
     await this.hubConnection?.invoke('RejectCall', targetUserId, reason);
   }
 
@@ -373,29 +450,98 @@ export class CallService {
     await this.hubConnection?.invoke('SendIceCandidate', targetUserId, candidate);
   }
 
-  public stopConnection(): void {
+  public async stopConnection(): Promise<void> {
     this.stopRingtones();
     if (this.hubConnection) {
-      this.hubConnection.stop()
-        .then(() => console.log('Call SignalR Stopped'))
-        .catch(err => console.error('Error stopping Call SignalR: ', err));
+      try {
+        await this.hubConnection.stop();
+        console.log('Call SignalR Stopped');
+      } catch (err) {
+        console.error('Error stopping Call SignalR: ', err);
+      } finally {
+        this.hubConnection = null;
+      }
     }
   }
 
   // --- Ringtone Logic ---
 
+  private ringingAudioCtx: AudioContext | null = null;
+  private ringingOscillators: OscillatorNode[] = [];
+  private ringingIntervalId: any = null;
+
   private playIncomingRingtone(): void {
     this.stopRingtones();
-    this.ringingSound = new Audio('assets/sounds/incoming-call.mp3');
-    this.ringingSound.loop = true;
-    this.ringingSound.play().catch(e => console.warn('Could not play ringtone (interaction required?):', e));
+
+    // Try MP3 first; fall back to Web Audio API tone on error
+    const audio = new Audio('assets/sounds/incoming-call.mp3');
+    audio.loop = true;
+    audio.play().then(() => {
+      this.ringingSound = audio;
+    }).catch(() => {
+      // MP3 not available — generate a phone-ring tone via Web Audio API
+      this.playWebAudioRingtone('incoming');
+    });
   }
 
   private playOutgoingRingtone(): void {
     this.stopRingtones();
-    this.ringingSound = new Audio('assets/sounds/outgoing-call.mp3');
-    this.ringingSound.loop = true;
-    this.ringingSound.play().catch(e => console.warn('Could not play ringtone:', e));
+
+    const audio = new Audio('assets/sounds/outgoing-call.mp3');
+    audio.loop = true;
+    audio.play().then(() => {
+      this.ringingSound = audio;
+    }).catch(() => {
+      this.playWebAudioRingtone('outgoing');
+    });
+  }
+
+  /**
+   * Generates a simple phone-ring tone using the Web Audio API.
+   * Incoming: two-tone ring (480 Hz + 440 Hz, ring-ring pattern)
+   * Outgoing: single low tone (440 Hz, long ring)
+   */
+  private playWebAudioRingtone(type: 'incoming' | 'outgoing'): void {
+    try {
+      this.ringingAudioCtx = new AudioContext();
+      const ctx = this.ringingAudioCtx;
+
+      const playBurst = () => {
+        if (!this.ringingAudioCtx || ctx.state === 'closed') return;
+        const freqs = type === 'incoming' ? [480, 440] : [440];
+        const osc1 = ctx.createOscillator();
+        const osc2 = type === 'incoming' ? ctx.createOscillator() : null;
+        const gain = ctx.createGain();
+
+        osc1.type = 'sine';
+        osc1.frequency.value = freqs[0];
+        osc1.connect(gain);
+
+        if (osc2) {
+          osc2.type = 'sine';
+          osc2.frequency.value = freqs[1];
+          osc2.connect(gain);
+        }
+
+        gain.gain.setValueAtTime(0.18, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+        gain.connect(ctx.destination);
+
+        osc1.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.8);
+        if (osc2) {
+          osc2.start(ctx.currentTime);
+          osc2.stop(ctx.currentTime + 0.8);
+        }
+        this.ringingOscillators = osc2 ? [osc1, osc2] : [osc1];
+      };
+
+      playBurst();
+      const interval = type === 'incoming' ? 2000 : 3500;
+      this.ringingIntervalId = setInterval(playBurst, interval);
+    } catch (e) {
+      console.warn('Web Audio ringtone failed:', e);
+    }
   }
 
   public stopRingtones(): void {
@@ -403,6 +549,16 @@ export class CallService {
       this.ringingSound.pause();
       this.ringingSound.currentTime = 0;
       this.ringingSound = null;
+    }
+    if (this.ringingIntervalId !== null) {
+      clearInterval(this.ringingIntervalId);
+      this.ringingIntervalId = null;
+    }
+    this.ringingOscillators.forEach(o => { try { o.stop(); } catch { /* ignore */ } });
+    this.ringingOscillators = [];
+    if (this.ringingAudioCtx) {
+      try { this.ringingAudioCtx.close(); } catch { /* ignore */ }
+      this.ringingAudioCtx = null;
     }
   }
 
@@ -412,7 +568,6 @@ export class CallService {
   public showToast(message: string, bgColor: string = '#4f46e5'): void {
     const id = Date.now().toString();
     this.oisToasts.update(current => [...current, { id, message, bgColor }]);
-    
     setTimeout(() => {
       this.oisToasts.update(current => current.filter(t => t.id !== id));
     }, 5000);

@@ -74,13 +74,13 @@ export class LiveTranscriptionService implements OnDestroy {
 
   // ── Public observables ──────────────────────────────────────────────────────
   private readonly segmentsSubject = new BehaviorSubject<LiveTranscriptionSegment[]>([]);
-  public  readonly segments$: Observable<LiveTranscriptionSegment[]> = this.segmentsSubject.asObservable();
+  public readonly segments$: Observable<LiveTranscriptionSegment[]> = this.segmentsSubject.asObservable();
 
   private readonly statusSubject = new BehaviorSubject<LiveTranscriptionStatus>('idle');
-  public  readonly status$: Observable<LiveTranscriptionStatus> = this.statusSubject.asObservable();
+  public readonly status$: Observable<LiveTranscriptionStatus> = this.statusSubject.asObservable();
 
   private readonly errorSubject = new Subject<string>();
-  public  readonly error$: Observable<string> = this.errorSubject.asObservable();
+  public readonly error$: Observable<string> = this.errorSubject.asObservable();
 
   /** True when this client's own WebSocket + mic capture is running. */
   public get isActiveParticipant(): boolean { return this._isActiveParticipant; }
@@ -91,34 +91,34 @@ export class LiveTranscriptionService implements OnDestroy {
   private _isSessionHost = false;
 
   // ── Private WebSocket / Audio state ────────────────────────────────────────
-  private ws:               WebSocket | null = null;
-  private audioContext:     AudioContext | null = null;
-  private scriptProcessor:  ScriptProcessorNode | null = null;
-  private micSourceNode:    MediaStreamAudioSourceNode | null = null;
+  private ws: WebSocket | null = null;
+  private audioContext: AudioContext | null = null;
+  private scriptProcessor: ScriptProcessorNode | null = null;
+  private micSourceNode: MediaStreamAudioSourceNode | null = null;
 
-  private pingInterval:     ReturnType<typeof setInterval>  | null = null;
-  private reconnectTimeout: ReturnType<typeof setTimeout>   | null = null;
-  private flushInterval:    ReturnType<typeof setInterval>  | null = null;
+  private pingInterval: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private flushInterval: ReturnType<typeof setInterval> | null = null;
 
-  private sampleBuffer:     Float32Array[] = [];
-  private segmentCounter    = 0;
+  private sampleBuffer: Float32Array[] = [];
+  private segmentCounter = 0;
 
   // Kept for reconnect
-  private activeWsUrl       = '';
-  private activeMeetingId   = '';
-  private activeLanguage    = 'en';
+  private activeWsUrl = '';
+  private activeMeetingId = '';
+  private activeLanguage = 'en';
   private activeParticipantName = '';
-  private activeMicStream:  MediaStream | null = null;
-  private signalRBridge:    ISignalRBridge | null = null;
+  private activeMicStream: MediaStream | null = null;
+  private signalRBridge: ISignalRBridge | null = null;
 
   // Audio constants
-  private readonly SAMPLE_RATE         = 16000;
-  private readonly CHUNK_INTERVAL_MS   = 1500;
+  private readonly SAMPLE_RATE = 16000;
+  private readonly CHUNK_INTERVAL_MS = 1500;
   private readonly SCRIPT_PROCESSOR_SZ = 4096;
-  private readonly MAX_SEGMENTS        = 500;
-  private readonly SILENCE_THRESHOLD   = 0.005;
+  private readonly MAX_SEGMENTS = 500;
+  private readonly SILENCE_THRESHOLD = 0.005;
 
-  constructor(private ngZone: NgZone) {}
+  constructor(private ngZone: NgZone) { }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PUBLIC API
@@ -137,25 +137,25 @@ export class LiveTranscriptionService implements OnDestroy {
    * @param language         ISO-639-1 code, default "en"
    */
   public async start(
-    micStream:        MediaStream,
-    wsUrl:            string,
-    participantName:  string,
-    meetingId:        string,
-    signalR:          ISignalRBridge,
-    isSessionHost     = false,
-    language          = 'en'
+    micStream: MediaStream,
+    wsUrl: string,
+    participantName: string,
+    meetingId: string,
+    signalR: ISignalRBridge,
+    isSessionHost = false,
+    language = 'en'
   ): Promise<void> {
     const s = this.statusSubject.value;
     if (s === 'connecting' || s === 'connected') return;
 
-    this._isActiveParticipant     = true;
-    this._isSessionHost           = isSessionHost;
-    this.activeWsUrl              = wsUrl;
-    this.activeMeetingId          = meetingId;
-    this.activeLanguage           = language;
-    this.activeParticipantName    = participantName;
-    this.activeMicStream          = micStream;
-    this.signalRBridge            = signalR;
+    this._isActiveParticipant = true;
+    this._isSessionHost = isSessionHost;
+    this.activeWsUrl = wsUrl;
+    this.activeMeetingId = meetingId;
+    this.activeLanguage = language;
+    this.activeParticipantName = participantName;
+    this.activeMicStream = micStream;
+    this.signalRBridge = signalR;
 
     this.statusSubject.next('connecting');
     this.connectWebSocket();
@@ -168,7 +168,7 @@ export class LiveTranscriptionService implements OnDestroy {
   public startAsViewer(): void {
     this.cleanup();
     this._isActiveParticipant = false;
-    this._isSessionHost       = false;
+    this._isSessionHost = false;
     this.statusSubject.next('viewing');
   }
 
@@ -182,14 +182,14 @@ export class LiveTranscriptionService implements OnDestroy {
     if (!raw.text?.trim()) return;
     this.ngZone.run(() => {
       const seg: LiveTranscriptionSegment = {
-        id:          `rmt-${++this.segmentCounter}-${Date.now()}`,
-        start:       raw.start,
-        end:         raw.end,
-        text:        raw.text.trim(),
-        language:    raw.language,
+        id: `rmt-${++this.segmentCounter}-${Date.now()}`,
+        start: raw.start,
+        end: raw.end,
+        text: raw.text.trim(),
+        language: raw.language,
         speakerName: raw.speakerName || 'Participant',
-        receivedAt:  new Date(),
-        isOwn:       false,
+        receivedAt: new Date(),
+        isOwn: false,
       };
       const updated = [...this.segmentsSubject.value, seg].slice(-this.MAX_SEGMENTS);
       this.segmentsSubject.next(updated);
@@ -200,14 +200,14 @@ export class LiveTranscriptionService implements OnDestroy {
   public stop(): void {
     this.cleanup();
     this._isActiveParticipant = false;
-    this._isSessionHost       = false;
+    this._isSessionHost = false;
     this.statusSubject.next('stopped');
   }
 
   /** Stop viewer state without affecting the running session. */
   public stopViewing(): void {
     this._isActiveParticipant = false;
-    this._isSessionHost       = false;
+    this._isSessionHost = false;
     this.statusSubject.next('stopped');
     this.segmentsSubject.next([]);
     this.segmentCounter = 0;
@@ -303,13 +303,26 @@ export class LiveTranscriptionService implements OnDestroy {
 
   private startMicCapture(): void {
     if (!this.activeMicStream) return;
-    const micTracks = this.activeMicStream.getAudioTracks();
-    if (!micTracks.length) return;
+
+    // Use only live, active audio tracks — ignore ended or muted-at-hardware-level tracks
+    const micTracks = this.activeMicStream.getAudioTracks()
+      .filter(t => t.readyState === 'live');
+    if (!micTracks.length) {
+      console.warn('[LiveTranscription] No live audio tracks available for capture');
+      return;
+    }
 
     try {
       // AudioContext resampled to 16 kHz so Whisper gets the right sample rate
-      this.audioContext    = new AudioContext({ sampleRate: this.SAMPLE_RATE });
-      this.micSourceNode   = this.audioContext.createMediaStreamSource(
+      this.audioContext = new AudioContext({ sampleRate: this.SAMPLE_RATE });
+
+      // Resume suspended context (Electron/Chromium autoplay policy)
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume().catch(e =>
+          console.warn('[LiveTranscription] AudioContext resume failed:', e));
+      }
+
+      this.micSourceNode = this.audioContext.createMediaStreamSource(
         new MediaStream(micTracks)
       );
 
@@ -320,6 +333,7 @@ export class LiveTranscriptionService implements OnDestroy {
       );
       this.scriptProcessor.onaudioprocess = (e: AudioProcessingEvent) => {
         if (this.ws?.readyState !== WebSocket.OPEN) return;
+        if (this.audioContext?.state !== 'running') return;
         // Clone samples — the underlying buffer is reused after the event
         this.sampleBuffer.push(new Float32Array(e.inputBuffer.getChannelData(0)));
       };
@@ -331,10 +345,12 @@ export class LiveTranscriptionService implements OnDestroy {
       // Flush samples to WS on a fixed cadence
       this.flushInterval = setInterval(() => this.flushBuffer(), this.CHUNK_INTERVAL_MS);
 
+      console.log('[LiveTranscription] Mic capture started, AudioContext state:', this.audioContext.state);
+
     } catch (err) {
       console.error('[LiveTranscription] Mic capture failed:', err);
       this.ngZone.run(() => {
-        this.errorSubject.next('Microphone capture failed');
+        this.errorSubject.next('Microphone capture failed — please check mic permissions');
         this.statusSubject.next('error');
       });
     }
@@ -344,11 +360,11 @@ export class LiveTranscriptionService implements OnDestroy {
     if (this.flushInterval !== null) { clearInterval(this.flushInterval); this.flushInterval = null; }
     this.sampleBuffer = [];
     try { this.scriptProcessor?.disconnect(); } catch { /* ignore */ }
-    try { this.micSourceNode?.disconnect();   } catch { /* ignore */ }
-    try { this.audioContext?.close();         } catch { /* ignore */ }
+    try { this.micSourceNode?.disconnect(); } catch { /* ignore */ }
+    try { this.audioContext?.close(); } catch { /* ignore */ }
     this.scriptProcessor = null;
-    this.micSourceNode   = null;
-    this.audioContext    = null;
+    this.micSourceNode = null;
+    this.audioContext = null;
   }
 
   /** Merge buffered PCM frames into one chunk and send to Whisper. */
@@ -356,7 +372,7 @@ export class LiveTranscriptionService implements OnDestroy {
     if (!this.sampleBuffer.length || this.ws?.readyState !== WebSocket.OPEN) return;
 
     const totalLen = this.sampleBuffer.reduce((a, f) => a + f.length, 0);
-    const merged   = new Float32Array(totalLen);
+    const merged = new Float32Array(totalLen);
     let offset = 0;
     for (const frame of this.sampleBuffer) { merged.set(frame, offset); offset += frame.length; }
     this.sampleBuffer = [];
@@ -366,8 +382,8 @@ export class LiveTranscriptionService implements OnDestroy {
 
     try {
       this.ws!.send(JSON.stringify({
-        type:     'audio_data',
-        data:     Array.from(merged),
+        type: 'audio_data',
+        data: Array.from(merged),
         language: this.activeLanguage,
       }));
     } catch { /* WS closed between check and send */ }
@@ -387,18 +403,18 @@ export class LiveTranscriptionService implements OnDestroy {
     raw: { start: number; end: number; text: string }[],
     language?: string
   ): void {
-    const now    = new Date();
+    const now = new Date();
     const newSegs: LiveTranscriptionSegment[] = raw
       .filter((s) => s.text?.trim())
       .map((s) => ({
-        id:          `lt-${++this.segmentCounter}-${Date.now()}`,
-        start:       s.start,
-        end:         s.end,
-        text:        s.text.trim(),
-        language:    language ?? this.activeLanguage,
+        id: `lt-${++this.segmentCounter}-${Date.now()}`,
+        start: s.start,
+        end: s.end,
+        text: s.text.trim(),
+        language: language ?? this.activeLanguage,
         speakerName: this.activeParticipantName,
-        receivedAt:  now,
-        isOwn:       true,
+        receivedAt: now,
+        isOwn: true,
       }));
 
     if (!newSegs.length) return;
@@ -413,10 +429,10 @@ export class LiveTranscriptionService implements OnDestroy {
         .broadcastLiveTranscriptionSegments(
           this.activeMeetingId,
           newSegs.map((s) => ({
-            start:       s.start,
-            end:         s.end,
-            text:        s.text,
-            language:    s.language,
+            start: s.start,
+            end: s.end,
+            text: s.text,
+            language: s.language,
             speakerName: s.speakerName,
           }))
         )
@@ -433,8 +449,8 @@ export class LiveTranscriptionService implements OnDestroy {
     this.stopMicCapture();
     this.stopPing();
     if (this.ws) { try { this.ws.close(); } catch { /* ignore */ } this.ws = null; }
-    this.activeMicStream   = null;
-    this.signalRBridge     = null;
+    this.activeMicStream = null;
+    this.signalRBridge = null;
   }
 
   ngOnDestroy(): void { this.cleanup(); }

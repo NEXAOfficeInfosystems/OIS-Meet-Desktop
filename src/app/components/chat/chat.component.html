@@ -311,18 +311,6 @@
           <p class="text-muted fs-xs">Please wait a moment while we prepare your workspace...</p>
         </div>
 
-        <div class="outgoing-call-banner" *ngIf="isCalling">
-          <div class="outgoing-call-banner__icon">
-            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-          </div>
-          <div class="outgoing-call-banner__content">
-            <div class="outgoing-call-banner__title">Calling {{ activeCallUserName || 'participant' }}</div>
-            <div class="outgoing-call-banner__meta">
-              {{ callType }} call in progress
-              <span *ngIf="callHubStatusMessage">· {{ callHubStatusMessage }}</span>
-            </div>
-          </div>
-        </div>
 
         <!-- MAIN TAB CONTENT -->
         <div class="main-tab-content flex-grow-1 d-flex flex-column overflow-hidden min-vh-0"
@@ -344,64 +332,65 @@
 
               <div class="message-group" [id]="'msg-' + (msg.id || msg.Id)"
                 [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
-              <div class="message-avatar-col" *ngIf="msg.senderId?.toString() !== currentUserId?.toString()">
-                <img *ngIf="msg.senderAvatarUrl" [src]="fileService.getFileUrl(msg.senderAvatarUrl)"
-                  class="msg-avatar rounded-circle" alt="avatar">
-                <div *ngIf="!msg.senderAvatarUrl" class="msg-avatar"
-                  [style.background-color]="getMemberAvatarColor(msg.senderName)">
-                  {{ msg.senderName.charAt(0).toUpperCase() }}
-                </div>
-              </div>
-              <div class="message-data-col">
-                <div class="msg-header">
-                  <span class="sender-name">{{ msg.senderId?.toString() === currentUserId?.toString() ? 'You' :
-                    msg.senderName
-                    }}</span>
-                  <span class="msg-time">{{ msg.sentAt | date:'shortTime' }}</span>
-                </div>
-                <div class="msg-content">
-                  <!-- Formatted HTML content or fallback plain text -->
-                  <div class="mb-0" *ngIf="msg.formattedContent || msg.content"
-                    [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
-
-                  <!-- Legacy Attachments -->
-                  <div class="msg-attachments"
-                    *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
-                    <div class="file-chip animate-fade-in" *ngFor="let file of (msg.attachments || msg.Attachments)"
-                      (click)="openPreview(file)">
-                      <i class="bi fs-4" [class]="getFileIcon(file.fileName || file.FileName)"></i>
-                      <div class="file-info">
-                        <span class="file-name text-truncate" style="max-width: 150px;">{{ file.fileName ||
-                          file.FileName }}</span>
-                      </div>
-                      <button class="btn-download"
-                        (click)="downloadFile(file.fileUrl || file.FileUrl, file.fileName || file.FileName); $event.stopPropagation()">
-                        <i class="bi bi-download"></i>
-                      </button>
-                    </div>
+                <div class="message-avatar-col" *ngIf="msg.senderId?.toString() !== currentUserId?.toString()">
+                  <img *ngIf="msg.senderAvatarUrl" [src]="fileService.getFileUrl(msg.senderAvatarUrl)"
+                    class="msg-avatar rounded-circle" alt="avatar">
+                  <div *ngIf="!msg.senderAvatarUrl" class="msg-avatar"
+                    [style.background-color]="getMemberAvatarColor(msg.senderName)">
+                    {{ msg.senderName.charAt(0).toUpperCase() }}
                   </div>
-                  <div class="msg-attachments-hidden mt-1"
-                    *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
-                    <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
-                      <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}} Attachment(s)
-                      hidden
+                </div>
+                <div class="message-data-col">
+                  <div class="msg-header">
+                    <span class="sender-name">{{ msg.senderId?.toString() === currentUserId?.toString() ? 'You' :
+                      msg.senderName
+                      }}</span>
+                    <span class="msg-time">{{ msg.sentAt | date:'shortTime' }}</span>
+                  </div>
+                  <div class="msg-content">
+                    <!-- Formatted HTML content or fallback plain text -->
+                    <div class="mb-0" *ngIf="msg.formattedContent || msg.content"
+                      [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
+
+                    <!-- Legacy Attachments -->
+                    <div class="msg-attachments"
+                      *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
+                      <div class="file-chip animate-fade-in" *ngFor="let file of (msg.attachments || msg.Attachments)"
+                        (click)="openPreview(file)">
+                        <i class="bi fs-4" [class]="getFileIcon(file.fileName || file.FileName)"></i>
+                        <div class="file-info">
+                          <span class="file-name text-truncate" style="max-width: 150px;">{{ file.fileName ||
+                            file.FileName }}</span>
+                        </div>
+                        <button class="btn-download"
+                          (click)="downloadFile(file.fileUrl || file.FileUrl, file.fileName || file.FileName); $event.stopPropagation()">
+                          <i class="bi bi-download"></i>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="msg-attachments-hidden mt-1"
+                      *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
+                      <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
+                        <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}}
+                        Attachment(s)
+                        hidden
+                      </span>
+                    </div>
+                  </div> <!-- end msg-content -->
+
+                  <!-- Reactions Section -->
+                  <div class="msg-reactions mt-1 d-flex flex-wrap gap-1"
+                    *ngIf="msg.reactions && msg.reactions.length > 0">
+                    <span *ngFor="let emoji of commonEmojis">
+                      <button class="reaction-badge btn btn-sm rounded-pill" *ngIf="getReactionCount(msg, emoji) > 0"
+                        [class.reacted]="hasReacted(msg, emoji)" (click)="toggleReaction(msg, emoji)"
+                        [title]="getReactionUsers(msg, emoji)">
+                        <span class="emoji">{{ emoji }}</span>
+                        <span class="count">{{ getReactionCount(msg, emoji) }}</span>
+                      </button>
                     </span>
                   </div>
-                </div> <!-- end msg-content -->
-
-                <!-- Reactions Section -->
-                <div class="msg-reactions mt-1 d-flex flex-wrap gap-1"
-                  *ngIf="msg.reactions && msg.reactions.length > 0">
-                  <span *ngFor="let emoji of commonEmojis">
-                    <button class="reaction-badge btn btn-sm rounded-pill" *ngIf="getReactionCount(msg, emoji) > 0"
-                      [class.reacted]="hasReacted(msg, emoji)" (click)="toggleReaction(msg, emoji)"
-                      [title]="getReactionUsers(msg, emoji)">
-                      <span class="emoji">{{ emoji }}</span>
-                      <span class="count">{{ getReactionCount(msg, emoji) }}</span>
-                    </button>
-                  </span>
                 </div>
-              </div>
               </div>
             </ng-container>
 

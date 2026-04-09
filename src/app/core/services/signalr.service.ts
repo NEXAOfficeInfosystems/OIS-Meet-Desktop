@@ -36,7 +36,7 @@ export interface MomBroadcast {
 })
 export class SignalRService {
   private hubConnection!: signalR.HubConnection;
-private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconnected';
+  private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconnected';
 
   private reconnectedSubject = new Subject<void>();
   public reconnected$ = this.reconnectedSubject.asObservable();
@@ -66,9 +66,10 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
 
   private transcriptionAvailableSubject = new Subject<TranscriptionBroadcast>();
   private momAvailableSubject = new Subject<MomBroadcast>();
+  private inviteToMeetingSubject = new Subject<{ meetingId: string; fromUserName: string; fromUserId?: string }>();
 
   // Live Transcription broadcast support
-  private liveTranscriptionStartedSubject = new Subject<{ meetingId: string; fromUserId: string; fromUserName: string;}>();
+  private liveTranscriptionStartedSubject = new Subject<{ meetingId: string; fromUserId: string; fromUserName: string; }>();
   private liveTranscriptionStoppedSubject = new Subject<{ meetingId: string; fromUserId: string }>();
   private liveTranscriptionSegmentSubject = new Subject<{
     meetingId: string;
@@ -104,6 +105,7 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
 
   public transcriptionAvailable$ = this.transcriptionAvailableSubject.asObservable();
   public momAvailable$ = this.momAvailableSubject.asObservable();
+  public inviteToMeeting$ = this.inviteToMeetingSubject.asObservable();
 
   public liveTranscriptionStarted$ = this.liveTranscriptionStartedSubject.asObservable();
   public liveTranscriptionStopped$ = this.liveTranscriptionStoppedSubject.asObservable();
@@ -208,109 +210,111 @@ private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconne
     });
 
     // Meeting Events
-this.hubConnection.on('CurrentParticipants', (participants: any[]) => {
-  this.ngZone.run(() => {
-    const mappedParticipants = participants.map(p => ({
-      connectionId: p.connectionId,
-      userId: p.userId,
-      userName: p.userName,
-      isAudioEnabled: p.isAudioEnabled,
-      isVideoEnabled: p.isVideoEnabled,
-      isScreenSharing: p.isScreenSharing
-    }));
-    this.currentParticipantsSubject.next(mappedParticipants);
-  });
-});
+    this.hubConnection.on('CurrentParticipants', (participants: any[]) => {
+      this.ngZone.run(() => {
+        const mappedParticipants = participants.map(p => ({
+          connectionId: p.connectionId,
+          userId: p.userId,
+          userName: p.userName,
+          isAudioEnabled: p.isAudioEnabled,
+          isVideoEnabled: p.isVideoEnabled,
+          isScreenSharing: p.isScreenSharing
+        }));
+        this.currentParticipantsSubject.next(mappedParticipants);
+      });
+    });
 
-this.hubConnection.on('UserJoined', (data: any) => {
-  this.ngZone.run(() => {
-    const participant: MeetingParticipant = {
-      connectionId: data.connectionId,
-      userId: data.userId,
-      userName: data.userName,
-      isAudioEnabled: data.isAudioEnabled,
-      isVideoEnabled: data.isVideoEnabled,
-      isScreenSharing: data.isScreenSharing
-    };
-    this.participantJoinedSubject.next(participant);
-  });
-});
+    this.hubConnection.on('UserJoined', (data: any) => {
+      this.ngZone.run(() => {
+        const participant: MeetingParticipant = {
+          connectionId: data.connectionId,
+          userId: data.userId,
+          userName: data.userName,
+          isAudioEnabled: data.isAudioEnabled,
+          isVideoEnabled: data.isVideoEnabled,
+          isScreenSharing: data.isScreenSharing
+        };
+        this.participantJoinedSubject.next(participant);
+      });
+    });
 
     this.hubConnection.on('UserLeft', (data: { connectionId: string; userId: string }) => {
-    this.ngZone.run(() => this.participantLeftSubject.next(data));
-  });
+      this.ngZone.run(() => this.participantLeftSubject.next(data));
+    });
 
-  this.hubConnection.on('UserDisconnected', (data: { connectionId: string; userId: string }) => {
-    console.log('🔌 User disconnected:', data);
-    this.ngZone.run(() => this.participantDisconnectedSubject.next(data));
-  });
+    this.hubConnection.on('InviteToMeeting', (meetingId: string, fromUserName: string, fromUserId?: string) => {
+    });
 
-  // WebRTC Signaling
-  this.hubConnection.on('ReceiveOffer', (data: { fromConnectionId: string; offer: any }) => {
-    console.log('📞 Received offer');
-    this.ngZone.run(() => this.receiveOfferSubject.next(data));
-  });
+    this.hubConnection.on('UserDisconnected', (data: { connectionId: string; userId: string }) => {
+      console.log('🔌 User disconnected:', data);
+    });
 
-  this.hubConnection.on('ReceiveAnswer', (data: { fromConnectionId: string; answer: any }) => {
-    console.log('📞 Received answer');
-    this.ngZone.run(() => this.receiveAnswerSubject.next(data));
-  });
+    // WebRTC Signaling
+    this.hubConnection.on('ReceiveOffer', (data: { fromConnectionId: string; offer: any }) => {
+      console.log('📞 Received offer');
+      this.ngZone.run(() => this.receiveOfferSubject.next(data));
+    });
 
-  this.hubConnection.on('ReceiveIceCandidate', (data: { fromConnectionId: string; candidate: any }) => {
-    console.log('🧊 Received ICE candidate');
-    this.ngZone.run(() => this.receiveIceCandidateSubject.next(data));
-  });
+    this.hubConnection.on('ReceiveAnswer', (data: { fromConnectionId: string; answer: any }) => {
+      console.log('📞 Received answer');
+      this.ngZone.run(() => this.receiveAnswerSubject.next(data));
+    });
 
-  // Media toggles
-  this.hubConnection.on('AudioToggled', (data: { connectionId: string; userId: string; isEnabled: boolean }) => {
-    console.log('🔊 Audio toggled:', data);
-    this.ngZone.run(() => this.audioToggledSubject.next(data));
-  });
+    this.hubConnection.on('ReceiveIceCandidate', (data: { fromConnectionId: string; candidate: any }) => {
+      console.log('🧊 Received ICE candidate');
+      this.ngZone.run(() => this.receiveIceCandidateSubject.next(data));
+    });
 
-  this.hubConnection.on('VideoToggled', (data: { connectionId: string; userId: string; isEnabled: boolean }) => {
-    console.log('📹 Video toggled:', data);
-    this.ngZone.run(() => this.videoToggledSubject.next(data));
-  });
+    // Media toggles
+    this.hubConnection.on('AudioToggled', (data: { connectionId: string; userId: string; isEnabled: boolean }) => {
+      console.log('🔊 Audio toggled:', data);
+      this.ngZone.run(() => this.audioToggledSubject.next(data));
+    });
 
-  this.hubConnection.on('ScreenShareStarted', (data: { connectionId: string; userId: string }) => {
-    console.log('🖥️ Screen share started');
-    this.ngZone.run(() => this.screenShareStartedSubject.next(data));
-  });
+    this.hubConnection.on('VideoToggled', (data: { connectionId: string; userId: string; isEnabled: boolean }) => {
+      console.log('📹 Video toggled:', data);
+      this.ngZone.run(() => this.videoToggledSubject.next(data));
+    });
 
-  this.hubConnection.on('ScreenShareStopped', (data: { connectionId: string; userId: string }) => {
-    console.log('🖥️ Screen share stopped');
-    this.ngZone.run(() => this.screenShareStoppedSubject.next(data));
-  });
+    this.hubConnection.on('ScreenShareStarted', (data: { connectionId: string; userId: string }) => {
+      console.log('🖥️ Screen share started');
+      this.ngZone.run(() => this.screenShareStartedSubject.next(data));
+    });
 
-  this.hubConnection.on('ChatMessageReceived', (data: any) => {
-    console.log('💬 Chat message received');
-    this.ngZone.run(() => this.meetingMessageReceivedSubject.next(data));
-  });
+    this.hubConnection.on('ScreenShareStopped', (data: { connectionId: string; userId: string }) => {
+      console.log('🖥️ Screen share stopped');
+      this.ngZone.run(() => this.screenShareStoppedSubject.next(data));
+    });
 
-  this.hubConnection.on('MeetingEnded', (data: { endedBy: string; timestamp: Date }) => {
-    console.log('🏁 Meeting ended');
-    this.ngZone.run(() => this.meetingEndedSubject.next(data));
-  });
+    this.hubConnection.on('ChatMessageReceived', (data: any) => {
+      console.log('💬 Chat message received');
+      this.ngZone.run(() => this.meetingMessageReceivedSubject.next(data));
+    });
 
-  this.hubConnection.on('TranscriptionAvailable', (data: any) => {
-    this.ngZone.run(() => this.transcriptionAvailableSubject.next(data as TranscriptionBroadcast));
-  });
+    this.hubConnection.on('MeetingEnded', (data: { endedBy: string; timestamp: Date }) => {
+      console.log('🏁 Meeting ended');
+      this.ngZone.run(() => this.meetingEndedSubject.next(data));
+    });
 
-  this.hubConnection.on('MomAvailable', (data: any) => {
-    this.ngZone.run(() => this.momAvailableSubject.next(data as MomBroadcast));
-  });
+    this.hubConnection.on('TranscriptionAvailable', (data: any) => {
+      this.ngZone.run(() => this.transcriptionAvailableSubject.next(data as TranscriptionBroadcast));
+    });
 
-  this.hubConnection.on('LiveTranscriptionStarted', (data: any) => {
-    this.ngZone.run(() => this.liveTranscriptionStartedSubject.next(data));
-  });
+    this.hubConnection.on('MomAvailable', (data: any) => {
+      this.ngZone.run(() => this.momAvailableSubject.next(data as MomBroadcast));
+    });
 
-  this.hubConnection.on('LiveTranscriptionStopped', (data: any) => {
-    this.ngZone.run(() => this.liveTranscriptionStoppedSubject.next(data));
-  });
+    this.hubConnection.on('LiveTranscriptionStarted', (data: any) => {
+      this.ngZone.run(() => this.liveTranscriptionStartedSubject.next(data));
+    });
 
-  this.hubConnection.on('LiveTranscriptionSegments', (data: any) => {
-    this.ngZone.run(() => this.liveTranscriptionSegmentSubject.next(data));
-  });
+    this.hubConnection.on('LiveTranscriptionStopped', (data: any) => {
+      this.ngZone.run(() => this.liveTranscriptionStoppedSubject.next(data));
+    });
+
+    this.hubConnection.on('LiveTranscriptionSegments', (data: any) => {
+      this.ngZone.run(() => this.liveTranscriptionSegmentSubject.next(data));
+    });
   }
 
   // Chat Methods
@@ -335,20 +339,20 @@ this.hubConnection.on('UserJoined', (data: any) => {
   }
 
   // Meeting Methods
-// In signalr.service.ts
-public async joinMeeting(meetingId: string, userId: string, userName: string, isAudioEnabled: boolean, isVideoEnabled: boolean): Promise<void> {
-  if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-    try {
-      console.log(`Invoking JoinMeeting: ${meetingId}, ${userId}, ${userName}, Audio:${isAudioEnabled}, Video:${isVideoEnabled}`);
-      await this.hubConnection.invoke('JoinMeeting', meetingId, userId, userName, isAudioEnabled, isVideoEnabled);
-      console.log(`✅ Joined meeting: ${meetingId}`);
-    } catch (err) {
-      console.error('Error joining meeting:', err);
+  // In signalr.service.ts
+  public async joinMeeting(meetingId: string, userId: string, userName: string, isAudioEnabled: boolean, isVideoEnabled: boolean): Promise<void> {
+    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+      try {
+        console.log(`Invoking JoinMeeting: ${meetingId}, ${userId}, ${userName}, Audio:${isAudioEnabled}, Video:${isVideoEnabled}`);
+        await this.hubConnection.invoke('JoinMeeting', meetingId, userId, userName, isAudioEnabled, isVideoEnabled);
+        console.log(`✅ Joined meeting: ${meetingId}`);
+      } catch (err) {
+        console.error('Error joining meeting:', err);
+      }
+    } else {
+      console.error('Cannot join meeting - SignalR not connected. State:', this.hubConnection?.state);
     }
-  } else {
-    console.error('Cannot join meeting - SignalR not connected. State:', this.hubConnection?.state);
   }
-}
 
   public async leaveMeeting(meetingId: string, userId: string): Promise<void> {
     if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
@@ -400,29 +404,29 @@ public async joinMeeting(meetingId: string, userId: string, userName: string, is
     await this.hubConnection?.invoke('StopScreenShare', meetingId);
   }
 
-public async sendMeetingMessage(meetingId: string, message: string, messageId?: string): Promise<void> {
-  await this.hubConnection?.invoke('SendChatMessage', meetingId, message, messageId);
-}
+  public async sendMeetingMessage(meetingId: string, message: string, messageId?: string): Promise<void> {
+    await this.hubConnection?.invoke('SendChatMessage', meetingId, message, messageId);
+  }
 
-public async publishTranscription(meetingId: string, transcription: TranscriptionResponse): Promise<void> {
-  if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-    try {
-      await this.hubConnection.invoke('PublishTranscription', meetingId, transcription);
-    } catch (err) {
-      console.error('Error publishing transcription:', err);
+  public async publishTranscription(meetingId: string, transcription: TranscriptionResponse): Promise<void> {
+    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+      try {
+        await this.hubConnection.invoke('PublishTranscription', meetingId, transcription);
+      } catch (err) {
+        console.error('Error publishing transcription:', err);
+      }
     }
   }
-}
 
-public async publishMom(meetingId: string, mom: GenerateMomResponse): Promise<void> {
-  if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-    try {
-      await this.hubConnection.invoke('PublishMom', meetingId, mom);
-    } catch (err) {
-      console.error('Error publishing MoM:', err);
+  public async publishMom(meetingId: string, mom: GenerateMomResponse): Promise<void> {
+    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+      try {
+        await this.hubConnection.invoke('PublishMom', meetingId, mom);
+      } catch (err) {
+        console.error('Error publishing MoM:', err);
+      }
     }
   }
-}
 
   public async inviteToMeeting(targetUserId: string, meetingId: string, fromUserName: string): Promise<void> {
     if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {

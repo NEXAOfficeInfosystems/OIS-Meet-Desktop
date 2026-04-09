@@ -2,348 +2,387 @@
 <div class="meeting-container" [class.sidebars-open]="showParticipants || showChat">
 
   <!-- Loading State -->
-  <div class="loading-overlay" *ngIf="isLoading" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #f8fafc; display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; gap: 16px;">
-    <div class="spinner-border text-primary" role="status">
+  <div class="loading-overlay" *ngIf="isLoading"
+    style="position:absolute;inset:0;background:#f0f2f5;display:flex;align-items:center;justify-content:center;z-index:1000;flex-direction:column;gap:20px;">
+    <div class="spinner-border" role="status"
+      style="width:2.5rem;height:2.5rem;border-width:0.2em;color:#6366f1 !important;">
       <span class="visually-hidden">Loading...</span>
     </div>
-    <p class="text-muted fw-medium">Loading meeting...</p>
+    <p style="color:#64748b;font-weight:600;font-size:0.9rem;">Preparing your secure room…</p>
   </div>
 
   <!-- Main Meeting Area -->
   <div class="main-area" *ngIf="!isLoading">
 
-    <!-- Teams-Style Window Header -->
+    <!-- ── Header ──────────────────────────────────────────────── -->
     <header class="window-header" id="dragHandle">
       <div class="window-title">
         <i class="fas fa-video"></i>
-        <span>{{ meetingTopic || 'Meeting Room' }} <span class="participant-count">{{ participants.length + 1 }}</span></span>
+        <span>{{ meetingTopic || 'Meeting Room' }}</span>
+        <span class="participant-count">{{ participants.length + 1 }} in call</span>
       </div>
+
       <div class="window-controls">
-        <div class="meeting-id-pill px-3 py-1 bg-light rounded-pill border border-secondary fs-xs text-muted me-3" style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          <i class="fas fa-lock me-2 opacity-50"></i>ID: {{ (displayMeetingId || meetingId) | slice:0:15 }}
+        <div class="meeting-id-pill" (click)="copyMeetingId()" title="Click to copy Meeting ID">
+          <i class="fas fa-fingerprint"></i>
+          {{ (displayMeetingId || meetingId) | slice:0:12 }}…
         </div>
         <button class="win-btn" title="Minimize"><i class="fas fa-minus"></i></button>
-        <button class="win-btn close" (click)="leaveMeeting()" title="Close"><i class="fas fa-times"></i></button>
+        <button class="win-btn close" (click)="leaveMeeting()" title="End call"><i class="fas fa-times"></i></button>
       </div>
     </header>
 
+    <!-- ── Info Bar ────────────────────────────────────────────── -->
     <div class="meeting-info-bar">
-      <div class="meeting-title">
-        <h4><i class="fas fa-users"></i> Current call &middot; {{ participants.length + 1 }} participants</h4>
-        <span>Encrypted &middot; add participants from panel</span>
+      <div class="info-left">
+        <i class="fas fa-headset info-icon"></i>
+        <div class="info-text">
+          <span class="info-title">Active call · {{ participants.length + 1 }} participants</span>
+          <span class="info-subtitle">
+            <i class="fas fa-lock"></i>
+            Encrypted · light theme
+          </span>
+        </div>
       </div>
-      <div class="meeting-actions">
-        <button class="icon-btn-light" [class.muted]="isMuted" (click)="toggleMute()" [title]="isMuted ? 'Unmute' : 'Mute'">
+
+      <div class="info-controls">
+        <button class="info-btn" [class.active]="!isMuted" [class.muted-btn]="isMuted" (click)="toggleMute()"
+          [title]="isMuted ? 'Unmute microphone' : 'Mute microphone'">
           <i class="fas" [class.fa-microphone]="!isMuted" [class.fa-microphone-slash]="isMuted"></i>
         </button>
-        <button class="icon-btn-light" [class.off]="isVideoOff" (click)="toggleVideo()" [title]="isVideoOff ? 'Camera On' : 'Camera Off'">
+        <button class="info-btn" [class.active]="!isVideoOff" (click)="toggleVideo()"
+          [title]="isVideoOff ? 'Enable camera' : 'Disable camera'">
           <i class="fas" [class.fa-video]="!isVideoOff" [class.fa-video-slash]="isVideoOff"></i>
         </button>
-        <button class="icon-btn-light" [class.active]="isScreenSharing" (click)="toggleScreenShare()" title="Share Screen">
+        <button class="info-btn" [class.active]="isScreenSharing" (click)="toggleScreenShare()" title="Share screen">
           <i class="fas fa-desktop"></i>
         </button>
-        <button class="icon-btn-light highlight" (click)="openAddParticipantPanel()" title="Add Participant">
+        <button class="info-btn" [class.active]="showAddParticipantPanel" (click)="openAddParticipantPanel()"
+          title="Add participant">
           <i class="fas fa-user-plus"></i>
         </button>
       </div>
     </div>
 
-    <!-- Video Container -->
-    <div class="video-container" [class.hidden]="isVoiceMode" [class.speaker-mode]="gridLayout === 'speaker'">
-      <!-- Screen Share View (if active) -->
-      <div class="screen-share-container" *ngIf="isScreenSharing || isRemoteScreenSharing">
-        <video #screenShareVideo autoplay playsinline [muted]="true"></video>
-        <div class="screen-share-label">
-          <i class="fas fa-desktop"></i>
-          <span>{{ screenShareOwnerName }}</span>
-        </div>
-      </div>
-
-      <!-- Video Grid -->
+    <!-- ── Video Grid ──────────────────────────────────────────── -->
+    <div class="video-container" [class.hidden]="isVoiceMode">
       <div class="video-grid-light" [class]="getGridLayout()">
 
-        <!-- LOCAL VIDEO TILE -->
+        <!-- LOCAL TILE -->
         <div class="video-participant-light local-tile" [class.active-speaker]="isSpeaking">
           <div class="video-placeholder-light" *ngIf="isVideoOff">
-             <div class="avatar-large-light">{{ getInitials(userFullName) }}</div>
-             <span>Camera is off</span>
+            <div class="avatar-large-light">{{ getInitials(userFullName) }}</div>
+            <p>Your camera is off</p>
           </div>
           <video #localVideo autoplay playsinline [muted]="true" [hidden]="isVideoOff"></video>
-          
-          <div class="participant-name-light">You</div>
+
+          <div class="participant-name-light">
+            <i class="fas fa-user-circle"></i>
+            You ({{ userFullName }})
+          </div>
           <div class="mic-icon-light">
-            <i class="fas" [class.fa-microphone]="!isMuted" [class.fa-microphone-slash]="isMuted" [style.color]="isMuted ? '#E5484D' : '#1D1C1D'"></i>
+            <i class="fas" [class.fa-microphone]="!isMuted" [class.fa-microphone-slash]="isMuted"></i>
           </div>
         </div>
 
         <!-- REMOTE PARTICIPANTS -->
-        <div class="video-participant-light" *ngFor="let p of participants; trackBy: trackById" [class.active-speaker]="p.isSpeaking">
-          <div class="video-placeholder-light" *ngIf="p.isVideoOff">
-            <div class="avatar-large-light" [style.background-color]="p.avatarColor || '#E2E6ED'">
+        <div class="video-participant-light" *ngFor="let p of participants; trackBy: trackById"
+          [class.active-speaker]="p.isSpeaking">
+          <div class="video-placeholder-light" *ngIf="p.isVideoOff || !p.stream">
+            <div class="avatar-large-light" [style.background-color]="p.avatarColor || '#6366f1'">
               {{ getInitials(p.name) }}
             </div>
-            <span>{{ p.name }}</span>
+            <p>{{ p.name }}</p>
           </div>
-          <video *ngIf="!p.isVideoOff" [id]="'video-' + p.id" [srcObject]="p.stream" autoplay playsinline></video>
-          
-          <div class="participant-name-light">{{ p.name }}</div>
+          <video *ngIf="!p.isVideoOff && p.stream" [id]="'video-' + p.id" [srcObject]="p.stream" autoplay
+            playsinline></video>
+
+          <div class="participant-name-light">
+            <i class="fas fa-user"></i>
+            {{ p.name }}
+          </div>
           <div class="mic-icon-light">
-            <i class="fas" [class.fa-microphone]="!p.isMuted" [class.fa-microphone-slash]="p.isMuted" [style.color]="p.isMuted ? '#E5484D' : '#1D1C1D'"></i>
+            <i class="fas" [class.fa-microphone]="!p.isMuted" [class.fa-microphone-slash]="p.isMuted"></i>
           </div>
         </div>
 
-        <!-- Invite Placeholder -->
-        <div class="video-participant-light placeholder-tile" *ngIf="participants.length < 3">
+        <!-- Invite Placeholder (when < 3 remotes) -->
+        <div class="video-participant-light placeholder-tile" *ngIf="participants.length < 2">
           <div class="video-placeholder-light">
-             <div class="avatar-large-light"><i class="fas fa-user-plus"></i></div>
-             <p>Waiting for others...</p>
-             <button class="add-btn mt-2" (click)="openAddParticipantPanel()">Invite People</button>
+            <div class="avatar-large-light" style="background:#e2e8f0;color:#94a3b8;">
+              <i class="fas fa-user-plus"></i>
+            </div>
+            <p>Invite someone</p>
+            <button class="add-btn mt-2" (click)="openAddParticipantPanel()">Add Participant</button>
           </div>
         </div>
+
       </div>
     </div>
 
-    <!-- Voice Call View -->
+    <!-- ── Screen Share Overlay ────────────────────────────────── -->
+    <div class="screen-share-overlay" *ngIf="isScreenSharing || isRemoteScreenSharing"
+      style="position:absolute;top:110px;right:20px;width:300px;border-radius:14px;overflow:hidden;border:2px solid #6366f1;box-shadow:0 12px 40px rgba(0,0,0,0.2);z-index:1000;">
+      <video #screenShareVideo autoplay playsinline [muted]="true" style="width:100%;display:block;"></video>
+      <div
+        style="background:#fff;padding:6px 12px;font-size:0.68rem;display:flex;align-items:center;gap:6px;color:#4a5568;border-top:1px solid #e2e8f0;">
+        <i class="fas fa-desktop" style="color:#6366f1;"></i>
+        <span>{{ screenShareOwnerName }} is sharing</span>
+      </div>
+    </div>
+
+    <!-- ── Voice Only Mode ─────────────────────────────────────── -->
     <div class="voice-call-light" *ngIf="isVoiceMode">
-      <div class="voice-avatar-circle-light"><i class="fas fa-phone-alt fa-2x"></i></div>
-      <div style="text-align:center;">
-        <h3 class="fw-bold mb-2">Voice Call in progress</h3>
-        <p class="text-muted">You + {{ participants.length }} participant(s)</p>
+      <div class="voice-avatar-circle-light"><i class="fas fa-microphone-alt"></i></div>
+      <div class="text-center">
+        <h2 class="fw-bold mb-1" style="font-size:1.3rem;">Voice Call Active</h2>
+        <p style="font-size:0.85rem;">{{ participants.length + 1 }} participants · Encrypted</p>
       </div>
       <div class="voice-wave-light"><span></span><span></span><span></span><span></span></div>
-      <div style="background:#EBF0F6; border-radius:40px; padding:6px 18px;"><i class="fas fa-circle" style="color:#2BAC76;"></i> Connected</div>
     </div>
 
-    <!-- Call Controls -->
+    <!-- ── Bottom Dock ─────────────────────────────────────────── -->
     <footer class="call-controls-light">
-      <button class="control-btn-light" [class.active-mode]="isVoiceMode" (click)="toggleVoiceMode()">
-        <i class="fas fa-phone-alt"></i><span>Voice only</span>
+
+      <!-- Voice / Video mode toggle -->
+      <button class="control-btn-light" [class.active-mode]="isVoiceMode" (click)="toggleVoiceMode()"
+        title="Voice only mode">
+        <i class="fas fa-phone-alt"></i>
+        <span>Voice only</span>
       </button>
-      <button class="control-btn-light" [class.active-mode]="!isVoiceMode" (click)="toggleVideoMode()">
-        <i class="fas fa-video"></i><span>Video call</span>
+
+      <button class="control-btn-light" [class.active-mode]="!isVoiceMode && !isVideoOff" (click)="switchToVideoCall()"
+        title="Video call mode">
+        <i class="fas fa-video"></i>
+        <span>Video call</span>
       </button>
-      <button class="control-btn-light" (click)="toggleMute()" [class.muted]="isMuted">
+
+      <div class="controls-divider"></div>
+
+      <!-- Mute -->
+      <button class="control-btn-light" [class.muted]="isMuted" (click)="toggleMute()"
+        [title]="isMuted ? 'Unmute' : 'Mute'">
         <i class="fas" [class.fa-microphone-slash]="isMuted" [class.fa-microphone]="!isMuted"></i>
         <span>{{ isMuted ? 'Unmute' : 'Mute' }}</span>
       </button>
-      <button class="control-btn-light" (click)="toggleParticipants()" [class.active-mode]="showParticipants">
-        <i class="fas fa-users"></i><span>People</span>
+
+      <!-- Screen share -->
+      <button class="control-btn-light icon-only" [class.active-mode]="isScreenSharing" (click)="toggleScreenShare()"
+        title="Share screen">
+        <i class="fas fa-desktop"></i>
       </button>
-      <button class="control-btn-light" (click)="toggleChat()" [class.active-mode]="showChat">
-        <i class="fas fa-comment-alt"></i><span>Chat</span>
+
+      <div class="controls-divider"></div>
+
+      <!-- Sidebar toggles -->
+      <button class="control-btn-light icon-only" [class.active-mode]="showParticipants" (click)="toggleParticipants()"
+        title="Participants">
+        <i class="fas fa-users"></i>
       </button>
-      <button class="control-btn-light" (click)="toggleLiveTranscriptionPanel()" [class.active-mode]="showLiveTranscriptionPanel">
-        <i class="fas fa-closed-captioning"></i><span>Transcription</span>
+
+      <button class="control-btn-light icon-only" [class.active-mode]="showChat" (click)="toggleChat()" title="Chat">
+        <i class="fas fa-comment-alt"></i>
       </button>
-      <button class="control-btn-light end-call-light" (click)="leaveMeeting()">
-        <i class="fas fa-phone-slash"></i><span>Leave call</span>
+
+      <!-- Live Transcription: toggles start/stop and shows panel -->
+      <button class="control-btn-light icon-only" [class.active-mode]="isLiveTranscriptionOn"
+        (click)="toggleLiveTranscriptionFromButton()" title="Live transcription">
+        <i class="fas fa-closed-captioning"></i>
+      </button>
+
+      <div class="controls-divider"></div>
+
+      <!-- Leave -->
+      <button class="control-btn-light end-call-light" (click)="leaveMeeting()" title="Leave meeting">
+        <i class="fas fa-phone-slash"></i>
+        <span>Leave call</span>
       </button>
     </footer>
 
-    <!-- Add Participant Panel -->
+    <!-- ── Add Participant Panel ───────────────────────────────── -->
     <div class="add-participant-panel" *ngIf="showAddParticipantPanel">
-        <div class="panel-header">
-            <span><i class="fas fa-user-plus"></i> Add people</span>
-            <i class="fas fa-times" (click)="closeAddParticipantPanel()" style="cursor:pointer;"></i>
+      <div class="panel-header">
+        <div class="d-flex align-items-center gap-2">
+          <i class="fas fa-user-plus" style="color:#6366f1;"></i>
+          <span>Invite People</span>
         </div>
-        <div class="panel-search">
-            <input type="text" [(ngModel)]="inviteSearchQuery" (input)="filterInviteUsers()" placeholder="Search by name or email...">
+        <button class="close-panel-btn" (click)="closeAddParticipantPanel()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <div class="panel-search">
+        <div class="search-input-wrapper">
+          <i class="fas fa-search search-icon"></i>
+          <input type="text" [(ngModel)]="inviteSearchQuery" (input)="filterInviteUsers()"
+            placeholder="Search by name or email…">
         </div>
-        <div class="participant-list">
-            <div class="add-participant-item" *ngFor="let u of filteredInviteUsers">
-                <div class="participant-info">
-                    <div class="avatar-light">{{ u.fullName?.charAt(0) || 'U' }}</div>
-                    <div>
-                        <div style="font-weight:600; font-size:0.85rem;">{{ u.fullName }}</div>
-                        <div style="font-size:0.7rem; color:#6C6F7A;">{{ u.email || 'OIS Member' }}</div>
-                    </div>
-                </div>
-                <button class="add-btn" [disabled]="isInviting" (click)="inviteUser(u)">Add</button>
+      </div>
+
+      <!-- Loading state -->
+      <div *ngIf="oisMeetUsers.length === 0 && !inviteSearchQuery"
+        style="padding:24px;text-align:center;color:#94a3b8;font-size:0.82rem;">
+        <i class="fas fa-spinner fa-spin mb-2" style="font-size:1.2rem;"></i>
+        <p style="margin:8px 0 0;">Loading contacts…</p>
+      </div>
+
+      <div class="participant-list custom-scrollbar" *ngIf="oisMeetUsers.length > 0 || inviteSearchQuery">
+        <div class="add-participant-item" *ngFor="let u of filteredInviteUsers">
+          <div class="participant-info">
+            <div class="participant-avatar" [style.background-color]="getRandomColor(u.oisMeetUserId)">
+              {{ u.fullName?.charAt(0) || 'U' }}
             </div>
-            <div class="p-4 text-center text-muted fs-xs" *ngIf="filteredInviteUsers.length === 0">
-                No users found
+            <div class="participant-details">
+              <span class="full-name">{{ u.fullName }}</span>
+              <span class="email-address">{{ u.email || 'OIS Member' }}</span>
             </div>
-        </div>
-    </div>
-  </div>
-
-  <!-- Tabbed Right Sidebar -->
-  <aside class="meeting-right-sidebar" *ngIf="(showChat || showParticipants) && !isLoading">
-    <div class="sidebar-tabs-nav d-flex border-bottom ps-3 pe-2">
-      <button class="sidebar-tab-link" [class.active]="showParticipants" (click)="showParticipants = true; showChat = false">Participants</button>
-      <button class="sidebar-tab-link" [class.active]="showChat" (click)="showChat = true; showParticipants = false">Chat</button>
-      <button class="btn btn-icon-sm text-muted ms-auto my-1" (click)="showChat = false; showParticipants = false"><i class="bi bi-x-lg"></i></button>
-    </div>
-
-    <!-- Participants Tab Content -->
-    <div class="sidebar-content h-100 overflow-auto p-3" *ngIf="showParticipants">
-      <div class="sec-header mb-3 d-flex justify-content-between align-items-center">
-        <span class="fs-xs fw-bold text-uppercase text-muted letter-spacing-1">In this meeting</span>
-        <span class="badge bg-light text-dark border rounded-pill">{{ participants.length + 1 }}</span>
-      </div>
-      
-      <div class="participant-meeting-item d-flex align-items-center gap-3 mb-3">
-        <div class="avatar-sm" [style.background-color]="'#4f46e5'">{{ getInitials(userFullName) }}</div>
-        <div class="flex-grow-1 min-w-0">
-          <div class="fw-bold fs-xs text-truncate">You</div>
-          <div class="fs-xxs text-muted">Meeting Host</div>
-        </div>
-        <div class="mic-status"><i class="bi" [class.bi-mic-fill]="!isMuted" [class.bi-mic-mute-fill]="isMuted"></i></div>
-      </div>
-
-      <div class="participant-meeting-item d-flex align-items-center gap-3 mb-3" *ngFor="let p of participants">
-        <div class="avatar-sm" [style.background-color]="p.avatarColor || '#3b82f6'">{{ getInitials(p.name) }}</div>
-        <div class="flex-grow-1 min-w-0">
-          <div class="fw-bold fs-xs text-truncate">{{ p.name }}</div>
-          <div class="fs-xxs text-muted">Participant</div>
-        </div>
-        <div class="mic-status"><i class="bi" [class.bi-mic-fill]="!p.isMuted" [class.bi-mic-mute-fill]="p.isMuted"></i></div>
-      </div>
-    </div>
-
-    <!-- Chat Tab Content -->
-    <div class="sidebar-content h-100 d-flex flex-column" *ngIf="showChat">
-      <div #chatMessagesContainer class="chat-messages-container flex-grow-1 overflow-auto p-3">
-        <div class="meeting-msg mb-4" *ngFor="let msg of chatMessages" [class.is-me]="msg.isMe">
-          <div class="d-flex align-items-center gap-2 mb-1">
-            <span class="fw-bold fs-xxs" [class.text-primary]="msg.isMe">{{ msg.isMe ? 'You' : msg.sender }}</span>
-            <span class="text-muted fs-xxxs">{{ msg.timestamp | date:'shortTime' }}</span>
           </div>
-          <div class="msg-bubble p-2 rounded chat-bubble-theme fs-xs">{{ msg.message }}</div>
-        </div>
-        <div *ngIf="chatMessages.length === 0" class="text-center py-5 opacity-30">
-          <i class="bi bi-chat-dots fs-2 mb-2 d-block"></i>
-          <p class="fs-xs">No messages yet</p>
-        </div>
-      </div>
-
-      <div class="chat-input-row p-3 border-top">
-        <div class="chat-input-wrapper d-flex align-items-center gap-2 chat-input-theme rounded-3 px-2 py-1 border">
-          <input type="text" class="flex-grow-1 border-0 bg-transparent theme-text fs-xs py-1 px-2" 
-            placeholder="Send a message..." [(ngModel)]="newMessage" (keydown.enter)="sendMessage()">
-          <button class="btn btn-icon-sm text-primary p-0" (click)="sendMessage()" [disabled]="!newMessage.trim()">
-            <i class="bi bi-send-fill" style="transform: rotate(45deg);"></i>
+          <button class="call-action-btn" [disabled]="isInviting" (click)="inviteUser(u)">
+            <i class="fas fa-phone-alt"></i>
+            <span>Call</span>
           </button>
         </div>
-      </div>
-    </div>
-  </aside>
 
-  <!-- Live Transcription Panel -->
-    <div class="lt-minimised-pill"
-      *ngIf="!showLiveTranscriptionPanel && isLiveTranscriptionOn && !liveTranscriptionIsHost && !isLoading"
-      (click)="toggleLiveTranscriptionPanel()">
-      <span class="lt-pill-dot"></span>
-      Live transcription - click to view
-    </div>
-
-  
-  <div class="live-transcription-panel" *ngIf="showLiveTranscriptionPanel && isLiveTranscriptionOn && !isLoading"
-    [class.panel-visible]="showLiveTranscriptionPanel">
-
-    <!-- Header -->
-    <div class="lt-header">
-      <div class="lt-header-left">
-        <span class="lt-status-dot" [class.lt-dot-connecting]="liveTranscriptionStatus === 'connecting'"
-          [class.lt-dot-active]="liveTranscriptionStatus === 'connected'"
-          [class.lt-dot-viewing]="liveTranscriptionStatus === 'viewing'"
-          [class.lt-dot-error]="liveTranscriptionStatus === 'error'"
-          [class.lt-dot-idle]="liveTranscriptionStatus === 'idle' || liveTranscriptionStatus === 'stopped'">
-        </span>
-
-        <span class="lt-title">Live Transcription</span>
-
-        <span class="lt-badge lt-badge-host" *ngIf="liveTranscriptionIsHost">
-          <i class="bi bi-broadcast"></i> Host
-        </span>
-        <span class="lt-badge lt-badge-viewer" *ngIf="!liveTranscriptionIsHost">
-          <i class="bi bi-mic-fill"></i> Active
-        </span>
-
-        <span class="lt-status-label">
-          <ng-container [ngSwitch]="liveTranscriptionStatus">
-            <span *ngSwitchCase="'connecting'">Connecting...</span>
-            <span *ngSwitchCase="'connected'">Live</span>
-            <span *ngSwitchCase="'viewing'">Receiving</span>
-            <span *ngSwitchCase="'error'">Reconnecting...</span>
-            <span *ngSwitchDefault></span>
-          </ng-container>
-        </span>
-      </div>
-
-      <div class="lt-header-actions">
-        <!-- Clear -->
-        <button class="lt-action-btn" (click)="clearLiveTranscription()" title="Clear"
-          [disabled]="liveTranscriptionSegments.length === 0">
-          <i class="bi bi-trash3"></i>
-        </button>
-
-        <!-- HOST: stop the session for everyone -->
-        <button class="lt-action-btn lt-stop-btn" *ngIf="liveTranscriptionIsHost" (click)="toggleLiveTranscription()"
-          title="Stop live transcription">
-          <i class="bi bi-stop-circle"></i> Stop
-        </button>
-
-        <!-- VIEWER: hide panel locally -->
-        <button class="lt-action-btn" *ngIf="!liveTranscriptionIsHost" (click)="toggleLiveTranscriptionPanel()"
-          title="Hide panel">
-          <i class="bi bi-eye-slash"></i>
-        </button>
-      </div>
-    </div>
-
-    <!-- Error banner -->
-    <div class="lt-error-banner" *ngIf="liveTranscriptionError">
-      <i class="bi bi-exclamation-triangle-fill"></i>
-      {{ liveTranscriptionError }}
-    </div>
-
-    <!-- Scroll area -->
-    <div #liveTranscriptionScroll class="lt-body" id="live-transcription-scroll">
-
-      <!-- Empty state -->
-      <div class="lt-empty" *ngIf="liveTranscriptionSegments.length === 0 && !liveTranscriptionError">
-        <div class="lt-empty-icon">
-          <i class="bi bi-mic-fill"></i>
-          <span class="lt-wave"></span>
-          <span class="lt-wave lt-wave-2"></span>
-          <span class="lt-wave lt-wave-3"></span>
-        </div>
-        <p>
-          <ng-container *ngIf="liveTranscriptionStatus === 'connected' || liveTranscriptionStatus === 'viewing'">
-            Listening - anyone can speak now
-          </ng-container>
-          <ng-container *ngIf="liveTranscriptionStatus === 'connecting'">
-            Connecting to transcription server...
-          </ng-container>
-          <ng-container *ngIf="liveTranscriptionStatus === 'error'">
-            Connection lost. Retrying...
-          </ng-container>
-        </p>
-      </div>
-
-      <!-- Segment rows with speaker name -->
-      <div class="lt-segment" [class.lt-segment-own]="seg.isOwn"
-        *ngFor="let seg of liveTranscriptionSegments; trackBy: trackLiveSegment">
-
-        <!-- Speaker avatar initial + name -->
-        <div class="lt-seg-speaker">
-          <span class="lt-speaker-avatar" [class.lt-avatar-own]="seg.isOwn">
-            {{ seg.speakerName.charAt(0).toUpperCase() }}
-          </span>
-          <span class="lt-speaker-name" [class.lt-name-own]="seg.isOwn">
-            {{ seg.isOwn ? 'You' : seg.speakerName }}
-          </span>
-        </div>
-
-        <!-- Transcription text + timestamp -->
-        <div class="lt-seg-content">
-          <span class="lt-seg-text">{{ seg.text }}</span>
-          <span class="lt-seg-time">{{ seg.start | number:'1.0-1' }}s</span>
+        <div class="empty-results" *ngIf="filteredInviteUsers.length === 0">
+          <i class="fas fa-search-minus"></i>
+          <p>No results found</p>
         </div>
       </div>
 
+    </div><!-- /main-area -->
+
+    <!-- ── Right Sidebar ─────────────────────────────────────────── -->
+    <aside class="meeting-right-sidebar" *ngIf="(showChat || showParticipants) && !isLoading">
+      <div class="sidebar-tabs-nav d-flex">
+        <button class="sidebar-tab-link" [class.active]="showParticipants"
+          (click)="showParticipants=true;showChat=false">Participants</button>
+        <button class="sidebar-tab-link" [class.active]="showChat"
+          (click)="showChat=true;showParticipants=false">Chat</button>
+        <button class="win-btn ms-auto" (click)="showChat=false;showParticipants=false">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <!-- Participants Tab -->
+      <div class="sidebar-content h-100 overflow-auto p-3" *ngIf="showParticipants">
+
+        <!-- Self -->
+        <div class="d-flex align-items-center gap-3 mb-3 p-2 rounded-3"
+          style="background:#f8fafc;border:1px solid #e2e8f0;">
+          <div
+            style="width:38px;height:38px;background:#6366f1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.82rem;color:white;flex-shrink:0;">
+            {{ getInitials(userFullName) }}
+          </div>
+          <div class="flex-grow-1">
+            <div class="fw-bold" style="font-size:0.85rem;">{{ userFullName }} (You)</div>
+            <div class="fs-xxs" style="color:#94a3b8;">{{ isHost ? 'Host' : 'Participant' }}</div>
+          </div>
+          <i class="fas" [class.fa-microphone]="!isMuted" [class.fa-microphone-slash]="isMuted"
+            [style.color]="isMuted ? '#ef4444' : '#10b981'" style="font-size:0.8rem;"></i>
+        </div>
+
+        <!-- Remote participants -->
+        <div class="d-flex align-items-center gap-3 mb-3 p-2 rounded-3"
+          style="background:#f8fafc;border:1px solid #e2e8f0;" *ngFor="let p of participants">
+          <div
+            style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.82rem;color:white;flex-shrink:0;"
+            [style.background-color]="p.avatarColor || '#6366f1'">
+            {{ getInitials(p.name) }}
+          </div>
+          <div class="flex-grow-1">
+            <div class="fw-bold" style="font-size:0.85rem;">{{ p.name }}</div>
+            <div class="fs-xxs" style="color:#94a3b8;">{{ p.isHost ? 'Host' : 'Participant' }}</div>
+          </div>
+          <i class="fas" [class.fa-microphone]="!p.isMuted" [class.fa-microphone-slash]="p.isMuted"
+            [style.color]="p.isMuted ? '#ef4444' : '#10b981'" style="font-size:0.8rem;"></i>
+        </div>
+
+        <div *ngIf="participants.length === 0"
+          style="text-align:center;padding:30px 0;color:#94a3b8;font-size:0.82rem;">
+          <i class="fas fa-users mb-2" style="font-size:1.5rem;display:block;opacity:0.4;"></i>
+          No other participants yet
+        </div>
+      </div>
+
+      <!-- Chat Tab -->
+      <div class="sidebar-content h-100 d-flex flex-column" *ngIf="showChat">
+        <div #chatMessagesContainer class="chat-messages-container flex-grow-1 overflow-auto">
+          <div class="meeting-msg mb-3" *ngFor="let msg of chatMessages" [class.is-me]="msg.isMe">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="fw-bold fs-xs" style="color:#4a5568;">{{ msg.isMe ? 'You' : msg.sender }}</span>
+              <span class="fs-xxs" style="color:#94a3b8;">{{ msg.timestamp | date:'shortTime' }}</span>
+            </div>
+            <div class="msg-bubble">{{ msg.message }}</div>
+          </div>
+
+          <div *ngIf="chatMessages.length === 0"
+            style="text-align:center;padding:30px 0;color:#94a3b8;font-size:0.82rem;">
+            <i class="fas fa-comment-alt mb-2" style="font-size:1.5rem;display:block;opacity:0.4;"></i>
+            No messages yet
+          </div>
+        </div>
+
+        <div class="p-3" style="border-top:1px solid #e2e8f0;">
+          <div class="chat-input-wrapper d-flex align-items-center gap-2 chat-input-theme rounded-4 px-3 py-2">
+            <input type="text" class="flex-grow-1 border-0 bg-transparent fs-6 py-1"
+              style="font-size:0.85rem !important;" placeholder="Type a message…" [(ngModel)]="newMessage"
+              (keydown.enter)="sendMessage()">
+            <button class="btn p-0" style="color:#6366f1;" (click)="sendMessage()" [disabled]="!newMessage.trim()">
+              <i class="fas fa-paper-plane"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Live Transcription Panel ──────────────────────────────── -->
+    <div class="live-transcription-panel" *ngIf="showLiveTranscriptionPanel && !isLoading">
+
+      <div class="lt-header">
+        <div class="d-flex align-items-center gap-2">
+          <span class="lt-status-dot"
+            [class.lt-dot-active]="liveTranscriptionStatus === 'connected' || liveTranscriptionStatus === 'viewing'"></span>
+          <span class="fw-bold fs-xs">Live Transcript</span>
+          <span *ngIf="liveTranscriptionStatus === 'idle'" class="fs-xxs" style="color:#94a3b8;">(not started)</span>
+        </div>
+
+        <div class="lt-header-actions d-flex align-items-center gap-1">
+          <button class="win-btn" (click)="clearLiveTranscription()" title="Clear"
+            *ngIf="liveTranscriptionSegments.length > 0">
+            <i class="fas fa-trash-alt" style="font-size:0.7rem;"></i>
+          </button>
+          <button class="win-btn" (click)="toggleLiveTranscriptionPanel()"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+
+      <!-- Error -->
+      <div *ngIf="liveTranscriptionError"
+        style="padding:8px 14px;background:#fee2e2;border-bottom:1px solid #fca5a5;font-size:0.72rem;color:#ef4444;">
+        <i class="fas fa-exclamation-circle"></i> {{ liveTranscriptionError }}
+      </div>
+
+      <!-- Not started hint -->
+      <div *ngIf="!isLiveTranscriptionOn" style="padding:20px 14px;text-align:center;color:#94a3b8;font-size:0.78rem;">
+        <i class="fas fa-closed-captioning mb-2" style="font-size:1.2rem;display:block;opacity:0.4;"></i>
+        Click the <strong>CC</strong> button again to start transcription
+      </div>
+
+      <div #liveTranscriptionScroll class="lt-body" id="live-transcription-scroll" *ngIf="isLiveTranscriptionOn">
+        <div class="lt-segment" [class.lt-segment-own]="seg.isOwn"
+          *ngFor="let seg of liveTranscriptionSegments; trackBy: trackLiveSegment">
+          <div class="lt-seg-speaker">
+            <span class="lt-speaker-name">{{ seg.isOwn ? 'You' : seg.speakerName }}</span>
+          </div>
+          <div class="lt-seg-content">
+            <span class="lt-seg-text">{{ seg.text }}</span>
+          </div>
+        </div>
+
+        <div *ngIf="liveTranscriptionSegments.length === 0 && isLiveTranscriptionOn"
+          style="text-align:center;color:#94a3b8;font-size:0.78rem;padding:16px 0;">
+          Listening… speak to see live transcription
+        </div>
+      </div>
     </div>
-  </div>
-  <!-- END LIVE TRANSCRIPTION PANEL -->
-</div>
+
+  </div><!-- /meeting-container -->

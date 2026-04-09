@@ -82,6 +82,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private localLivekitScreenShareTrackSid: string | null = null;
   private remoteLivekitScreenShareTrackSid: string | null = null;
   private livekitAudioTrackSidToIdentity: Map<string, string> = new Map();
+  private livekitVideoTrackSidToIdentity: Map<string, string> = new Map();
 
   private tooltips: bootstrap.Tooltip[] = [];
 
@@ -808,12 +809,33 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             isMuted: !p.isAudioEnabled
           })));
 
-        // Add only filtered participants to the list
+        // Batch-add all participants in one zone run to avoid multiple CD cycles
         this.ngZone.run(() => {
-          this.participants = []; // Clear existing
+          this.participants = [];
+          const batch: Participant[] = [];
           filteredParticipants.forEach(p => {
-            this.addParticipant(p);
+            if (p.userId === this.oisMeetUserId) return;
+            const existing = batch.find(x => x.id === p.userId);
+            if (!existing) {
+              const np: Participant = {
+                connectionId: p.connectionId,
+                id: p.userId,
+                name: p.userName,
+                isMuted: !p.isAudioEnabled,
+                isVideoOff: !p.isVideoEnabled,
+                isScreenSharing: p.isScreenSharing,
+                isHost: p.userId === this.meetingDetails?.hostId,
+                isSpeaking: false,
+                avatarColor: this.getRandomColor(p.userId)
+              };
+              batch.push(np);
+              if (p.connectionId) {
+                this.participantByConnectionId.set(p.connectionId, np);
+              }
+            }
           });
+          this.participants = batch;
+          this.cdr.markForCheck();
           console.log('Participants after API load:', this.participants.map(p => ({
             name: p.name,
             isMuted: p.isMuted
@@ -911,11 +933,34 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       // Once connected, we consider LiveKit the active media path.
       this.livekitActive = true;
 
-      // Publish microphone using our existing audio track (so UI mute toggles still work).
+      // Always publish mic track so remote participants can receive audio.
+      // Then apply the initial mute state (setMicrophoneMuted skips publish when muted=true,
+      // so we publish explicitly first then mute if needed).
       const localAudioTrack = this.mediaStream?.getAudioTracks()?.[0] ?? null;
       if (localAudioTrack) {
-        // IMPORTANT: enforce initial mute state for LiveKit.
-        await this.livekitService.setMicrophoneMuted(this.isMuted, localAudioTrack);
+        try {
+          await this.livekitService.publishMicrophoneTrack(localAudioTrack);
+        } catch (pubErr) {
+          console.error('Failed to publish mic to LiveKit:', pubErr);
+        }
+        if (this.isMuted) {
+          try {
+            await this.livekitService.setMicrophoneMuted(true, localAudioTrack);
+          } catch (muteErr) {
+            console.error('Failed to apply initial mute state in LiveKit:', muteErr);
+          }
+        }
+      }
+
+      // Publish camera track if video is enabled
+      const localVideoTrack = this.mediaStream?.getVideoTracks()
+        .find(t => t.readyState === 'live') ?? null;
+      if (localVideoTrack && !this.isVideoOff) {
+        try {
+          await this.livekitService.publishCameraTrack(localVideoTrack);
+        } catch (camErr) {
+          console.error('Failed to publish camera to LiveKit:', camErr);
+        }
       }
 
       console.log('✅ LiveKit connected');
@@ -947,6 +992,18 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     this.livekitService.remoteAudioRemoved$
       .pipe(takeUntil(this.destroy$))
       .subscribe((evt) => this.ngZone.run(() => this.detachLivekitRemoteAudio(evt.trackSid)));
+
+    // ── Remote camera video ──────────────────────────────────────────────────
+    this.livekitService.remoteVideoAdded$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((evt) => this.ngZone.run(() =>
+        this.attachLivekitRemoteVideo(evt.identity, evt.trackSid, evt.mediaStreamTrack)));
+
+    this.livekitService.remoteVideoRemoved$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((evt) => this.ngZone.run(() =>
+        this.detachLivekitRemoteVideo(evt.trackSid)));
+    // ────────────────────────────────────────────────────────────────────────
 
     this.livekitService.screenShareStarted$
       .pipe(takeUntil(this.destroy$))
@@ -1021,6 +1078,63 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  /** Attach a remote camera video track received from LiveKit. */
+  private attachLivekitRemoteVideo(identity: string, trackSid: string, mediaStreamTrack: MediaStreamTrack): void {
+    if (!identity || identity === this.oisMeetUserId) {
+      return;
+    }
+
+    if (trackSid) {
+      this.livekitVideoTrackSidToIdentity.set(trackSid, identity);
+    }
+
+    // Find participant by identity (which equals the remote participant's userId)
+    const participant = this.participants.find(p => p.id === identity);
+    if (!participant) {
+      console.warn('LiveKit remote video: participant not found for identity:', identity);
+      return;
+    }
+
+    // Build or update the participant's MediaStream with this video track
+    if (!participant.stream) {
+      participant.stream = new MediaStream([mediaStreamTrack]);
+    } else {
+      // Remove any stale video tracks and add the fresh one
+      participant.stream.getVideoTracks().forEach(t => participant.stream!.removeTrack(t));
+      participant.stream.addTrack(mediaStreamTrack);
+    }
+
+    participant.isVideoOff = false;
+    this.participants = [...this.participants];
+    this.cdr.markForCheck();
+  }
+
+  /** Remove a remote camera video track when LiveKit unsubscribes it. */
+  private detachLivekitRemoteVideo(trackSid: string): void {
+    const identity = this.livekitVideoTrackSidToIdentity.get(trackSid);
+    if (!identity) {
+      return;
+    }
+
+    this.livekitVideoTrackSidToIdentity.delete(trackSid);
+
+    const participant = this.participants.find(p => p.id === identity);
+    if (!participant) {
+      return;
+    }
+
+    if (participant.stream) {
+      participant.stream.getVideoTracks().forEach(t => participant.stream!.removeTrack(t));
+      if (participant.stream.getTracks().length === 0) {
+        participant.stream = undefined;
+      }
+    }
+
+    participant.isVideoOff = true;
+    this.participants = [...this.participants];
+    this.cdr.markForCheck();
+  }
+
   private attachRemoteScreenShare(ownerName: string, trackSid: string, mediaStreamTrack: MediaStreamTrack): void {
     // If we are locally sharing, prefer showing our own preview.
     if (this.isScreenSharing) {
@@ -1039,15 +1153,14 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private detachRemoteScreenShare(trackSid: string): void {
     if (!this.remoteLivekitScreenShareTrackSid || this.remoteLivekitScreenShareTrackSid !== trackSid) {
-      return;
-    }
 
-    this.remoteLivekitScreenShareTrackSid = null;
-    this.isRemoteScreenSharing = false;
-    this.screenShareOwnerName = 'Your Screen';
+      this.remoteLivekitScreenShareTrackSid = null;
+      this.isRemoteScreenSharing = false;
+      this.screenShareOwnerName = 'Your Screen';
 
-    if (this.screenShareVideo) {
-      this.screenShareVideo.nativeElement.srcObject = null;
+      if (this.screenShareVideo) {
+        this.screenShareVideo.nativeElement.srcObject = null;
+      }
     }
   }
 
@@ -1098,7 +1211,6 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
       console.log('Requesting getUserMedia with constaints:', { audio: audioConstraints, video: videoConstraints });
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
         video: videoConstraints
       });
       console.log('Got media stream with tracks:', this.mediaStream.getTracks().length);
@@ -1572,6 +1684,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
       this.participants = [...this.participants, newParticipant];
       this.registerParticipantConnection(newParticipant, participant.connectionId);
+      this.cdr.markForCheck();
       console.log('✅ Added participant:', newParticipant.name,
         'Muted:', newParticipant.isMuted,
         'VideoOff:', newParticipant.isVideoOff,
@@ -1597,6 +1710,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     this.participantByConnectionId.delete(connectionId);
     this.stopSpeakingDetection(connectionId);
     this.participants = this.participants.filter(p => p.connectionId !== connectionId);
+    this.cdr.markForCheck();
     console.log('Participants after removal:', this.participants.length);
   }
 
@@ -1973,6 +2087,15 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     this.cdr.markForCheck();
   }
 
+  /** Switch to video call mode: exit voice-only and enable camera if off */
+  async switchToVideoCall() {
+    this.isVoiceMode = false;
+    this.cdr.markForCheck();
+    if (this.isVideoOff) {
+      await this.toggleVideo();
+    }
+  }
+
   toggleParticipants() {
     this.showParticipants = !this.showParticipants;
     if (this.showParticipants) {
@@ -1999,6 +2122,22 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       this.showAddParticipantPanel = false;
     }
     this.cdr.markForCheck();
+  }
+
+  /** Called by the CC dock button — starts/stops transcription and manages panel */
+  async toggleLiveTranscriptionFromButton(): Promise<void> {
+    if (!this.isLiveTranscriptionOn) {
+      // Show the panel immediately so the user sees feedback; then start
+      this.showLiveTranscriptionPanel = true;
+      this.showChat = false;
+      this.showParticipants = false;
+      this.showAddParticipantPanel = false;
+      this.cdr.markForCheck();
+      await this.toggleLiveTranscription();
+    } else {
+      await this.toggleLiveTranscription();
+      this.cdr.markForCheck();
+    }
   }
 
   openAddParticipantPanel() {
@@ -2038,6 +2177,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   async toggleMute() {
     const wasMuted = this.isMuted;
     this.isMuted = !this.isMuted;
+    this.cdr.markForCheck();
 
     if (this.mediaStream) {
       const audioTracks = this.mediaStream.getAudioTracks();
@@ -2088,16 +2228,17 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   async toggleVideo() {
     console.log('Toggling video, current:', this.isVideoOff);
     this.isVideoOff = !this.isVideoOff;
+    this.cdr.markForCheck();
 
     if (this.mediaStream) {
       const videoTracks = this.mediaStream.getVideoTracks();
 
       if (videoTracks.length > 0) {
-        // If we have video tracks, just enable/disable them
-        videoTracks.forEach(track => track.enabled = !this.isVideoOff);
+        // Existing track – just enable/disable
+        videoTracks.forEach(track => { track.enabled = !this.isVideoOff; });
         console.log('Video tracks enabled:', !this.isVideoOff);
       } else if (!this.isVideoOff) {
-        // If turning video on but no video tracks, need to get camera
+        // No video track yet – acquire camera and push into all active peers
         try {
           const settings = this.settingsService.currentSettings;
           const videoConstraints: any = { width: { ideal: 1280 }, height: { ideal: 720 } };
@@ -2114,6 +2255,25 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           if (videoTrack) {
             videoTrack.enabled = true;
             this.mediaStream.addTrack(videoTrack);
+
+            // Push the new video track into every existing RTCPeerConnection so
+            // remote participants can see our camera without a full renegotiation.
+            this.peers.forEach((peer) => {
+              try {
+                const pc: RTCPeerConnection = (peer as any)._pc;
+                if (!pc) return;
+                const senders = pc.getSenders();
+                const videoSender = senders.find((s) => s.track?.kind === 'video');
+                if (videoSender) {
+                  videoSender.replaceTrack(videoTrack).catch((e: any) =>
+                    console.warn('replaceTrack failed:', e));
+                } else {
+                  pc.addTrack(videoTrack, this.mediaStream!);
+                }
+              } catch (e) {
+                console.warn('Failed to update video track in peer:', e);
+              }
+            });
           }
 
           if (this.localVideo) {
@@ -2121,9 +2281,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             this.localVideo.nativeElement.volume = 0;
             this.localVideo.nativeElement.srcObject = this.mediaStream;
           }
+          this.cdr.markForCheck();
         } catch (err) {
           console.error('Error starting camera:', err);
-          this.isVideoOff = true; // Revert if failed
+          this.isVideoOff = true;
+          this.cdr.markForCheck();
           this.snackBar.open('Could not start camera', 'Close', { duration: 3000 });
         }
       }
@@ -2131,6 +2293,25 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     await this.signalRService.toggleVideo(this.meetingId, !this.isVideoOff);
     console.log('Video toggle sent to server:', !this.isVideoOff);
+
+    // ── LiveKit: publish / unpublish the local camera track ──────────────────
+    if (this.livekitActive) {
+      if (this.isVideoOff) {
+        // Camera turned off — unpublish from LiveKit so remote participants stop receiving
+        await this.livekitService.unpublishCameraTracks().catch(e =>
+          console.error('Failed to unpublish camera from LiveKit:', e));
+      } else {
+        // Camera turned on — publish the live video track
+        const videoTrack = this.mediaStream?.getVideoTracks()
+          .find(t => t.readyState === 'live') ?? null;
+        if (videoTrack) {
+          await this.livekitService.publishCameraTrack(videoTrack).catch(e =>
+            console.error('Failed to publish camera to LiveKit:', e));
+        }
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     this.refreshTooltips();
   }
 
@@ -2443,6 +2624,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
 
+  copyMeetingId() {
+    this.clipboard.copy(this.meetingId);
+    this.snackBar.open('Meeting ID copied!', 'OK', { duration: 2000 });
+  }
+
   copyMeetingCode(event: Event): void {
     event.preventDefault();
     this.clipboard.copy(this.meetingId);
@@ -2545,7 +2731,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     return num < 10 ? '0' + num : num.toString();
   }
 
-  private getRandomColor(seed: string): string {
+  getRandomColor(seed: string): string {
     const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
     let hash = 0;
     for (let i = 0; i < seed.length; i++) {
@@ -2594,9 +2780,32 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const aiBase: string = ((environment as any).aiApiBaseUrl || 'http://192.168.1.47:8001')
       .toString().trim().replace(/\/+$/, '');
-    // const aiBase: string = ('http://192.168.1.47:8001')
-    //   .toString().trim().replace(/\/+$/, '');
     const wsUrl = aiBase.replace(/^http/, 'ws') + '/ws/transcribe';
+
+    // Build a dedicated mic-only stream for transcription so we don't affect
+    // the main media stream's enabled state. If all audio tracks are currently
+    // disabled (muted), re-enable them inside the capture stream — Web Audio
+    // captures at the hardware level regardless, but enabled=false on the
+    // MediaStreamTrack causes silence in some Chromium/Electron builds.
+    const audioTracks = this.mediaStream.getAudioTracks();
+    let transcriptionStream: MediaStream;
+    if (audioTracks.length > 0) {
+      // Clone each track so toggling enabled on it doesn't affect the WebRTC stream
+      const clonedTracks = audioTracks.map(t => {
+        const clone = t.clone();
+        clone.enabled = true; // ensure the clone sends real audio to the AudioContext
+        return clone;
+      });
+      transcriptionStream = new MediaStream(clonedTracks);
+    } else {
+      // No mic track — try acquiring one just for transcription
+      try {
+        transcriptionStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      } catch {
+        this.snackBar.open('Microphone not available for transcription', 'Close', { duration: 3000 });
+        return;
+      }
+    }
 
     const bridge: ISignalRBridge = {
       broadcastLiveTranscriptionSegments: (mid, segs) =>
@@ -2608,9 +2817,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     };
 
     await this.liveTranscriptionService.start(
-      this.mediaStream,   // ← own mic only (no remote streams)
+      transcriptionStream, // dedicated clone — enabled regardless of mute state
       wsUrl,
-      this.userFullName,  // speaker label for this participant's segments
+      this.userFullName,
       this.meetingId,
       bridge,
       isHost
@@ -2692,12 +2901,18 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       appId
     ).subscribe({
       next: (res: any) => {
-        if (res.success && res.data) {
-          this.oisMeetUsers = res.data.filter((u: any) => u.oisMeetUserId !== this.oisMeetUserId);
-          this.filteredInviteUsers = [...this.oisMeetUsers];
-        }
+        this.ngZone.run(() => {
+          if (res.success && res.data) {
+            this.oisMeetUsers = res.data.filter((u: any) => u.oisMeetUserId !== this.oisMeetUserId);
+            this.filteredInviteUsers = [...this.oisMeetUsers];
+          }
+          this.cdr.markForCheck();
+        });
       },
-      error: (err: any) => console.error('Failed to load users for invitation:', err)
+      error: (err: any) => {
+        console.error('Failed to load users for invitation:', err);
+        this.ngZone.run(() => { this.cdr.markForCheck(); });
+      }
     });
   }
 
@@ -2710,29 +2925,33 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         u.fullName.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
       );
     }
+    this.cdr.markForCheck();
   }
 
   inviteUser(user: any): void {
     if (this.isInviting) return;
     this.isInviting = true;
+    this.cdr.markForCheck();
+
+    const finalize = (msg: string) => {
+      this.ngZone.run(() => {
+        this.isInviting = false;
+        this.snackBar.open(msg, 'OK', { duration: 2500 });
+        this.cdr.markForCheck();
+      });
+    };
 
     // Use CallService to "call" the participant into the meeting
     this.callService.startCall(user.oisMeetUserId, user.fullName, this.userFullName, 'Video', this.meetingId)
-      .then(() => {
-        this.snackBar.open(`Calling ${user.fullName}...`, 'OK', { duration: 2000 });
-        this.isInviting = false;
-      })
+      .then(() => finalize(`Calling ${user.fullName}…`))
       .catch(err => {
-        console.error('Call failed:', err);
-        // Fallback to traditional invite if specific calling fails or if StartCall doesn't support roomId yet
+        console.error('Call failed, falling back to meeting invite:', err);
+        // Fallback: send a meeting invite notification
         this.signalRService.inviteToMeeting(user.oisMeetUserId, this.meetingId, this.userFullName)
-          .then(() => {
-            this.snackBar.open(`Invitation sent to ${user.fullName}`, 'OK', { duration: 2000 });
-            this.isInviting = false;
-          })
+          .then(() => finalize(`Invitation sent to ${user.fullName}`))
           .catch(e => {
             console.error('Invite fallback failed:', e);
-            this.isInviting = false;
+            finalize(`Could not reach ${user.fullName}`);
           });
       });
   }
@@ -2763,16 +2982,14 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
         if (isLocal) {
           if (this.isSpeaking !== isSpeaking) {
-            this.ngZone.run(() => {
-              this.isSpeaking = isSpeaking;
-            });
+            this.isSpeaking = isSpeaking;
+            this.cdr.markForCheck();
           }
         } else {
           const participant = this.participantByConnectionId.get(connectionId);
           if (participant && participant.isSpeaking !== isSpeaking) {
-            this.ngZone.run(() => {
-              participant.isSpeaking = isSpeaking;
-            });
+            participant.isSpeaking = isSpeaking;
+            this.cdr.markForCheck();
           }
         }
 

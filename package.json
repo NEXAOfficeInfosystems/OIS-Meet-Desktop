@@ -1,6 +1,6 @@
 {
   "name": "ois-meet-desktop",
-  "version": "1.0.2",
+  "version": "1.0.6",
   "description": "OIS Meet desktop application",
   "author": "OIS Meet",
   "main": "electron/main.js",
@@ -75,7 +75,8 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://raw.githubusercontent.com/NEXAOfficeInfosystems/OIS-Meet-Desktop/main/updates"
+        "url": "https://netorgft12643612-my.sharepoint.com/personal/senthilkumar_s_officeinfosystems_com/Documents/oismeet-updates",
+        "channel": "latest"
       }
     ],
     "files": [
