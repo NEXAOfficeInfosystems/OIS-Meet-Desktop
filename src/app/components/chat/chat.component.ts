@@ -195,6 +195,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private typingTimeout: any;
   private callTimeout: any;
   private shouldScroll: boolean = false;
+  private _initialLoadConvId: string | null = null;
+  private _scrollToMessageIndex: number | null = null;
   private destroy$ = new Subject<void>();
   isCompanyChanging = false;
   private isSwitchingUser = false;
@@ -307,7 +309,24 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         });
 
         this.updateSharedFiles();
-        this.shouldScroll = true;
+
+        if (this._initialLoadConvId === convId) {
+          // First message batch for this conversation — mark read and scroll to first unread.
+          this._initialLoadConvId = null;
+          setTimeout(() => this.markAllUnreadAsRead(convId), 200);
+          const firstUnread = this.messages.findIndex(m =>
+            m.senderId?.toString() !== this.currentUserId?.toString() && !m.isRead
+          );
+          if (firstUnread !== -1) {
+            this._scrollToMessageIndex = firstUnread;
+          } else {
+            this.shouldScroll = true;
+          }
+        } else if (this.currentPage === 1) {
+          // Real-time message arrived — scroll to bottom.
+          this.shouldScroll = true;
+        }
+        // currentPage > 1 means pagination (load older) — preserve scroll position.
       }
     });
 
@@ -739,6 +758,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   ngAfterViewChecked(): void {
+    if (this._scrollToMessageIndex !== null) {
+      const idx = this._scrollToMessageIndex;
+      this._scrollToMessageIndex = null;
+      this._scrollToFirstUnread(idx);
+    }
     if (this.shouldScroll) {
       this.scrollToBottom();
       this.shouldScroll = false;
@@ -1436,6 +1460,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.hasMoreMessages = true;
     this.isLoading = false;
 
+    // Reset initial-load flag immediately so any stale pending load is ignored.
+    this._initialLoadConvId = null;
+
     if (user.unreadCount > 0) {
       user.unreadCount = 0;
       this.totalUnreadCount = this.users.reduce((s, u) => s + (u.unreadCount || 0), 0);
@@ -1446,6 +1473,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       this.selectedConversation = { id: user.conversationId };
       try {
         await this.chatSignalrService.joinConversation(user.conversationId);
+        this._initialLoadConvId = user.conversationId;
         this.loadMessages(user.conversationId);
 
         // Load mention list for this conversation
@@ -1483,6 +1511,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
               this.selectedConversation = { id: convId };
               try {
                 await this.chatSignalrService.joinConversation(convId);
+                this._initialLoadConvId = convId;
                 this.loadMessages(convId);
                 this.mentionList = [user];
               } catch (err) {
@@ -2069,6 +2098,21 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     try {
       this.chatMessagesContainer.nativeElement.scrollTop = this.chatMessagesContainer.nativeElement.scrollHeight + 60;
     } catch (err) { }
+  }
+
+  private _scrollToFirstUnread(index: number): void {
+    const msg = this.messages[index];
+    if (!msg) { this.scrollToBottom(); return; }
+    const id = msg.id || msg.Id;
+    if (!id) { this.scrollToBottom(); return; }
+    try {
+      const el = document.getElementById('msg-' + id);
+      if (el) {
+        el.scrollIntoView({ block: 'start' });
+      } else {
+        this.scrollToBottom();
+      }
+    } catch { this.scrollToBottom(); }
   }
 
   private requestNotificationPermission(): void {
