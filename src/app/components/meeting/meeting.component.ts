@@ -83,6 +83,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private remoteLivekitScreenShareTrackSid: string | null = null;
   private livekitAudioTrackSidToIdentity: Map<string, string> = new Map();
   private livekitVideoTrackSidToIdentity: Map<string, string> = new Map();
+  // Buffers for LiveKit tracks that arrive before the participant is added via SignalR.
+  private pendingLivekitVideoTracks: Map<string, { trackSid: string; mediaStreamTrack: MediaStreamTrack }> = new Map();
+  private pendingLivekitAudioTracks: Map<string, { trackSid: string; mediaStreamTrack: MediaStreamTrack }> = new Map();
 
   private tooltips: bootstrap.Tooltip[] = [];
 
@@ -782,14 +785,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       if (response.success && response.data) {
         console.log('📋 Existing participants from API:', response.data);
 
-        // FIX: Map API response correctly to MeetingParticipant format
+        // Map API response correctly to MeetingParticipant format.
+        // IMPORTANT: p.id here is the DB record id, NOT the SignalR connectionId.
+        // Leave connectionId blank so the real SignalR connectionId (sent via
+        // CurrentParticipants immediately after joinMeeting) can be assigned later.
         const participants: MeetingParticipant[] = response.data.map((p: any) => ({
-          connectionId: p.id,
+          connectionId: '',          // Will be updated when SignalR CurrentParticipants fires
           userId: p.userId,
           userName: p.userName,
-          // FIX: API uses isMuted (true = muted), SignalR uses isAudioEnabled (true = unmuted)
-          isAudioEnabled: !p.isMuted,  // Convert API isMuted to isAudioEnabled
-          isVideoEnabled: !p.isVideoOff, // Convert API isVideoOff to isVideoEnabled
+          isAudioEnabled: !p.isMuted,   // API: isMuted=true → not enabled
+          isVideoEnabled: !p.isVideoOff, // API: isVideoOff=true → not enabled
           isScreenSharing: false
         }));
 
@@ -818,7 +823,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             const existing = batch.find(x => x.id === p.userId);
             if (!existing) {
               const np: Participant = {
-                connectionId: p.connectionId,
+                connectionId: '',    // Real connectionId comes from SignalR CurrentParticipants
                 id: p.userId,
                 name: p.userName,
                 isMuted: !p.isAudioEnabled,
@@ -829,9 +834,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
                 avatarColor: this.getRandomColor(p.userId)
               };
               batch.push(np);
-              if (p.connectionId) {
-                this.participantByConnectionId.set(p.connectionId, np);
-              }
+              // Do NOT register into participantByConnectionId yet — connectionId is blank.
             }
           });
           this.participants = batch;
@@ -1023,6 +1026,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       this.livekitAudioTrackSidToIdentity.set(trackSid, identity);
     }
 
+    // If the participant is not yet in the array, buffer the audio track.
+    // The audio element itself can be created immediately for playback,
+    // but we store in pending so addParticipant() can also register the stream for recording.
+    const participantExists = this.participants.some(p => p.id === identity);
+    if (!participantExists) {
+      console.warn(`LiveKit remote audio: participant not found for identity "${identity}" — buffering audio track.`);
+      this.pendingLivekitAudioTracks.set(identity, { trackSid, mediaStreamTrack });
+      // Still create the audio element so playback starts immediately without waiting.
+    }
+
     const stream = new MediaStream([mediaStreamTrack]);
     this.remoteAudioStreams.set(identity, stream);
     this.audioRecorderService.addRemoteStream(identity, stream);
@@ -1091,19 +1104,25 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     // Find participant by identity (which equals the remote participant's userId)
     const participant = this.participants.find(p => p.id === identity);
     if (!participant) {
-      console.warn('LiveKit remote video: participant not found for identity:', identity);
+      // Participant not yet in the array (SignalR participantJoined$ hasn't fired yet).
+      // Buffer the track so it can be applied as soon as the participant is added.
+      console.warn(`LiveKit remote video: participant not found for identity "${identity}" — buffering track for later.`);
+      this.pendingLivekitVideoTracks.set(identity, { trackSid, mediaStreamTrack });
       return;
     }
 
-    // Build or update the participant's MediaStream with this video track
+    this._applyLivekitVideoToParticipant(participant, mediaStreamTrack);
+  }
+
+  /** Internal: write the video track into a participant's MediaStream and trigger CD. */
+  private _applyLivekitVideoToParticipant(participant: any, mediaStreamTrack: MediaStreamTrack): void {
     if (!participant.stream) {
       participant.stream = new MediaStream([mediaStreamTrack]);
     } else {
       // Remove any stale video tracks and add the fresh one
-      participant.stream.getVideoTracks().forEach(t => participant.stream!.removeTrack(t));
+      participant.stream.getVideoTracks().forEach((t: MediaStreamTrack) => participant.stream!.removeTrack(t));
       participant.stream.addTrack(mediaStreamTrack);
     }
-
     participant.isVideoOff = false;
     this.participants = [...this.participants];
     this.cdr.markForCheck();
@@ -1211,6 +1230,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
       console.log('Requesting getUserMedia with constaints:', { audio: audioConstraints, video: videoConstraints });
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
         video: videoConstraints
       });
       console.log('Got media stream with tracks:', this.mediaStream.getTracks().length);
@@ -1296,6 +1316,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             existingParticipant.isMuted = !p.isAudioEnabled;
             existingParticipant.isVideoOff = !p.isVideoEnabled;
             existingParticipant.isScreenSharing = p.isScreenSharing;
+
+            // Flush any buffered LiveKit tracks now that we have a real connectionId.
+            this._flushPendingLivekitTracks(p.userId, existingParticipant);
 
             console.log('🔄 Updated participant from current list:', existingParticipant.name,
               'Muted:', existingParticipant.isMuted,
@@ -1689,6 +1712,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         'Muted:', newParticipant.isMuted,
         'VideoOff:', newParticipant.isVideoOff,
         'Host:', newParticipant.isHost);
+
+      // Flush any LiveKit tracks that arrived before this participant was registered.
+      this._flushPendingLivekitTracks(participant.userId, newParticipant);
     } else {
       // Update existing participant's media states
       this.registerParticipantConnection(existingParticipant, participant.connectionId);
@@ -1706,10 +1732,33 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  /** Apply any LiveKit tracks that arrived before the participant object was created. */
+  private _flushPendingLivekitTracks(userId: string, participant: any): void {
+    const pendingVideo = this.pendingLivekitVideoTracks.get(userId);
+    if (pendingVideo) {
+      this.pendingLivekitVideoTracks.delete(userId);
+      console.log('Flushing buffered LiveKit video track for:', participant.name);
+      this._applyLivekitVideoToParticipant(participant, pendingVideo.mediaStreamTrack);
+    }
+
+    const pendingAudio = this.pendingLivekitAudioTracks.get(userId);
+    if (pendingAudio) {
+      this.pendingLivekitAudioTracks.delete(userId);
+      console.log('Flushing buffered LiveKit audio track for:', participant.name);
+      // Re-register the recording stream now that the participant exists.
+      const stream = this.remoteAudioStreams.get(userId);
+      if (stream) {
+        this.audioRecorderService.addRemoteStream(userId, stream);
+      }
+    }
+  }
+
   removeParticipant(connectionId: string) {
     this.participantByConnectionId.delete(connectionId);
     this.stopSpeakingDetection(connectionId);
-    this.participants = this.participants.filter(p => p.connectionId !== connectionId);
+    this.participants = this.participants.filter(
+      p => p.connectionId !== connectionId && p.id !== connectionId
+    );
     this.cdr.markForCheck();
     console.log('Participants after removal:', this.participants.length);
   }
@@ -2903,7 +2952,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       next: (res: any) => {
         this.ngZone.run(() => {
           if (res.success && res.data) {
-            this.oisMeetUsers = res.data.filter((u: any) => u.oisMeetUserId !== this.oisMeetUserId);
+            // Normalize field names from the API so the template can always use
+            // u.fullName, u.email, u.oisMeetUserId and u.avatarUrl uniformly.
+            const normalized = (res.data as any[]).map((u: any) => ({
+              ...u,
+              oisMeetUserId: u.oisMeetUserId || u.userId || u.id || '',
+              fullName: u.fullName || u.userName || u.name || u.displayName || 'Unknown',
+              email: u.email || u.emailAddress || u.userEmail || '',
+              avatarUrl: u.avatarUrl || u.avatar || u.profileImage || null,
+            }));
+            this.oisMeetUsers = normalized.filter((u: any) => u.oisMeetUserId !== this.oisMeetUserId);
             this.filteredInviteUsers = [...this.oisMeetUsers];
           }
           this.cdr.markForCheck();

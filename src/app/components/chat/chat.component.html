@@ -332,7 +332,8 @@
 
               <div class="message-group" [id]="'msg-' + (msg.id || msg.Id)"
                 [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
-                <div class="message-avatar-col" *ngIf="msg.senderId?.toString() !== currentUserId?.toString()">
+                <!-- *ngIf="msg.senderId?.toString() !== currentUserId?.toString()" -->
+                <div class="message-avatar-col">
                   <img *ngIf="msg.senderAvatarUrl" [src]="fileService.getFileUrl(msg.senderAvatarUrl)"
                     class="msg-avatar rounded-circle" alt="avatar">
                   <div *ngIf="!msg.senderAvatarUrl" class="msg-avatar"
@@ -463,7 +464,7 @@
                   *ngIf="mentionsVisible && filteredMentionList.length > 0">
                   <div class="mention-item d-flex align-items-center gap-2 p-2 rounded cursor-pointer"
                     *ngFor="let m of filteredMentionList; let i = index" [class.active]="i === mentionSelectedIndex"
-                    (click)="insertMention(m); $event.stopPropagation()">
+                    (mousedown)="$event.preventDefault()" (click)="insertMention(m); $event.stopPropagation()">
                     <div class="dm-avatar-xs" [style.background-color]="m.avatarColor || '#3b82f6'">
                       {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
                     </div>

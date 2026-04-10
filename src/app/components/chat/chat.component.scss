@@ -480,7 +480,7 @@
     .avatar-wrapper {
       width: 38px;
       height: 38px;
-      border-radius: 10px;
+      border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -688,7 +688,7 @@
   .msg-avatar {
     width: 40px;
     height: 40px;
-    border-radius: 8px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1212,7 +1212,7 @@
   .avatar-xl {
     width: 80px;
     height: 80px;
-    border-radius: 20px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2161,7 +2161,7 @@
 .dm-avatar-sm {
   width: 36px;
   height: 36px;
-  border-radius: 6px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2175,7 +2175,7 @@
   .avatar-xl {
     width: 100px;
     height: 100px;
-    border-radius: 24px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2555,6 +2555,7 @@
   justify-content: center;
   overflow: hidden;
   position: relative;
+  border-radius: 50%;
 
   img {
     width: 100%;

@@ -118,6 +118,12 @@ export class AppComponent {
       console.log('[AppComponent] userId not yet available — waiting for auth-restored event to start Call Hub.');
     }
 
+    // When the main window is hidden to the system tray there is no visible UI to
+    // accept or dismiss an incoming call, so stop the ringtone immediately.
+    window.addEventListener('ois-window-hidden', () => {
+      this.callService.stopRingtones();
+    });
+
     // In Electron, auth data is restored asynchronously after the app loads.
     // When it arrives, stop any stale connection (connected with null userId) and
     // reconnect with the real userId so the server can route IncomingCall events.
@@ -139,6 +145,18 @@ export class AppComponent {
 
     this.realtime.notificationReceived$.subscribe(notification => {
       if (notification?.title) {
+        // Skip call/meeting notifications: they are already handled by the
+        // incomingCall signal effect above, which shows exactly one OS notification.
+        const callTypes = ['IncomingCall', 'InviteToCall', 'InviteToMeeting', 'CallInvite', 'MeetingInvite'];
+        const isCallNotification = callTypes.some(t =>
+          notification.type?.toLowerCase().includes(t.toLowerCase()) ||
+          notification.entityType?.toLowerCase().includes('call') ||
+          notification.entityType?.toLowerCase().includes('meeting')
+        );
+        if (isCallNotification) {
+          console.log('🔕 Suppressing duplicate call/meeting OS notification from generic handler:', notification.type);
+          return;
+        }
         console.log('🔔 Generic Notification Received:', notification.title);
         this.notifications.notify(notification.title, notification.body || 'New notification');
       }

@@ -245,6 +245,15 @@ function createMainWindow() {
       mainWindow.hide();
     }
   });
+
+  // When the window is hidden (goes to tray) there is no visible UI to accept or
+  // dismiss an incoming call, so the Web Audio ring would play silently for the
+  // full 60-second timeout.  Tell the renderer to stop its ringtone immediately.
+  mainWindow.on('hide', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window-hidden-stop-ringtone');
+    }
+  });
 }
 
 function createTray() {
@@ -412,17 +421,20 @@ ipcMain.on('close-meeting-window', (event, { force } = { force: false }) => {
 // NOTIFICATIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
-ipcMain.handle('show-native-notification', async (event, { title, body }) => {
+ipcMain.handle('show-native-notification', async (event, { title, body, silent }) => {
   try {
     if (!Notification.isSupported()) {
       return { success: false, error: 'Notifications are not supported on this system' };
     }
+    // The Web Audio API ring in the renderer already provides the call alert sound,
+    // so OS notifications are silent by default to avoid a double "ding".
+    // Pass silent=false explicitly from the caller only when no in-app sound plays.
     const notification = new Notification({
       title:  typeof title === 'string' && title.trim() ? title.trim() : 'OIS Meet',
       body:   typeof body  === 'string' ? body : '',
       icon:   APP_ICON || undefined,
       appID:  APP_ID,
-      silent: false
+      silent: silent !== false  // true unless the caller explicitly opts in to OS sound
     });
 
     notification.on('click', () => {

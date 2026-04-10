@@ -567,21 +567,38 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   insertMention(user: any): void {
+    // Always close the dropdown immediately, regardless of outcome
+    this.mentionsVisible = false;
+
     const selection = window.getSelection();
-    if (!selection?.rangeCount) return;
+    if (!selection?.rangeCount) {
+      this.cdr.detectChanges();
+      return;
+    }
 
     const range = selection.getRangeAt(0);
+
+    // Selection must be inside the editor; if not (e.g. click stole focus), bail out
+    if (!this.messageEditor?.nativeElement.contains(range.startContainer)) {
+      this.messageEditor?.nativeElement.focus();
+      this.cdr.detectChanges();
+      return;
+    }
+
     const textNode = range.startContainer;
     const offset = range.startOffset;
     const text = textNode.textContent || '';
 
     const atIndex = text.lastIndexOf('@', offset - 1);
-    if (atIndex === -1) return;
+    if (atIndex === -1) {
+      this.cdr.detectChanges();
+      return;
+    }
 
     const before = text.substring(0, atIndex);
     const after = text.substring(offset);
 
-    // Replace text node content
+    // Replace text node content with the part before @
     textNode.textContent = before;
 
     const mentionSpan = document.createElement('span');
@@ -590,10 +607,17 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     mentionSpan.setAttribute('data-user-id', user.userId || user.id);
     mentionSpan.innerText = `@${user.fullName || user.name}`;
 
-    const spaceNode = document.createTextNode(' '); // Regular space instead of non-breaking
+    const spaceNode = document.createTextNode(' ');
 
     range.insertNode(spaceNode);
     range.insertNode(mentionSpan);
+
+    // Re-insert any text that was after the cursor (preserves mid-message edits)
+    if (after) {
+      const afterNode = document.createTextNode(after);
+      range.setStartAfter(spaceNode);
+      range.insertNode(afterNode);
+    }
 
     // Move cursor after the space
     const newRange = document.createRange();
@@ -603,7 +627,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     selection.addRange(newRange);
 
     this.suppressMentionCheck = true;
-    this.mentionsVisible = false;
     this.cdr.detectChanges();
     this.onEditorInput({ target: this.messageEditor.nativeElement });
     this.suppressMentionCheck = false;
@@ -1571,7 +1594,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       const interval = setInterval(() => {
         const element = document.getElementById(`msg-${messageId}`);
         if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.scrollIntoView({ behavior: 'smooth', block: 'end' });
           element.classList.add('highlight-message');
           setTimeout(() => element.classList.remove('highlight-message'), 5000);
           clearInterval(interval);
@@ -1603,29 +1626,29 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
    * participant is properly registered. Shows a spinner-style snack
    * while validating to give visual feedback.
    */
-onMessageClick(event: MouseEvent): void {
-  const target = event.target as HTMLElement;
+  onMessageClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
 
-  // Walk up one level in case user clicked the <small> ▶ Join child
-  const chip = target.classList.contains('meeting-id-link')
-    ? target
-    : (target.parentElement?.classList.contains('meeting-id-link')
-      ? target.parentElement
-      : null);
+    // Walk up one level in case user clicked the <small> ▶ Join child
+    const chip = target.classList.contains('meeting-id-link')
+      ? target
+      : (target.parentElement?.classList.contains('meeting-id-link')
+        ? target.parentElement
+        : null);
 
-  if(!chip) return;
+    if (!chip) return;
 
-  const meetingId = chip.getAttribute('data-meeting-id');
-  if(!meetingId) return;
+    const meetingId = chip.getAttribute('data-meeting-id');
+    if (!meetingId) return;
 
-  const confirmed = confirm(
-    `Join meeting?\n\nMeeting ID: ${meetingId}\n\nClick OK to join.`
-  );
-  if(!confirmed) return;
+    const confirmed = confirm(
+      `Join meeting?\n\nMeeting ID: ${meetingId}\n\nClick OK to join.`
+    );
+    if (!confirmed) return;
 
-  // Validate the meeting via API then open the window as participant
-  this.validateAndJoinMeeting(meetingId);
-}
+    // Validate the meeting via API then open the window as participant
+    this.validateAndJoinMeeting(meetingId);
+  }
 
   /**
    * FIX for Issue 2:
@@ -1633,829 +1656,829 @@ onMessageClick(event: MouseEvent): void {
    * calls joinMeeting so the participant is registered server-side,
    * then opens the meeting window.
    */
-  private async validateAndJoinMeeting(meetingId: string): Promise < void> {
-  const userId = this.sessionService.getOISMeetUserId();
-  const userName = this.sessionService.getFullName() || 'User';
+  private async validateAndJoinMeeting(meetingId: string): Promise<void> {
+    const userId = this.sessionService.getOISMeetUserId();
+    const userName = this.sessionService.getFullName() || 'User';
 
-  if(!userId) {
-    alert('User not authenticated. Please log in again.');
-    return;
-  }
-
-    // Single-meeting guard
-    const electronApi = (window as any).oisMeet;
-  if(electronApi?.isElectron && typeof electronApi.isMeetingActive === 'function') {
-  const isActive = await electronApi.isMeetingActive();
-  if (isActive) {
-    alert('You are already in an active meeting. Please leave it before joining another.');
-    return;
-  }
-}
-
-// Validate first
-this.meetingService.validateMeeting(meetingId).subscribe({
-  next: (validateRes: any) => {
-    if (!validateRes.success) {
-      alert(validateRes.message || 'Invalid or expired meeting ID.');
+    if (!userId) {
+      alert('User not authenticated. Please log in again.');
       return;
     }
 
-    // Register participant server-side
-    this.meetingService.joinMeeting({ meetingId, userId, userName }).subscribe({
-      next: (joinRes: any) => {
-        if (joinRes.success) {
-          this.openMeetingWindow(meetingId, false);
-        } else {
-          alert('Could not join meeting. Please try again.');
+    // Single-meeting guard
+    const electronApi = (window as any).oisMeet;
+    if (electronApi?.isElectron && typeof electronApi.isMeetingActive === 'function') {
+      const isActive = await electronApi.isMeetingActive();
+      if (isActive) {
+        alert('You are already in an active meeting. Please leave it before joining another.');
+        return;
+      }
+    }
+
+    // Validate first
+    this.meetingService.validateMeeting(meetingId).subscribe({
+      next: (validateRes: any) => {
+        if (!validateRes.success) {
+          alert(validateRes.message || 'Invalid or expired meeting ID.');
+          return;
         }
+
+        // Register participant server-side
+        this.meetingService.joinMeeting({ meetingId, userId, userName }).subscribe({
+          next: (joinRes: any) => {
+            if (joinRes.success) {
+              this.openMeetingWindow(meetingId, false);
+            } else {
+              alert('Could not join meeting. Please try again.');
+            }
+          },
+          error: () => alert('Failed to join meeting. Please try again.')
+        });
       },
-      error: () => alert('Failed to join meeting. Please try again.')
+      error: () => alert('Could not validate meeting. Please try again.')
     });
-  },
-  error: () => alert('Could not validate meeting. Please try again.')
-});
   }
 
-/**
- * Opens the meeting room in a new Electron BrowserWindow (or browser tab).
- * Used by both the chat click handler and meet-now-dialog (via selectUser flow).
- *
- * FIX: In the installed EXE, window.location.origin is "null" (file:// context),
- * so we send { routePath, queryString } and let main.js resolve it with loadFile().
- */
-openMeetingWindow(
-  meetingId: string,
-  isHost: boolean,
-  mic = false,
-  cam = false
-): void {
-  const params = new URLSearchParams({
-    host: String(isHost),
-    topic: 'OIS Meet',
-    mic: String(mic),
-    cam: String(cam),
-  });
+  /**
+   * Opens the meeting room in a new Electron BrowserWindow (or browser tab).
+   * Used by both the chat click handler and meet-now-dialog (via selectUser flow).
+   *
+   * FIX: In the installed EXE, window.location.origin is "null" (file:// context),
+   * so we send { routePath, queryString } and let main.js resolve it with loadFile().
+   */
+  openMeetingWindow(
+    meetingId: string,
+    isHost: boolean,
+    mic = false,
+    cam = false
+  ): void {
+    const params = new URLSearchParams({
+      host: String(isHost),
+      topic: 'OIS Meet',
+      mic: String(mic),
+      cam: String(cam),
+    });
 
-  const electronApi = (window as any).oisMeet;
-  if(electronApi?.isElectron && typeof electronApi.openMeetingWindow === 'function') {
-  // Send structured payload so main.js can use loadFile() in production
-  electronApi.openMeetingWindow({
-    routePath: `/meeting/${meetingId}`,
-    queryString: params.toString(),
-  });
-} else {
-  // Browser / dev-server fallback â€” window.location.origin is valid here
-  const url = `${window.location.origin}/meeting/${meetingId}?${params}`;
-  window.open(url, '_blank', 'width=1280,height=800,menubar=no,toolbar=no');
-}
+    const electronApi = (window as any).oisMeet;
+    if (electronApi?.isElectron && typeof electronApi.openMeetingWindow === 'function') {
+      // Send structured payload so main.js can use loadFile() in production
+      electronApi.openMeetingWindow({
+        routePath: `/meeting/${meetingId}`,
+        queryString: params.toString(),
+      });
+    } else {
+      // Browser / dev-server fallback â€” window.location.origin is valid here
+      const url = `${window.location.origin}/meeting/${meetingId}?${params}`;
+      window.open(url, '_blank', 'width=1280,height=800,menubar=no,toolbar=no');
+    }
   }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// SHARE MEETING ID â€” FIX: auto-select first user if none selected
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // SHARE MEETING ID â€” FIX: auto-select first user if none selected
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 
-// SEARCH
+  // SEARCH
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// SEARCH
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // SEARCH
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-searchUsers(event: any): void {
-  this.searchQuery = event.target.value.toLowerCase();
-  this.applySearch();
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// SCROLL / PAGINATION
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-onScroll(event: any): void {
-  if(this.isSwitchingUser) return;
-
-  const el = event.target;
-  if(el.scrollTop === 0 && this.hasMoreMessages && !this.isLoading) {
-  this.loadMoreMessages();
-}
+  searchUsers(event: any): void {
+    this.searchQuery = event.target.value.toLowerCase();
+    this.applySearch();
   }
 
-loadMoreMessages(): void {
-  if(!this.hasMoreMessages || this.isLoading || !this.selectedConversation) return;
-  this.currentPage++;
-  this.loadMessages(this.selectedConversation.id);
-}
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // SCROLL / PAGINATION
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+  onScroll(event: any): void {
+    if (this.isSwitchingUser) return;
+
+    const el = event.target;
+    if (el.scrollTop === 0 && this.hasMoreMessages && !this.isLoading) {
+      this.loadMoreMessages();
+    }
+  }
+
+  loadMoreMessages(): void {
+    if (!this.hasMoreMessages || this.isLoading || !this.selectedConversation) return;
+    this.currentPage++;
+    this.loadMessages(this.selectedConversation.id);
+  }
 
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TYPING
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // TYPING
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-onTyping(): void {
-  if(!this.selectedConversation || !this.currentUserId) return;
-  if(this.typingTimeout) clearTimeout(this.typingTimeout);
-  this.chatSignalrService.sendTypingIndicator(this.selectedConversation.id, true);
-  this.typingTimeout = setTimeout(() => {
-    if (this.selectedConversation)
-      this.chatSignalrService.sendTypingIndicator(this.selectedConversation.id, false);
-    this.typingTimeout = null;
-  }, 2000);
-}
+  onTyping(): void {
+    if (!this.selectedConversation || !this.currentUserId) return;
+    if (this.typingTimeout) clearTimeout(this.typingTimeout);
+    this.chatSignalrService.sendTypingIndicator(this.selectedConversation.id, true);
+    this.typingTimeout = setTimeout(() => {
+      if (this.selectedConversation)
+        this.chatSignalrService.sendTypingIndicator(this.selectedConversation.id, false);
+      this.typingTimeout = null;
+    }, 2000);
+  }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// FILE HANDLING
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // FILE HANDLING
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 
-triggerFileInput(): void { this.fileInput.nativeElement.click(); }
+  triggerFileInput(): void { this.fileInput.nativeElement.click(); }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// MISC HELPERS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // MISC HELPERS
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-selectConversation(conversation: any): void {
-  this.selectedConversation = conversation;
-  if(this.chatSignalrService.isConnected()) this.chatSignalrService.joinConversation(conversation.id);
-}
+  selectConversation(conversation: any): void {
+    this.selectedConversation = conversation;
+    if (this.chatSignalrService.isConnected()) this.chatSignalrService.joinConversation(conversation.id);
+  }
 
   private updateMessageStatus(messageId: string, status: string): void {
-  const msg = this.messages.find(m => m.id?.toString() === messageId?.toString());
-  if(msg) {
-    if (status === 'Read') { msg.isRead = true; msg.isDelivered = true; }
-    if (status === 'Delivered') { msg.isDelivered = true; }
+    const msg = this.messages.find(m => m.id?.toString() === messageId?.toString());
+    if (msg) {
+      if (status === 'Read') { msg.isRead = true; msg.isDelivered = true; }
+      if (status === 'Delivered') { msg.isDelivered = true; }
+    }
   }
-}
 
   private updateUserOnlineStatus(userId: string, online: boolean): void {
-  const user = this.users.find(u => u.userId?.toString() === userId?.toString());
-  if(user) { user.isOnline = online; if (!online) user.lastSeen = new Date(); }
-}
+    const user = this.users.find(u => u.userId?.toString() === userId?.toString());
+    if (user) { user.isOnline = online; if (!online) user.lastSeen = new Date(); }
+  }
 
   private deleteMessageFromUI(messageId: string): void {
-  const filtered = this.messages.filter(m => m.id?.toString() !== messageId?.toString());
-  this.messages = this.decorateMessagesWithDates(filtered);
-  this.displayedMessageIds.delete(messageId);
-}
+    const filtered = this.messages.filter(m => m.id?.toString() !== messageId?.toString());
+    this.messages = this.decorateMessagesWithDates(filtered);
+    this.displayedMessageIds.delete(messageId);
+  }
 
   private addNewConversation(conversation: any): void {
-  const otherUser = conversation.participants?.[0];
-  if(otherUser && !this.users.find(u => u.userId?.toString() === otherUser.userId?.toString())) {
-  this.users = [{
-    ...otherUser,
-    id: otherUser.userId,
-    conversationId: conversation.id,
-    avatarColor: this.commonService.getRandomColor()
-  }, ...this.users];
-  this.applySearch();
-}
+    const otherUser = conversation.participants?.[0];
+    if (otherUser && !this.users.find(u => u.userId?.toString() === otherUser.userId?.toString())) {
+      this.users = [{
+        ...otherUser,
+        id: otherUser.userId,
+        conversationId: conversation.id,
+        avatarColor: this.commonService.getRandomColor()
+      }, ...this.users];
+      this.applySearch();
+    }
   }
 
   public downloadFile(fileUrl: string, fileName: string): void {
-  const fullUrl = this.fileService.getFileUrl(fileUrl);
-  const link = document.createElement('a');
-  link.href = fullUrl;
-  link.download = fileName;
-  link.target = '_blank';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-downloadAttachment(attachment: any): void { if(attachment) this.downloadFile(attachment.fileUrl, attachment.fileName); }
-
-
-viewImage(message: any): void {
-  this.selectedImage = {
-    fileName: message.fileName || message.attachments?.[0]?.fileName,
-    fileUrl: message.fileUrl || message.attachments?.[0]?.fileUrl
-  };
-  new bootstrap.Modal(document.getElementById('imageViewerModal')).show();
-}
-
-startVoiceCall(): void {}
-startVideoCall(): void {}
-loadUnreadCount(): void {}
-
-// ——————————————————————————————————————————————————————————————————————————————
-// REACTIONS
-// ——————————————————————————————————————————————————————————————————————————————
-
-toggleReaction(message: any, emoji: string): void {
-  const userId = this.currentUserId;
-  if(!userId) return;
-
-  const existing = message.reactions?.find((r: any) =>
-    String(r.userId) === String(userId) && r.emoji === emoji
-  );
-
-  if(existing) {
-    this.store.dispatch(MessagesActions.removeReaction({ messageId: message.id, emoji }));
-  } else {
-    this.store.dispatch(MessagesActions.addReaction({ messageId: message.id, emoji }));
+    const fullUrl = this.fileService.getFileUrl(fileUrl);
+    const link = document.createElement('a');
+    link.href = fullUrl;
+    link.download = fileName;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
-}
 
-hasReacted(message: any, emoji: string): boolean {
-  if (!this.currentUserId || !message.reactions) return false;
-  return message.reactions.some((r: any) =>
-    String(r.userId) === String(this.currentUserId) && r.emoji === emoji
-  );
-}
+  downloadAttachment(attachment: any): void { if (attachment) this.downloadFile(attachment.fileUrl, attachment.fileName); }
 
-getReactionCount(message: any, emoji: string): number {
-  if (!message.reactions) return 0;
-  return message.reactions.filter((r: any) => r.emoji === emoji).length;
-}
 
-getReactionUsers(message: any, emoji: string): string {
-  if (!message.reactions) return '';
-  return message.reactions
-    .filter((r: any) => r.emoji === emoji)
-    .map((r: any) => r.userName || 'Someone')
-    .join(', ');
-}
-
-showEmojiPicker(event: MouseEvent): void {
-  event.stopPropagation();
-  this.isEmojiPickerVisible = !this.isEmojiPickerVisible;
-}
-
-@HostListener('document:click', ['$event'])
-onDocumentClick(event: MouseEvent): void {
-  const target = event.target as HTMLElement;
-
-  // Handle mention popup
-  if(this.mentionsVisible) {
-  const isInsideEditor = this.messageEditor?.nativeElement.contains(target);
-  const isInsidePopover = target.closest('.mention-popover');
-
-  if (!isInsideEditor && !isInsidePopover) {
-    this.mentionsVisible = false;
-    this.cdr.detectChanges();
+  viewImage(message: any): void {
+    this.selectedImage = {
+      fileName: message.fileName || message.attachments?.[0]?.fileName,
+      fileUrl: message.fileUrl || message.attachments?.[0]?.fileUrl
+    };
+    new bootstrap.Modal(document.getElementById('imageViewerModal')).show();
   }
-}
 
-// Handle emoji picker popup
-if (this.isEmojiPickerVisible) {
-  const isEmojiBtn = target.closest('#emojiPickerBtn');
-  const isEmojiPicker = target.closest('.emoji-picker-container') || target.closest('.emoji-picker-popover');
-  if (!isEmojiBtn && !isEmojiPicker) {
+  startVoiceCall(): void { }
+  startVideoCall(): void { }
+  loadUnreadCount(): void { }
+
+  // ——————————————————————————————————————————————————————————————————————————————
+  // REACTIONS
+  // ——————————————————————————————————————————————————————————————————————————————
+
+  toggleReaction(message: any, emoji: string): void {
+    const userId = this.currentUserId;
+    if (!userId) return;
+
+    const existing = message.reactions?.find((r: any) =>
+      String(r.userId) === String(userId) && r.emoji === emoji
+    );
+
+    if (existing) {
+      this.store.dispatch(MessagesActions.removeReaction({ messageId: message.id, emoji }));
+    } else {
+      this.store.dispatch(MessagesActions.addReaction({ messageId: message.id, emoji }));
+    }
+  }
+
+  hasReacted(message: any, emoji: string): boolean {
+    if (!this.currentUserId || !message.reactions) return false;
+    return message.reactions.some((r: any) =>
+      String(r.userId) === String(this.currentUserId) && r.emoji === emoji
+    );
+  }
+
+  getReactionCount(message: any, emoji: string): number {
+    if (!message.reactions) return 0;
+    return message.reactions.filter((r: any) => r.emoji === emoji).length;
+  }
+
+  getReactionUsers(message: any, emoji: string): string {
+    if (!message.reactions) return '';
+    return message.reactions
+      .filter((r: any) => r.emoji === emoji)
+      .map((r: any) => r.userName || 'Someone')
+      .join(', ');
+  }
+
+  showEmojiPicker(event: MouseEvent): void {
+    event.stopPropagation();
+    this.isEmojiPickerVisible = !this.isEmojiPickerVisible;
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+
+    // Handle mention popup
+    if (this.mentionsVisible) {
+      const isInsideEditor = this.messageEditor?.nativeElement.contains(target);
+      const isInsidePopover = target.closest('.mention-popover');
+
+      if (!isInsideEditor && !isInsidePopover) {
+        this.mentionsVisible = false;
+        this.cdr.detectChanges();
+      }
+    }
+
+    // Handle emoji picker popup
+    if (this.isEmojiPickerVisible) {
+      const isEmojiBtn = target.closest('#emojiPickerBtn');
+      const isEmojiPicker = target.closest('.emoji-picker-container') || target.closest('.emoji-picker-popover');
+      if (!isEmojiBtn && !isEmojiPicker) {
+        this.isEmojiPickerVisible = false;
+        this.cdr.detectChanges();
+      }
+    }
+  }
+
+  addEmoji(emoji: string): void {
+    if (this.messageEditor?.nativeElement) {
+      this.messageEditor.nativeElement.focus();
+      document.execCommand('insertText', false, emoji);
+      // Update bound model
+      this.newMessage = this.messageEditor.nativeElement.innerText;
+      this.formattedMessage = this.messageEditor.nativeElement.innerHTML;
+    }
     this.isEmojiPickerVisible = false;
-    this.cdr.detectChanges();
-  }
-}
   }
 
-addEmoji(emoji: string): void {
-  if(this.messageEditor?.nativeElement) {
-  this.messageEditor.nativeElement.focus();
-  document.execCommand('insertText', false, emoji);
-  // Update bound model
-  this.newMessage = this.messageEditor.nativeElement.innerText;
-  this.formattedMessage = this.messageEditor.nativeElement.innerHTML;
-}
-this.isEmojiPickerVisible = false;
+  formatTime(value: any): string {
+    if (!value) return '';
+    const d = this.parseDate(value);
+    if (!d) return '';
+    return d.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
-
-formatTime(value: any): string {
-  if (!value) return '';
-  const d = this.parseDate(value);
-  if (!d) return '';
-  return d.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
 
   private formatMessageTime(date: Date | string | any): string {
-  const now = new Date();
-  const d = date instanceof Date ? date : this.parseDate(date as any);
-  if (!d) return '';
+    const now = new Date();
+    const d = date instanceof Date ? date : this.parseDate(date as any);
+    if (!d) return '';
 
-  if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    if (d.toDateString() === now.toDateString()) {
+      return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    }
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) {
+      return "Yesterday";
+    }
+
+    return d.toLocaleDateString();
   }
 
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) {
-    return "Yesterday";
+  getFileSize(bytes: number | undefined | null): string {
+    if (!bytes) return '0 Bytes';
+    const k = 1024, s = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + s[i];
   }
-
-  return d.toLocaleDateString();
-}
-
-getFileSize(bytes: number | undefined | null): string {
-  if (!bytes) return '0 Bytes';
-  const k = 1024, s = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + s[i];
-}
 
   private parseDate(value: any): Date | null {
-  if (!value) return null;
-  let normalized: any = value;
-  if (typeof value === 'string') {
-    normalized = value.replace(/(\.\d{3})\d+/, '$1');
-    if (!/[Zz]|[+\-]\d{2}:?\d{2}$/.test(normalized)) {
-      normalized = normalized + 'Z';
+    if (!value) return null;
+    let normalized: any = value;
+    if (typeof value === 'string') {
+      normalized = value.replace(/(\.\d{3})\d+/, '$1');
+      if (!/[Zz]|[+\-]\d{2}:?\d{2}$/.test(normalized)) {
+        normalized = normalized + 'Z';
+      }
     }
+    const d = new Date(normalized);
+    return isNaN(d.getTime()) ? null : d;
   }
-  const d = new Date(normalized);
-  return isNaN(d.getTime()) ? null : d;
-}
 
   private getDateLabel(sentAt: any): string {
-  const d = this.parseDate(sentAt);
-  if (!d) return '';
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
+    const d = this.parseDate(sentAt);
+    if (!d) return '';
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
 
-  if (d.toDateString() === now.toDateString()) return 'Today';
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    if (d.toDateString() === now.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
 
-  return d.toLocaleDateString(undefined, {
-    year: d.getFullYear() === now.getFullYear() ? undefined : "numeric",
-    month: "long",
-    day: "numeric"
-  });
-}
+    return d.toLocaleDateString(undefined, {
+      year: d.getFullYear() === now.getFullYear() ? undefined : "numeric",
+      month: "long",
+      day: "numeric"
+    });
+  }
 
   private decorateMessagesWithDates(msgs: any[]): any[] {
-  return msgs.map((msg, index) => {
-    const current = this.parseDate(msg.sentAt);
-    const previous = index > 0 ? this.parseDate(msgs[index - 1].sentAt) : null;
-    const show = index === 0 ||
-      (!!current && !!previous && current.toDateString() !== previous.toDateString());
-    return {
-      ...msg,
-      showDateSeparator: show,
-      dateSeparatorLabel: show ? this.getDateLabel(msg.sentAt) : ''
-    };
-  });
-}
+    return msgs.map((msg, index) => {
+      const current = this.parseDate(msg.sentAt);
+      const previous = index > 0 ? this.parseDate(msgs[index - 1].sentAt) : null;
+      const show = index === 0 ||
+        (!!current && !!previous && current.toDateString() !== previous.toDateString());
+      return {
+        ...msg,
+        showDateSeparator: show,
+        dateSeparatorLabel: show ? this.getDateLabel(msg.sentAt) : ''
+      };
+    });
+  }
 
   private updateSharedFiles() {
-  const allFiles: any[] = [];
-  this.messages.forEach(m => {
-    const msgFiles: any[] = [];
-    const fileUrl = m.fileUrl || m.FileUrl;
-    if (fileUrl) {
-      msgFiles.push({
-        name: m.fileName || m.FileName || 'Unnamed File',
-        url: fileUrl,
-        sentAt: m.sentAt || m.SentAt,
-        sender: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown')
+    const allFiles: any[] = [];
+    this.messages.forEach(m => {
+      const msgFiles: any[] = [];
+      const fileUrl = m.fileUrl || m.FileUrl;
+      if (fileUrl) {
+        msgFiles.push({
+          name: m.fileName || m.FileName || 'Unnamed File',
+          url: fileUrl,
+          sentAt: m.sentAt || m.SentAt,
+          sender: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown')
+        });
+      }
+      const attachments = m.attachments || m.Attachments || [];
+      attachments.forEach((a: any) => {
+        msgFiles.push({
+          name: a.fileName || a.FileName || 'Unnamed File',
+          url: a.fileUrl || a.FileUrl,
+          sentAt: m.sentAt || m.SentAt,
+          sender: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown')
+        });
       });
-    }
-    const attachments = m.attachments || m.Attachments || [];
-    attachments.forEach((a: any) => {
-      msgFiles.push({
-        name: a.fileName || a.FileName || 'Unnamed File',
-        url: a.fileUrl || a.FileUrl,
-        sentAt: m.sentAt || m.SentAt,
-        sender: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown')
-      });
-    });
 
-    msgFiles.forEach(f => {
-      allFiles.push({
-        name: f.name,
-        size: 'View',
-        type: f.name.split('.').pop()?.toLowerCase() || 'file',
-        date: this.formatMessageTime(f.sentAt),
-        owner: f.sender,
-        url: f.url
+      msgFiles.forEach(f => {
+        allFiles.push({
+          name: f.name,
+          size: 'View',
+          type: f.name.split('.').pop()?.toLowerCase() || 'file',
+          date: this.formatMessageTime(f.sentAt),
+          owner: f.sender,
+          url: f.url
+        });
       });
     });
-  });
-  this.sharedFiles = allFiles.reverse();
-}
+    this.sharedFiles = allFiles.reverse();
+  }
 
   private getUniqueMessages(msgs: any[]): any[] {
-  const seen = new Set<string>();
-  return msgs.filter(m => {
-    const id = String(m?.id ?? m?.Id ?? '');
-    if (!id || seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
-}
+    const seen = new Set<string>();
+    return msgs.filter(m => {
+      const id = String(m?.id ?? m?.Id ?? '');
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }
 
   private scrollToBottom(): void {
-  try {
-    this.chatMessagesContainer.nativeElement.scrollTop = this.chatMessagesContainer.nativeElement.scrollHeight;
-  } catch(err) { }
-}
+    try {
+      this.chatMessagesContainer.nativeElement.scrollTop = this.chatMessagesContainer.nativeElement.scrollHeight + 60;
+    } catch (err) { }
+  }
 
   private requestNotificationPermission(): void {
-  if('Notification' in window && Notification.permission === 'default') {
-  Notification.requestPermission().catch(() => { });
-}
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => { });
+    }
   }
 
   private handleShareMeetingId(meetingId: string, text: string): void {
-  const messageText = text || `Join my meeting! Meeting ID: ${meetingId}`;
-  if(this.selectedConversation && this.currentUserId) {
-  this.sendMeetingIdMessage(messageText);
-} else {
-  const firstUser = this.users[0];
-  if (firstUser) {
-    this.selectUser(firstUser).then(() => {
-      setTimeout(() => {
-        if (this.selectedConversation) this.sendMeetingIdMessage(messageText);
-      }, 500);
-    });
-  }
-}
+    const messageText = text || `Join my meeting! Meeting ID: ${meetingId}`;
+    if (this.selectedConversation && this.currentUserId) {
+      this.sendMeetingIdMessage(messageText);
+    } else {
+      const firstUser = this.users[0];
+      if (firstUser) {
+        this.selectUser(firstUser).then(() => {
+          setTimeout(() => {
+            if (this.selectedConversation) this.sendMeetingIdMessage(messageText);
+          }, 500);
+        });
+      }
+    }
   }
 
   get filteredGroupMembers(): any[] {
-  if (!this.selectedUser || !this.selectedUser.isGroup || !this.selectedUser.participants) return [];
-  const q = this.groupMembersSearchQuery.toLowerCase().trim();
-  return this.selectedUser.participants
-    .filter((p: any) =>
-      (p.name || p.fullName || '').toLowerCase().includes(q) ||
-      (p.email || '').toLowerCase().includes(q)
-    )
-    .map((p: any) => ({
-      ...p,
-      isOnline: this.presenceService.isOnline(p.userId)
-    }));
-}
+    if (!this.selectedUser || !this.selectedUser.isGroup || !this.selectedUser.participants) return [];
+    const q = this.groupMembersSearchQuery.toLowerCase().trim();
+    return this.selectedUser.participants
+      .filter((p: any) =>
+        (p.name || p.fullName || '').toLowerCase().includes(q) ||
+        (p.email || '').toLowerCase().includes(q)
+      )
+      .map((p: any) => ({
+        ...p,
+        isOnline: this.presenceService.isOnline(p.userId)
+      }));
+  }
 
   private sendMeetingIdMessage(text: string): void {
-  if(!this.selectedConversation || !this.currentUserId) return;
-  this.store.dispatch(MessagesActions.sendMessage({
-    conversationId: this.selectedConversation.id,
-    content: text,
-    messageType: 'Text'
-  }));
-}
+    if (!this.selectedConversation || !this.currentUserId) return;
+    this.store.dispatch(MessagesActions.sendMessage({
+      conversationId: this.selectedConversation.id,
+      content: text,
+      messageType: 'Text'
+    }));
+  }
 
   private loadActivityFeed(): void {
-  this.collaborationService.getActivity(20).subscribe({
-    next: (res) => {
-      this.activityFeed = (res.data ?? []).map((item: any) => ({
-        user: item.title,
-        action: item.body || item.activityType || 'Activity',
-        time: this.formatMessageTime(item.createdAt)
-      }));
-    },
-    error: () => {
-      this.activityFeed = [];
-    }
-  });
-}
+    this.collaborationService.getActivity(20).subscribe({
+      next: (res) => {
+        this.activityFeed = (res.data ?? []).map((item: any) => ({
+          user: item.title,
+          action: item.body || item.activityType || 'Activity',
+          time: this.formatMessageTime(item.createdAt)
+        }));
+      },
+      error: () => {
+        this.activityFeed = [];
+      }
+    });
+  }
 
-// ——————————————————————————————————————————————————————————————————————————————
-// GROUP CREATION
-// ——————————————————————————————————————————————————————————————————————————————
+  // ——————————————————————————————————————————————————————————————————————————————
+  // GROUP CREATION
+  // ——————————————————————————————————————————————————————————————————————————————
 
-openGroupModal(): void {
-  this.isGroupModalOpen = true;
-  this.newGroupName = '';
-  this.newGroupSearchQuery = '';
-  this.selectedGroupMembers = [];
-  this.groupCreationError = '';
-}
+  openGroupModal(): void {
+    this.isGroupModalOpen = true;
+    this.newGroupName = '';
+    this.newGroupSearchQuery = '';
+    this.selectedGroupMembers = [];
+    this.groupCreationError = '';
+  }
 
-closeGroupModal(): void {
-  this.isGroupModalOpen = false;
-  this.groupCreationError = '';
-}
+  closeGroupModal(): void {
+    this.isGroupModalOpen = false;
+    this.groupCreationError = '';
+  }
 
   get groupModalFilteredUsers(): any[] {
-  const q = this.newGroupSearchQuery.toLowerCase().trim();
-  return this.users.filter(u =>
-    !u.isGroup &&
-    !u.isSelf && (u.fullName || u.name) &&
-    (q === '' || (u.fullName || u.name).toLowerCase().includes(q))
-  );
-}
-
-isGroupMemberSelected(user: any): boolean {
-  return this.selectedGroupMembers.some(m => m.id === user.id);
-}
-
-toggleGroupMember(user: any): void {
-  if(this.isGroupMemberSelected(user)) {
-  this.selectedGroupMembers = this.selectedGroupMembers.filter(m => m.id !== user.id);
-} else {
-  this.selectedGroupMembers = [...this.selectedGroupMembers, user];
-}
+    const q = this.newGroupSearchQuery.toLowerCase().trim();
+    return this.users.filter(u =>
+      !u.isGroup &&
+      !u.isSelf && (u.fullName || u.name) &&
+      (q === '' || (u.fullName || u.name).toLowerCase().includes(q))
+    );
   }
 
-createGroup(): void {
-  this.groupCreationError = '';
+  isGroupMemberSelected(user: any): boolean {
+    return this.selectedGroupMembers.some(m => m.id === user.id);
+  }
 
-  // Validate
-  if(!this.newGroupName.trim()) {
-  this.groupCreationError = 'Please enter a group name.';
-  return;
-}
-if (this.selectedGroupMembers.length < 2) {
-  this.groupCreationError = 'Please select at least 2 participants.';
-  return;
-}
-
-this.isCreatingGroup = true;
-const participantIds = this.selectedGroupMembers.map(u => u.id);
-
-this.chatService.createGroupConversation(this.newGroupName.trim(), participantIds)
-  .pipe(takeUntil(this.destroy$))
-  .subscribe({
-    next: (res) => {
-      this.isCreatingGroup = false;
-      if (res.success && res.data) {
-        const convId = res.data.id?.toString() || res.data?.toString();
-        const newGroup: any = {
-          id: convId,
-          userId: null,
-          name: this.newGroupName.trim(),
-          fullName: this.newGroupName.trim(),
-          email: '',
-          isOnline: true,
-          lastMessage: '',
-          lastMessageTime: '',
-          lastMessageType: '',
-          lastMessageAt: null,
-          unreadCount: 0,
-          conversationId: convId,
-          avatarColor: this.commonService.getRandomColor(),
-          isGroup: true
-        };
-        this.users = [newGroup, ...this.users];
-        this.updateTeamsList();
-        this.applySearch();
-        this.closeGroupModal();
-        this.selectUser(newGroup);
-      } else {
-        this.groupCreationError = res.message || 'Failed to create group. Please try again.';
-      }
-    },
-    error: (err) => {
-      this.isCreatingGroup = false;
-      this.groupCreationError = 'An error occurred. Please check your connection and try again.';
-      console.error('Group creation failed:', err);
+  toggleGroupMember(user: any): void {
+    if (this.isGroupMemberSelected(user)) {
+      this.selectedGroupMembers = this.selectedGroupMembers.filter(m => m.id !== user.id);
+    } else {
+      this.selectedGroupMembers = [...this.selectedGroupMembers, user];
     }
-  });
   }
 
-clearGroupSearch() {
-  this.newGroupSearchQuery = '';
-}
+  createGroup(): void {
+    this.groupCreationError = '';
 
-// --- ADD MEMBER TO GROUP ---
+    // Validate
+    if (!this.newGroupName.trim()) {
+      this.groupCreationError = 'Please enter a group name.';
+      return;
+    }
+    if (this.selectedGroupMembers.length < 2) {
+      this.groupCreationError = 'Please select at least 2 participants.';
+      return;
+    }
 
-openAddMemberModal(): void {
-  this.isAddMemberModalOpen = true;
-  this.addMemberSearchQuery = '';
-  this.selectedNewMembers = [];
-  this.addMemberError = '';
-}
+    this.isCreatingGroup = true;
+    const participantIds = this.selectedGroupMembers.map(u => u.id);
 
-closeAddMemberModal(): void {
-  this.isAddMemberModalOpen = false;
-  this.addMemberError = '';
-}
+    this.chatService.createGroupConversation(this.newGroupName.trim(), participantIds)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          this.isCreatingGroup = false;
+          if (res.success && res.data) {
+            const convId = res.data.id?.toString() || res.data?.toString();
+            const newGroup: any = {
+              id: convId,
+              userId: null,
+              name: this.newGroupName.trim(),
+              fullName: this.newGroupName.trim(),
+              email: '',
+              isOnline: true,
+              lastMessage: '',
+              lastMessageTime: '',
+              lastMessageType: '',
+              lastMessageAt: null,
+              unreadCount: 0,
+              conversationId: convId,
+              avatarColor: this.commonService.getRandomColor(),
+              isGroup: true
+            };
+            this.users = [newGroup, ...this.users];
+            this.updateTeamsList();
+            this.applySearch();
+            this.closeGroupModal();
+            this.selectUser(newGroup);
+          } else {
+            this.groupCreationError = res.message || 'Failed to create group. Please try again.';
+          }
+        },
+        error: (err) => {
+          this.isCreatingGroup = false;
+          this.groupCreationError = 'An error occurred. Please check your connection and try again.';
+          console.error('Group creation failed:', err);
+        }
+      });
+  }
+
+  clearGroupSearch() {
+    this.newGroupSearchQuery = '';
+  }
+
+  // --- ADD MEMBER TO GROUP ---
+
+  openAddMemberModal(): void {
+    this.isAddMemberModalOpen = true;
+    this.addMemberSearchQuery = '';
+    this.selectedNewMembers = [];
+    this.addMemberError = '';
+  }
+
+  closeAddMemberModal(): void {
+    this.isAddMemberModalOpen = false;
+    this.addMemberError = '';
+  }
 
   get addMemberFilteredUsers(): any[] {
-  if (!this.selectedUser || !this.selectedUser.isGroup) return [];
-  const q = this.addMemberSearchQuery.toLowerCase().trim();
-  const existingIds = (this.selectedUser.participants || []).map((p: any) => p.userId?.toString());
+    if (!this.selectedUser || !this.selectedUser.isGroup) return [];
+    const q = this.addMemberSearchQuery.toLowerCase().trim();
+    const existingIds = (this.selectedUser.participants || []).map((p: any) => p.userId?.toString());
 
-  return this.users.filter(u =>
-    !u.isGroup &&
-    !u.isSelf &&
-    !existingIds.includes(u.id?.toString()) &&
-    (q === '' || (u.fullName || u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q))
-  );
-}
-
-isNewMemberSelected(user: any): boolean {
-  return this.selectedNewMembers.some(m => m.id === user.id);
-}
-
-toggleNewMember(user: any): void {
-  if(this.isNewMemberSelected(user)) {
-  this.selectedNewMembers = this.selectedNewMembers.filter(m => m.id !== user.id);
-} else {
-  this.selectedNewMembers = [...this.selectedNewMembers, user];
-}
+    return this.users.filter(u =>
+      !u.isGroup &&
+      !u.isSelf &&
+      !existingIds.includes(u.id?.toString()) &&
+      (q === '' || (u.fullName || u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q))
+    );
   }
 
-addMembers(): void {
-  if(!this.selectedConversation || this.selectedNewMembers.length === 0) return;
+  isNewMemberSelected(user: any): boolean {
+    return this.selectedNewMembers.some(m => m.id === user.id);
+  }
 
-  this.isAddingMember = true;
-  this.addMemberError = '';
-  const userIds = this.selectedNewMembers.map(m => m.id?.toString());
+  toggleNewMember(user: any): void {
+    if (this.isNewMemberSelected(user)) {
+      this.selectedNewMembers = this.selectedNewMembers.filter(m => m.id !== user.id);
+    } else {
+      this.selectedNewMembers = [...this.selectedNewMembers, user];
+    }
+  }
 
-  this.chatService.addMemberToConversation(this.selectedConversation.id, userIds)
-    .pipe(takeUntil(this.destroy$))
-    .subscribe({
+  addMembers(): void {
+    if (!this.selectedConversation || this.selectedNewMembers.length === 0) return;
+
+    this.isAddingMember = true;
+    this.addMemberError = '';
+    const userIds = this.selectedNewMembers.map(m => m.id?.toString());
+
+    this.chatService.addMemberToConversation(this.selectedConversation.id, userIds)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          this.isAddingMember = false;
+          if (res.success) {
+            this.closeAddMemberModal();
+            // Refresh conversation data to show new members
+            // SignalR should handle the live update if implemented, but we can manually refresh
+            this.loadConversations();
+          } else {
+            this.addMemberError = res.message || 'Failed to add members.';
+          }
+        },
+        error: (err) => {
+          this.isAddingMember = false;
+          this.addMemberError = 'An error occurred. Please try again.';
+          console.error('Add member failed:', err);
+        }
+      });
+  }
+
+  // ——————————————————————————————————————————————————————————————————————————————
+  // GROUP INFO EDITING
+  // ——————————————————————————————————————————————————————————————————————————————
+
+  startEditingName(): void {
+    if (!this.selectedUser?.isGroup) return;
+    this.isEditingName = true;
+    this.editingNameValue = this.selectedUser.name;
+    this.cdr.detectChanges();
+  }
+
+  cancelEditingName(): void {
+    this.isEditingName = false;
+    this.editingNameValue = '';
+  }
+
+  saveGroupName(): void {
+    if (!this.selectedUser?.isGroup || !this.editingNameValue.trim()) {
+      this.isEditingName = false;
+      return;
+    }
+
+    const newName = this.editingNameValue.trim();
+    if (newName === this.selectedUser.name) {
+      this.isEditingName = false;
+      return;
+    }
+
+    const conversationId = this.selectedConversation?.id;
+    if (!conversationId) return;
+
+    this.chatService.updateGroupInfo(conversationId, newName).subscribe({
       next: (res) => {
-        this.isAddingMember = false;
         if (res.success) {
-          this.closeAddMemberModal();
-          // Refresh conversation data to show new members
-          // SignalR should handle the live update if implemented, but we can manually refresh
-          this.loadConversations();
-        } else {
-          this.addMemberError = res.message || 'Failed to add members.';
+          this.selectedUser.name = newName;
+          this.selectedUser.fullName = newName;
+          this.isEditingName = false;
+          this.cdr.detectChanges();
         }
       },
       error: (err) => {
-        this.isAddingMember = false;
-        this.addMemberError = 'An error occurred. Please try again.';
-        console.error('Add member failed:', err);
+        console.error('Failed to update group name:', err);
+        alert('Failed to update group name. Please try again.');
+        this.isEditingName = false;
       }
     });
-}
+  }
 
-// ——————————————————————————————————————————————————————————————————————————————
-// GROUP INFO EDITING
-// ——————————————————————————————————————————————————————————————————————————————
+  // --- AVATAR UPLOAD & CROP ---
 
-startEditingName(): void {
-  if(!this.selectedUser?.isGroup) return;
-  this.isEditingName = true;
-  this.editingNameValue = this.selectedUser.name;
-  this.cdr.detectChanges();
-}
+  onAvatarClick(fileInput: HTMLInputElement): void {
+    if (!this.selectedUser?.isGroup) return;
+    fileInput.click();
+  }
 
-cancelEditingName(): void {
-  this.isEditingName = false;
-  this.editingNameValue = '';
-}
+  onAvatarFileSelected(event: any): void {
+    const file = event.target.files[0];
+    if (!file) return;
 
-saveGroupName(): void {
-  if(!this.selectedUser?.isGroup || !this.editingNameValue.trim()) {
-  this.isEditingName = false;
-  return;
-}
-
-const newName = this.editingNameValue.trim();
-if (newName === this.selectedUser.name) {
-  this.isEditingName = false;
-  return;
-}
-
-const conversationId = this.selectedConversation?.id;
-if (!conversationId) return;
-
-this.chatService.updateGroupInfo(conversationId, newName).subscribe({
-  next: (res) => {
-    if (res.success) {
-      this.selectedUser.name = newName;
-      this.selectedUser.fullName = newName;
-      this.isEditingName = false;
-      this.cdr.detectChanges();
+    // Validate type
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      alert('Please select a valid image (JPG, PNG, or WEBP)');
+      return;
     }
-  },
-  error: (err) => {
-    console.error('Failed to update group name:', err);
-    alert('Failed to update group name. Please try again.');
-    this.isEditingName = false;
-  }
-});
-  }
 
-// --- AVATAR UPLOAD & CROP ---
+    // Validate size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image too large. Max size is 5MB.');
+      return;
+    }
 
-onAvatarClick(fileInput: HTMLInputElement): void {
-  if(!this.selectedUser?.isGroup) return;
-  fileInput.click();
-}
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      this.imageToCropUrl = e.target.result;
+      this.showCropModal = true;
+      this.resetCropState();
+      this.cdr.detectChanges();
+    };
+    reader.readAsDataURL(file);
 
-onAvatarFileSelected(event: any): void {
-  const file = event.target.files[0];
-  if(!file) return;
-
-  // Validate type
-  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  if(!validTypes.includes(file.type)) {
-  alert('Please select a valid image (JPG, PNG, or WEBP)');
-  return;
-}
-
-// Validate size (max 5MB)
-if (file.size > 5 * 1024 * 1024) {
-  alert('Image too large. Max size is 5MB.');
-  return;
-}
-
-const reader = new FileReader();
-reader.onload = (e: any) => {
-  this.imageToCropUrl = e.target.result;
-  this.showCropModal = true;
-  this.resetCropState();
-  this.cdr.detectChanges();
-};
-reader.readAsDataURL(file);
-
-// Reset input so same file can be selected again
-event.target.value = '';
+    // Reset input so same file can be selected again
+    event.target.value = '';
   }
 
   private resetCropState(): void {
-  this.cropZoom = 1;
-  this.cropTranslateX = 0;
-  this.cropTranslateY = 0;
-}
+    this.cropZoom = 1;
+    this.cropTranslateX = 0;
+    this.cropTranslateY = 0;
+  }
 
-@HostListener('window:mousemove', ['$event'])
-onCropDrag(event: MouseEvent): void {
-  if(!this.isDraggingCrop) return;
-  const dx = event.clientX - this.lastDragPos.x;
-  const dy = event.clientY - this.lastDragPos.y;
-  this.cropTranslateX += dx;
-  this.cropTranslateY += dy;
-  this.lastDragPos = { x: event.clientX, y: event.clientY };
-}
+  @HostListener('window:mousemove', ['$event'])
+  onCropDrag(event: MouseEvent): void {
+    if (!this.isDraggingCrop) return;
+    const dx = event.clientX - this.lastDragPos.x;
+    const dy = event.clientY - this.lastDragPos.y;
+    this.cropTranslateX += dx;
+    this.cropTranslateY += dy;
+    this.lastDragPos = { x: event.clientX, y: event.clientY };
+  }
 
-@HostListener('window:mouseup')
-stopCropDrag(): void {
-  this.isDraggingCrop = false;
-}
+  @HostListener('window:mouseup')
+  stopCropDrag(): void {
+    this.isDraggingCrop = false;
+  }
 
-startCropDrag(event: MouseEvent): void {
-  this.isDraggingCrop = true;
-  this.lastDragPos = { x: event.clientX, y: event.clientY };
-  event.preventDefault();
-}
+  startCropDrag(event: MouseEvent): void {
+    this.isDraggingCrop = true;
+    this.lastDragPos = { x: event.clientX, y: event.clientY };
+    event.preventDefault();
+  }
 
-handleCropScroll(event: WheelEvent): void {
-  event.preventDefault();
-  const delta = event.deltaY > 0 ? -0.1 : 0.1;
-  this.cropZoom = Math.max(0.5, Math.min(5, this.cropZoom + delta));
-}
+  handleCropScroll(event: WheelEvent): void {
+    event.preventDefault();
+    const delta = event.deltaY > 0 ? -0.1 : 0.1;
+    this.cropZoom = Math.max(0.5, Math.min(5, this.cropZoom + delta));
+  }
 
-confirmCrop(): void {
-  // In a real app, we'd use a canvas to crop the image based on zoom/translate.
-  // For this demo, we'll simulate it by uploading the current image after processing it via a canvas.
-  this.isUploadingAvatar = true;
-  this.showCropModal = false;
+  confirmCrop(): void {
+    // In a real app, we'd use a canvas to crop the image based on zoom/translate.
+    // For this demo, we'll simulate it by uploading the current image after processing it via a canvas.
+    this.isUploadingAvatar = true;
+    this.showCropModal = false;
 
-  // Create a 1:1 canvas
-  const size = 512;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
+    // Create a 1:1 canvas
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
 
-  const img = new Image();
-  img.src = this.imageToCropUrl!;
-  img.onload = () => {
-    if (!ctx) return;
+    const img = new Image();
+    img.src = this.imageToCropUrl!;
+    img.onload = () => {
+      if (!ctx) return;
 
-    // Calculate drawing dimensions
-    const aspect = img.width / img.height;
-    let drawW, drawH;
-    if (aspect > 1) {
-      drawH = size * this.cropZoom;
-      drawW = drawH * aspect;
-    } else {
-      drawW = size * this.cropZoom;
-      drawH = drawW / aspect;
-    }
-
-    const x = (size / 2) + this.cropTranslateX - (drawW / 2);
-    const y = (size / 2) + this.cropTranslateY - (drawH / 2);
-
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, size, size);
-    ctx.drawImage(img, x, y, drawW, drawH);
-
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const croppedFile = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
-        this.uploadGroupAvatar(croppedFile);
+      // Calculate drawing dimensions
+      const aspect = img.width / img.height;
+      let drawW, drawH;
+      if (aspect > 1) {
+        drawH = size * this.cropZoom;
+        drawW = drawH * aspect;
+      } else {
+        drawW = size * this.cropZoom;
+        drawH = drawW / aspect;
       }
-    }, 'image/jpeg', 0.9);
-  };
-}
+
+      const x = (size / 2) + this.cropTranslateX - (drawW / 2);
+      const y = (size / 2) + this.cropTranslateY - (drawH / 2);
+
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, size, size);
+      ctx.drawImage(img, x, y, drawW, drawH);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const croppedFile = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
+          this.uploadGroupAvatar(croppedFile);
+        }
+      }, 'image/jpeg', 0.9);
+    };
+  }
 
   private uploadGroupAvatar(file: File): void {
-  this.fileService.uploadFile(file).subscribe({
-    next: (event: any) => {
-      if (event.type === 4) { // Sent
-        const res = event.body;
-        if (res.success && res.data) {
-          const avatarUrl = res.data.url;
-          this.saveGroupAvatar(avatarUrl);
+    this.fileService.uploadFile(file).subscribe({
+      next: (event: any) => {
+        if (event.type === 4) { // Sent
+          const res = event.body;
+          if (res.success && res.data) {
+            const avatarUrl = res.data.url;
+            this.saveGroupAvatar(avatarUrl);
+          }
+          this.isUploadingAvatar = false;
         }
+      },
+      error: (err) => {
+        console.error('Avatar upload failed', err);
         this.isUploadingAvatar = false;
+        alert('Failed to upload avatar. Please try again.');
       }
-    },
-    error: (err) => {
-      console.error('Avatar upload failed', err);
-      this.isUploadingAvatar = false;
-      alert('Failed to upload avatar. Please try again.');
-    }
-  });
-}
+    });
+  }
 
   private saveGroupAvatar(avatarUrl: string): void {
     const conversationId = this.selectedConversation?.id;

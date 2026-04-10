@@ -243,6 +243,10 @@ export class SignalRService {
     });
 
     this.hubConnection.on('InviteToMeeting', (meetingId: string, fromUserName: string, fromUserId?: string) => {
+      this.ngZone.run(() => {
+        console.log(`🚀 [MeetingHub] InviteToMeeting: meetingId=${meetingId}, from=${fromUserName} (${fromUserId})`);
+        this.inviteToMeetingSubject.next({ meetingId, fromUserName, fromUserId });
+      });
     });
 
     this.hubConnection.on('UserDisconnected', (data: { connectionId: string; userId: string }) => {

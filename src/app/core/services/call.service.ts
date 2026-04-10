@@ -494,7 +494,7 @@ export class CallService {
       const ctx = this.ringingAudioCtx;
 
       const playBurst = () => {
-        if (!this.ringingAudioCtx || ctx.state === 'closed') return;
+        if (!this.ringingAudioCtx || ctx.state === 'closed' || ctx.state === 'suspended') return;
         const freqs = type === 'incoming' ? [480, 440] : [440];
         const osc1 = ctx.createOscillator();
         const osc2 = type === 'incoming' ? ctx.createOscillator() : null;
@@ -511,7 +511,7 @@ export class CallService {
         }
 
         gain.gain.setValueAtTime(0.18, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.8);
         gain.connect(ctx.destination);
 
         osc1.start(ctx.currentTime);
@@ -520,7 +520,9 @@ export class CallService {
           osc2.start(ctx.currentTime);
           osc2.stop(ctx.currentTime + 0.8);
         }
-        this.ringingOscillators = osc2 ? [osc1, osc2] : [osc1];
+        // Accumulate all oscillators so stopRingtones can stop any active burst
+        this.ringingOscillators.push(osc1);
+        if (osc2) this.ringingOscillators.push(osc2);
       };
 
       playBurst();
@@ -541,11 +543,30 @@ export class CallService {
       clearInterval(this.ringingIntervalId);
       this.ringingIntervalId = null;
     }
-    this.ringingOscillators.forEach(o => { try { o.stop(); } catch { /* ignore */ } });
+
+    if (this.ringingAudioCtx && this.ringingAudioCtx.state !== 'closed') {
+      try {
+        // Ramp the master output to zero immediately so no tail is heard while
+        // the async close() and suspend() promises are still pending.
+        const ctx = this.ringingAudioCtx;
+        const silencer = ctx.createGain();
+        silencer.gain.setValueAtTime(0, ctx.currentTime);
+        silencer.connect(ctx.destination);
+      } catch { /* ignore */ }
+    }
+
+    // Stop all accumulated oscillators. Nodes already finished throw InvalidStateError —
+    // that is expected and caught. Nodes still playing are stopped at ctx.currentTime (= 0
+    // means "as soon as possible" in the Web Audio spec).
+    this.ringingOscillators.forEach(o => { try { o.stop(0); } catch { /* ignore */ } });
     this.ringingOscillators = [];
+
     if (this.ringingAudioCtx) {
-      try { this.ringingAudioCtx.close(); } catch { /* ignore */ }
-      this.ringingAudioCtx = null;
+      const ctx = this.ringingAudioCtx;
+      this.ringingAudioCtx = null; // null immediately so no new bursts reference it
+      try {
+        ctx.close().catch(() => {});
+      } catch { /* ignore */ }
     }
   }
 

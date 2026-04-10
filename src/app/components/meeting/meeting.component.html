@@ -107,7 +107,7 @@
         </div>
 
         <!-- Invite Placeholder (when < 3 remotes) -->
-        <div class="video-participant-light placeholder-tile" *ngIf="participants.length < 2">
+        <!-- <div class="video-participant-light placeholder-tile" *ngIf="participants.length < 2">
           <div class="video-placeholder-light">
             <div class="avatar-large-light" style="background:#e2e8f0;color:#94a3b8;">
               <i class="fas fa-user-plus"></i>
@@ -115,7 +115,7 @@
             <p>Invite someone</p>
             <button class="add-btn mt-2" (click)="openAddParticipantPanel()">Add Participant</button>
           </div>
-        </div>
+        </div> -->
 
       </div>
     </div>
@@ -229,8 +229,12 @@
       <div class="participant-list custom-scrollbar" *ngIf="oisMeetUsers.length > 0 || inviteSearchQuery">
         <div class="add-participant-item" *ngFor="let u of filteredInviteUsers">
           <div class="participant-info">
-            <div class="participant-avatar" [style.background-color]="getRandomColor(u.oisMeetUserId)">
-              {{ u.fullName?.charAt(0) || 'U' }}
+            <div class="participant-avatar"
+              [style.background-color]="u.avatarUrl ? 'transparent' : getRandomColor(u.oisMeetUserId)"
+              [style.padding]="u.avatarUrl ? '0' : null">
+              <img *ngIf="u.avatarUrl" [src]="u.avatarUrl" alt="{{ u.fullName }}"
+                style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />
+              <span *ngIf="!u.avatarUrl">{{ u.fullName?.charAt(0)?.toUpperCase() || 'U' }}</span>
             </div>
             <div class="participant-details">
               <span class="full-name">{{ u.fullName }}</span>

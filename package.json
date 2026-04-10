@@ -1,6 +1,6 @@
 {
   "name": "ois-meet-desktop",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "OIS Meet desktop application",
   "author": "OIS Meet",
   "main": "electron/main.js",

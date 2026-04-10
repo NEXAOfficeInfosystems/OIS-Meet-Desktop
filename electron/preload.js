@@ -100,3 +100,13 @@ ipcRenderer.on('electron-auth-data', (event, authData) => {
     console.error('preload: failed to dispatch electron-auth-data event', err);
   }
 });
+
+// Main process fires this when the window is hidden to the system tray so the
+// renderer can immediately stop any playing ringtone (no visible UI to dismiss it).
+ipcRenderer.on('window-hidden-stop-ringtone', () => {
+  try {
+    window.dispatchEvent(new CustomEvent('ois-window-hidden'));
+  } catch (err) {
+    console.error('preload: failed to dispatch ois-window-hidden event', err);
+  }
+});
