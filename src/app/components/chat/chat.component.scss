@@ -712,26 +712,60 @@
   .message-data-col {
     flex: 1;
     min-width: 0;
-  }
-
-  &.is-self {
-    // flex-direction: row-reverse;
-    // text-align: right;
-
-    .message-data-col {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
 
     .msg-content {
+      font-size: 0.85rem;
+      color: #334155;
+      line-height: 1.5;
       background-color: #f1f5f9;
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
       display: inline-block;
       text-align: left;
       border: 1px solid var(--fluent-border);
+
+      &.voice-note-msg {
+        padding: 6px 16px !important;
+        border-radius: 20px !important;
+        background: #f1f5f9 !important; // Light gray for others
+        min-width: 280px;
+        max-width: 340px;
+        border: none !important;
+        display: block; // Allow waveform to fill
+      }
+    }
+  }
+
+  &.is-self {
+    .message-data-col {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end; // Align to right for self
+    }
+
+    .msg-header {
+      flex-direction: row-reverse;
+    }
+
+    .msg-content {
+      background-color: var(--accent-color) !important;
+      color: white !important;
+      border: none !important;
+
+      &.voice-note-msg {
+        background: #f8fafc !important; // Light for both, but we'll differentiate
+        color: #334155 !important;
+        border: 1px solid #e2e8f0 !important;
+        padding: 4px 12px !important;
+        border-radius: 24px !important;
+        display: block;
+      }
+    }
+
+    /* Merged voice note specific soft background */
+    .msg-content.voice-note-msg {
+       background: #ffffff !important;
+       border-color: rgba(99, 102, 241, 0.2) !important;
     }
   }
 

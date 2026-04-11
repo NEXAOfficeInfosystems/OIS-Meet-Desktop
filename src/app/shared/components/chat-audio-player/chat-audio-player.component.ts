@@ -6,123 +6,155 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="audio-player" [class.playing]="isPlaying">
-      <button class="play-btn" (click)="togglePlay()" [title]="isPlaying ? 'Pause' : 'Play'">
+    <div class="voice-note-player" [class.is-mine]="isMine">
+      <button class="play-pause-btn" (click)="togglePlay()" [title]="isPlaying ? 'Pause' : 'Play'">
         <i class="bi" [class.bi-play-fill]="!isPlaying" [class.bi-pause-fill]="isPlaying"></i>
       </button>
-      
-      <div class="player-content">
-        <div class="waveform-container">
-          <div class="progress-bar" [style.width.%]="progress"></div>
-          <div class="waveform-overlay">
-            <div class="bar" *ngFor="let h of waveformBars" [style.height.%]="h"></div>
+
+      <div class="waveform-container" (click)="seek($event)">
+        <div class="waveform-bars">
+          <div *ngFor="let h of waveformBars; let idx = index"
+            class="bar"
+            [class.played]="(idx / waveformBars.length) * 100 < progress"
+            [style.height.px]="h">
           </div>
-        </div>
-        <div class="player-meta">
-          <span class="currentTime">{{ formatTime(currentTime) }}</span>
-          <span class="duration">{{ formatTime(duration) }}</span>
         </div>
       </div>
 
-      <div class="speed-control" (click)="toggleSpeed()">
-        {{ playbackSpeed }}x
+      <div class="player-meta">
+        <!-- {{ formatTime(currentTime) }} /  -->
+        <span class="time-label">{{ formatTime(duration) }}</span>
+        <!-- <button class="speed-badge" (click)="toggleSpeed(); $event.stopPropagation()" title="Playback Speed">
+          {{ playbackSpeed }}x
+        </button>
+        <button class="download-btn" (click)="download($event)" title="Download">
+          <i class="bi bi-download"></i>
+        </button> -->
       </div>
     </div>
   `,
   styles: [`
-    .audio-player {
+    :host { display: block; width: 100%; max-width: 340px; }
+
+    .voice-note-player {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 10px 16px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      min-width: 240px;
-      backdrop-filter: blur(4px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      gap: 10px;
+      padding: 6px 4px;
+      background: transparent;
+      user-select: none;
     }
-    .play-btn {
+
+    .play-pause-btn {
       width: 36px;
       height: 36px;
       border-radius: 50%;
       border: none;
-      background: var(--fluent-primary, #2563EB);
-      color: white;
+      background: var(--accent-color);
+      color: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: transform 0.2s;
       flex-shrink: 0;
-    }
-    .play-btn:hover { transform: scale(1.05); }
-    .play-btn i { font-size: 1.2rem; }
+      transition: background 0.15s, transform 0.15s;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
 
-    .player-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
+      &:hover {
+        background: color-mix(in srgb, var(--accent-color) 85%, #000);
+        transform: scale(1.06);
+      }
+
+      i { font-size: 1rem; }
     }
 
     .waveform-container {
+      flex: 1;
+      height: 36px;
       position: relative;
-      height: 24px;
-      background: rgba(0, 0, 0, 0.05);
-      border-radius: 4px;
-      overflow: hidden;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      min-width: 100px;
     }
-    .progress-bar {
-      position: absolute;
-      left: 0;
-      top: 0;
-      height: 100%;
-      background: rgba(37, 99, 235, 0.2);
-      transition: width 0.1s linear;
-    }
-    .waveform-overlay {
-      position: absolute;
-      left: 0;
-      top: 0;
+
+    .waveform-bars {
       width: 100%;
       height: 100%;
       display: flex;
       align-items: center;
-      justify-content: space-around;
-      padding: 0 4px;
+      justify-content: space-between;
+      gap: 2px;
     }
+
     .bar {
-      width: 2px;
-      background: var(--fluent-primary, #2563EB);
-      opacity: 0.4;
-      border-radius: 1px;
+      flex: 1;
+      max-width: 3px;
+      min-height: 3px;
+      background: rgba(161, 185, 235, 0.25);
+      border-radius: 3px;
+      transition: background 0.12s ease;
+    }
+
+    .bar.played {
+      background: var(--accent-color);
     }
 
     .player-meta {
       display: flex;
-      justify-content: space-between;
-      font-size: 10px;
-      color: var(--fluent-text-secondary, #64748b);
-      font-weight: 500;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+      flex-shrink: 0;
     }
 
-    .speed-control {
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--fluent-primary, #2563EB);
-      cursor: pointer;
-      padding: 4px 6px;
-      background: rgba(37, 99, 235, 0.1);
-      border-radius: 4px;
-      user-select: none;
+    .player-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    .speed-control:hover { background: rgba(37, 99, 235, 0.2); }
+
+    .speed-badge {
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      padding: 1px 7px;
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent-color);
+      cursor: pointer;
+      transition: background 0.15s;
+      &:hover { background: rgba(99, 102, 241, 0.16); }
+    }
+
+    .download-btn {
+      background: transparent;
+      border: none;
+      padding: 3px;
+      color: #94a3b8;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      transition: color 0.15s;
+      &:hover { color: var(--accent-color); }
+    }
+
+    .time-label {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #64748b;
+      white-space: nowrap;
+      letter-spacing: 0.2px;
+    }
   `]
 })
 export class ChatAudioPlayerComponent implements OnInit, OnDestroy {
   @Input({ required: true }) audioUrl!: string;
   @Input() duration: number = 0;
+  @Input() isMine: boolean = false;
+  @Input() fileName: string = 'voice-note.webm';
 
   private audio: HTMLAudioElement = new Audio();
   isPlaying = false;
@@ -130,18 +162,27 @@ export class ChatAudioPlayerComponent implements OnInit, OnDestroy {
   progress = 0;
   playbackSpeed = 1;
 
-  waveformBars: number[] = [];
+  waveformBars: number[] = this.generateWaveform(40);
 
-  constructor(private cdr: ChangeDetectorRef) {
-    // Generate random heights for the waveform look
-    for (let i = 0; i < 30; i++) {
-      this.waveformBars.push(Math.random() * 60 + 20);
+  constructor(private cdr: ChangeDetectorRef) { }
+
+  generateWaveform(count: number): number[] {
+    const bars: number[] = [];
+    for (let i = 0; i < count; i++) {
+      // Create a more natural-looking waveform with peaks and valleys
+      const center = count / 2;
+      const distFromCenter = Math.abs(i - center) / center;
+      const envelope = 1 - distFromCenter * 0.4;
+      const noise = Math.random();
+      const height = Math.round((noise * 0.7 + 0.3) * envelope * 28) + 4;
+      bars.push(height);
     }
+    return bars;
   }
 
   ngOnInit() {
     this.audio.src = this.audioUrl;
-    
+
     this.audio.addEventListener('loadedmetadata', () => {
       if (isFinite(this.audio.duration)) {
         this.duration = this.audio.duration;
@@ -184,11 +225,31 @@ export class ChatAudioPlayerComponent implements OnInit, OnDestroy {
     }
   }
 
+  seek(event: MouseEvent) {
+    const container = event.currentTarget as HTMLElement;
+    const rect = container.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const percentage = x / rect.width;
+    if (this.duration) {
+      this.audio.currentTime = percentage * this.duration;
+    }
+  }
+
   toggleSpeed() {
     const speeds = [1, 1.5, 2];
     const currentIndex = speeds.indexOf(this.playbackSpeed);
     this.playbackSpeed = speeds[(currentIndex + 1) % speeds.length];
     this.audio.playbackRate = this.playbackSpeed;
+  }
+
+  download(event: Event) {
+    event.stopPropagation();
+    const link = document.createElement('a');
+    link.href = this.audioUrl;
+    link.download = this.fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   formatTime(seconds: number): string {

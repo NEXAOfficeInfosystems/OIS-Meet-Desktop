@@ -341,8 +341,8 @@
                 <div class="message-avatar-col">
                   <img *ngIf="msg.senderAvatarUrl" [src]="fileService.getFileUrl(msg.senderAvatarUrl)"
                     class="msg-avatar rounded-circle" alt="avatar">
-                  <div *ngIf="!msg.senderAvatarUrl" class="msg-avatar"
-                    [style.background-color]="getMemberAvatarColor(msg.senderName)">
+                  <div *ngIf="!msg.senderAvatarUrl && msg.senderId?.toString() !== currentUserId?.toString()"
+                    class="msg-avatar" [style.background-color]="getMemberAvatarColor(msg.senderName)">
                     {{ msg.senderName | initials }}
                   </div>
                 </div>
@@ -353,7 +353,7 @@
                       }}</span>
                     <span class="msg-time">{{ msg.sentAt | date:'shortTime' }}</span>
                   </div>
-                  <div class="msg-content">
+                  <div class="msg-content" [class.voice-note-msg]="msg.messageType === 'Audio' || msg.MessageType === 'Audio'" [class.is-other]="msg.senderId?.toString() !== currentUserId?.toString()">
                     <!-- Inline edit mode -->
                     <ng-container *ngIf="editingMessage?.id === (msg.id || msg.Id); else msgDisplay">
                       <div class="msg-edit-area">
@@ -420,16 +420,20 @@
                     </ng-container>
                     <!-- Normal display mode -->
                     <ng-template #msgDisplay>
-                      <div class="mb-0" *ngIf="msg.messageType === 'Audio' || msg.MessageType === 'Audio'">
-                        <app-chat-audio-player [audioUrl]="fileService.getFileUrl(msg.fileUrl || msg.FileUrl)" [duration]="msg.duration || msg.Duration || 0"></app-chat-audio-player>
-                      </div>
+                      <app-chat-audio-player *ngIf="msg.messageType === 'Audio' || msg.MessageType === 'Audio'"
+                        [audioUrl]="fileService.getFileUrl(msg.fileUrl || msg.FileUrl)"
+                        [duration]="msg.duration || msg.Duration || 0"
+                        [isMine]="msg.senderId?.toString() === currentUserId?.toString()"
+                        [fileName]="msg.fileName || msg.FileName || 'voice-note.webm'">
+                      </app-chat-audio-player>
 
-                      <div class="mb-0" *ngIf="(msg.messageType !== 'Audio' && msg.MessageType !== 'Audio') && (msg.formattedContent || msg.content)"
+                      <div class="mb-0"
+                        *ngIf="(msg.messageType !== 'Audio' && msg.MessageType !== 'Audio') && (msg.formattedContent || msg.content)"
                         [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
 
                       <!-- Legacy Attachments -->
                       <div class="msg-attachments"
-                        *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
+                        *ngIf="(msg.messageType !== 'Audio' && msg.MessageType !== 'Audio') && (msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
                         <div class="file-chip animate-fade-in" *ngFor="let file of (msg.attachments || msg.Attachments)"
                           (click)="openPreview(file)">
                           <i class="bi fs-4" [class]="getFileIcon(file.fileName || file.FileName)"></i>
@@ -444,7 +448,7 @@
                         </div>
                       </div>
                       <div class="msg-attachments-hidden mt-1"
-                        *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
+                        *ngIf="(msg.messageType !== 'Audio' && msg.MessageType !== 'Audio') && (msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
                         <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
                           <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}}
                           Attachment(s)
@@ -527,7 +531,8 @@
             </div>
 
             <!-- Editor Card -->
-            <div class="editor-card" [class.editor-card--focused]="true" [class.recording-mode]="recordingState.isRecording">
+            <div class="editor-card" [class.editor-card--focused]="true"
+              [class.recording-mode]="recordingState.isRecording">
 
               <!-- ── Formatting Toolbar (collapsible) ──────────────────────── -->
               <div class="rte-toolbar" *ngIf="isToolbarVisible" role="toolbar" aria-label="Text formatting">
@@ -629,15 +634,17 @@
                   <span class="timer">{{ formatDuration(recordingState.duration) || '0:00' }}</span>
                 </div>
                 <div class="waveform-viz flex-grow-1">
-                  <div class="wave-bar" *ngFor="let i of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]" 
-                       [style.height.px]="recordingState.amplitude * (15 + (i % 5) * 4)"></div>
+                  <div class="wave-bar" *ngFor="let i of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]"
+                    [style.height.px]="recordingState.amplitude * (15 + (i % 5) * 4)"></div>
                 </div>
                 <div class="recording-actions">
                   <button class="rec-btn rec-btn--cancel" (click)="cancelVoiceRecording()" title="Discard">
                     <i class="bi bi-trash"></i>
                   </button>
-                  <button class="rec-btn rec-btn--pause" (click)="toggleRecordingPause()" [title]="recordingState.isPaused ? 'Resume' : 'Pause'">
-                    <i class="bi" [class.bi-pause-fill]="!recordingState.isPaused" [class.bi-play-fill]="recordingState.isPaused"></i>
+                  <button class="rec-btn rec-btn--pause" (click)="toggleRecordingPause()"
+                    [title]="recordingState.isPaused ? 'Resume' : 'Pause'">
+                    <i class="bi" [class.bi-pause-fill]="!recordingState.isPaused"
+                      [class.bi-play-fill]="recordingState.isPaused"></i>
                   </button>
                   <button class="rec-btn rec-btn--stop" (click)="stopVoiceRecording()" title="Send">
                     <i class="bi bi-send-fill"></i>
@@ -689,7 +696,7 @@
                   </button>
 
                   <!-- Voice Note -->
-                  <button class="rte-action-btn rec-start-btn" [class.recording]="recordingState.isRecording" 
+                  <button class="rte-action-btn rec-start-btn" [class.recording]="recordingState.isRecording"
                     (click)="startVoiceRecording()" title="Record voice note" aria-label="Record voice note">
                     <i class="bi bi-mic"></i>
                   </button>
