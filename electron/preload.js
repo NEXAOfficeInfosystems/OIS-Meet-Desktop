@@ -62,16 +62,16 @@ contextBridge.exposeInMainWorld('oisMeet', {
 
   // ── Auto Updater Events ───────────────────────────────────────────────
   onUpdateAvailable: (callback) => {
-    ipcRenderer.on('update-available', (event, info) => callback(info));
+    ipcRenderer.on('update-available', (_e, info) => callback(info));
   },
   onUpdateDownloaded: (callback) => {
-    ipcRenderer.on('update-downloaded', (event, info) => callback(info));
+    ipcRenderer.on('update-downloaded', (_e, info) => callback(info));
   },
   onUpdateError: (callback) => {
-    ipcRenderer.on('update-error', (event, error) => callback(error));
+    ipcRenderer.on('update-error', (_e, error) => callback(error));
   },
   onDownloadProgress: (callback) => {
-    ipcRenderer.on('update-download-progress', (event, progress) => callback(progress));
+    ipcRenderer.on('update-download-progress', (_e, progress) => callback(progress));
   },
   checkForUpdates: () => {
     return ipcRenderer.invoke('check-for-updates');
@@ -81,12 +81,16 @@ contextBridge.exposeInMainWorld('oisMeet', {
   },
 
   // ── Screen capture sources (for custom screen-picker UI if needed) ──────────
-  // Returns an array of { id, name, thumbnail } objects for all available
-  // screens and windows.  The primary path uses setDisplayMediaRequestHandler
-  // in main.js (triggered automatically by getDisplayMedia()), but this IPC
-  // is available as a fallback for building a custom picker dialog.
   getDesktopSources: (opts) => {
     return ipcRenderer.invoke('get-desktop-sources', opts || {});
+  },
+
+  // ── Screen recording floating control window ──────────────────────────────
+  showRecordingControls: () => ipcRenderer.invoke('show-recording-controls'),
+  updateRecordingControls: (state) => ipcRenderer.send('update-recording-controls', state),
+  hideRecordingControls: () => ipcRenderer.send('hide-recording-controls'),
+  onRecordingControlAction: (callback) => {
+    ipcRenderer.on('recording-control-action', (_e, action) => callback(action));
   }
 });
 
@@ -101,7 +105,7 @@ contextBridge.exposeInMainWorld('windowAPI', {
 // When main process forwards cached auth for a newly created window, emit
 // a DOM CustomEvent so renderer code listening for 'electron-auth-data'
 // receives it (this mirrors the existing renderer-side listener).
-ipcRenderer.on('electron-auth-data', (event, authData) => {
+ipcRenderer.on('electron-auth-data', (_e, authData) => {
   try {
     window.dispatchEvent(new CustomEvent('electron-auth-data', { detail: authData }));
   } catch (err) {

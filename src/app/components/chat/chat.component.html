@@ -353,7 +353,9 @@
                       }}</span>
                     <span class="msg-time">{{ msg.sentAt | date:'shortTime' }}</span>
                   </div>
-                  <div class="msg-content" [class.voice-note-msg]="msg.messageType === 'Audio' || msg.MessageType === 'Audio'" [class.is-other]="msg.senderId?.toString() !== currentUserId?.toString()">
+                  <div class="msg-content"
+                    [class.voice-note-msg]="msg.messageType === 'Audio' || msg.MessageType === 'Audio'"
+                    [class.is-other]="msg.senderId?.toString() !== currentUserId?.toString()">
                     <!-- Inline edit mode -->
                     <ng-container *ngIf="editingMessage?.id === (msg.id || msg.Id); else msgDisplay">
                       <div class="msg-edit-area">
@@ -420,6 +422,8 @@
                     </ng-container>
                     <!-- Normal display mode -->
                     <ng-template #msgDisplay>
+
+                      <!-- ── Audio (voice note) ── -->
                       <app-chat-audio-player *ngIf="msg.messageType === 'Audio' || msg.MessageType === 'Audio'"
                         [audioUrl]="fileService.getFileUrl(msg.fileUrl || msg.FileUrl)"
                         [duration]="msg.duration || msg.Duration || 0"
@@ -427,13 +431,52 @@
                         [fileName]="msg.fileName || msg.FileName || 'voice-note.webm'">
                       </app-chat-audio-player>
 
+                      <!-- ── Screen recording / video ── -->
+                      <app-chat-video-player
+                        *ngIf="msg.messageType === 'Video' || msg.MessageType === 'Video'"
+                        [videoUrl]="fileService.getFileUrl(msg.fileUrl || msg.FileUrl)"
+                        [isMine]="msg.senderId?.toString() === currentUserId?.toString()"
+                        [fileName]="msg.fileName || msg.FileName || 'screen-recording.webm'">
+                      </app-chat-video-player>
+
+                      <!-- ── Inline image ── -->
+                      <div class="msg-image-wrap" *ngIf="(msg.messageType === 'Image' || msg.MessageType === 'Image') && (msg.fileUrl || msg.FileUrl) && settings.showMediaPreviews">
+                        <img class="msg-image"
+                          [src]="fileService.getFileUrl(msg.fileUrl || msg.FileUrl)"
+                          [alt]="msg.fileName || msg.FileName || 'Image'"
+                          (click)="openPreview(msg)"
+                          loading="lazy">
+                      </div>
+
+                      <!-- ── Text content (non-media messages) ── -->
                       <div class="mb-0"
-                        *ngIf="(msg.messageType !== 'Audio' && msg.MessageType !== 'Audio') && (msg.formattedContent || msg.content)"
+                        *ngIf="['Audio','Video','Image'].indexOf(msg.messageType || msg.MessageType) === -1 && (msg.formattedContent || msg.content)"
                         [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
 
-                      <!-- Legacy Attachments -->
+                      <!-- ── Direct file on message (File type with fileUrl) ── -->
+                      <ng-container *ngIf="(msg.messageType === 'File' || msg.MessageType === 'File') && (msg.fileUrl || msg.FileUrl)">
+                        <div class="msg-attachments" *ngIf="settings.showMediaPreviews">
+                          <div class="file-chip animate-fade-in" (click)="openPreview(msg)">
+                            <i class="bi fs-4" [class]="getFileIcon(msg.fileName || msg.FileName || '')"></i>
+                            <div class="file-info">
+                              <span class="file-name text-truncate" style="max-width: 150px;">{{ msg.fileName || msg.FileName || 'File' }}</span>
+                            </div>
+                            <button class="btn-download"
+                              (click)="downloadFile(msg.fileUrl || msg.FileUrl, msg.fileName || msg.FileName); $event.stopPropagation()">
+                              <i class="bi bi-download"></i>
+                            </button>
+                          </div>
+                        </div>
+                        <div class="msg-attachments-hidden mt-1" *ngIf="!settings.showMediaPreviews">
+                          <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
+                            <i class="bi bi-paperclip me-1"></i> 1 Attachment hidden
+                          </span>
+                        </div>
+                      </ng-container>
+
+                      <!-- ── Attachments array ── -->
                       <div class="msg-attachments"
-                        *ngIf="(msg.messageType !== 'Audio' && msg.MessageType !== 'Audio') && (msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
+                        *ngIf="['Audio','Video','Image'].indexOf(msg.messageType || msg.MessageType) === -1 && (msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
                         <div class="file-chip animate-fade-in" *ngFor="let file of (msg.attachments || msg.Attachments)"
                           (click)="openPreview(file)">
                           <i class="bi fs-4" [class]="getFileIcon(file.fileName || file.FileName)"></i>
@@ -448,13 +491,13 @@
                         </div>
                       </div>
                       <div class="msg-attachments-hidden mt-1"
-                        *ngIf="(msg.messageType !== 'Audio' && msg.MessageType !== 'Audio') && (msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
+                        *ngIf="['Audio','Video','Image'].indexOf(msg.messageType || msg.MessageType) === -1 && (msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
                         <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
                           <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}}
-                          Attachment(s)
-                          hidden
+                          Attachment(s) hidden
                         </span>
                       </div>
+
                     </ng-template>
                   </div> <!-- end msg-content -->
 
@@ -492,7 +535,8 @@
                     </button>
                     <!-- Edit button (own messages only) -->
                     <button class="msg-act-btn" title="Edit"
-                      *ngIf="msg.senderId?.toString() === currentUserId?.toString()" (click)="editMessage(msg)">
+                      *ngIf="msg.senderId?.toString() === currentUserId?.toString() && msg.messageType !== 'Audio' && msg.MessageType !== 'Audio'"
+                      (click)="editMessage(msg)">
                       <i class="bi bi-pencil"></i>
                     </button>
                   </div>
@@ -623,11 +667,39 @@
                   [attr.aria-label]="'Message ' + (selectedUser ? (selectedUser.fullName || selectedUser.name) : (activeChannel ? '#' + activeChannel : ''))"
                   [attr.data-placeholder]="'Message ' + (selectedUser ? (selectedUser.fullName || selectedUser.name) : (activeChannel ? '#' + activeChannel : 'the team')) + '…'"
                   (input)="onEditorInput($event)" (keydown)="onEditorKeydown($event)" (paste)="onEditorPaste($event)"
-                  *ngIf="!recordingState.isRecording">
+                  *ngIf="!recordingState.isRecording && !screenRecordingState.isRecording">
                 </div>
               </div>
 
-              <!-- Recording Overlay (Moved outside editor container to cover full area) -->
+              <!-- Screen Recording Overlay — shown in browser; Electron uses the floating window instead -->
+              <div class="recording-overlay screen-rec-overlay animate-slide-up" *ngIf="screenRecordingState.isRecording && !isElectron">
+                <!-- Left: status badge -->
+                <div class="screen-rec-status">
+                  <div class="screen-dot" [class.paused]="screenRecordingState.isPaused"></div>
+                  <i class="bi bi-display screen-rec-icon"></i>
+                  <span class="screen-rec-label">{{ screenRecordingState.isPaused ? 'Paused' : 'Recording' }}</span>
+                </div>
+
+                <!-- Center: timer -->
+                <span class="screen-rec-timer">{{ formatDuration(screenRecordingState.duration) }}</span>
+
+                <!-- Right: actions -->
+                <div class="recording-actions">
+                  <button class="rec-btn rec-btn--cancel" (click)="cancelScreenRecording()" title="Discard recording">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                  <button class="rec-btn rec-btn--pause" (click)="toggleScreenRecordingPause()"
+                    [title]="screenRecordingState.isPaused ? 'Resume' : 'Pause'">
+                    <i class="bi" [class.bi-pause-fill]="!screenRecordingState.isPaused"
+                      [class.bi-play-fill]="screenRecordingState.isPaused"></i>
+                  </button>
+                  <button class="rec-btn rec-btn--stop" (click)="stopScreenRecording()" title="Stop & Send">
+                    <i class="bi bi-send-fill"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Voice Recording Overlay -->
               <div class="recording-overlay animate-slide-up" *ngIf="recordingState.isRecording">
                 <div class="recording-indicator">
                   <div class="dot" [class.paused]="recordingState.isPaused"></div>
@@ -653,7 +725,7 @@
               </div>
 
               <!-- ── Bottom Action Bar ───────────────────────────────────────── -->
-              <div class="rte-footer" *ngIf="!recordingState.isRecording">
+              <div class="rte-footer" *ngIf="!recordingState.isRecording && !screenRecordingState.isRecording">
                 <div class="rte-footer-left">
 
                   <!-- Format toggle -->
@@ -697,8 +769,17 @@
 
                   <!-- Voice Note -->
                   <button class="rte-action-btn rec-start-btn" [class.recording]="recordingState.isRecording"
-                    (click)="startVoiceRecording()" title="Record voice note" aria-label="Record voice note">
+                    (click)="startVoiceRecording()" title="Record voice note" aria-label="Record voice note"
+                    [disabled]="screenRecordingState.isRecording">
                     <i class="bi bi-mic"></i>
+                  </button>
+
+                  <!-- Screen Record -->
+                  <button class="rte-action-btn screen-rec-btn"
+                    (click)="startScreenRecording()" title="Record screen" aria-label="Record screen"
+                    [disabled]="recordingState.isRecording || isSendingScreenRecording">
+                    <i class="bi bi-display" *ngIf="!isSendingScreenRecording"></i>
+                    <div class="spinner-border spinner-border-sm" *ngIf="isSendingScreenRecording" role="status"></div>
                   </button>
 
                 </div>

@@ -308,6 +308,22 @@ app.whenReady().then(() => {
     callback(['media', 'display-capture'].includes(permission));
   });
 
+  // Allow renderer's getDisplayMedia() to work in Electron 17+.
+  // Without this handler getDisplayMedia() always throws in Electron.
+  // We grab all screen + window sources and hand back the primary screen.
+  // The renderer can also call the `get-desktop-sources` IPC to build its
+  // own source-picker UI and then use getUserMedia() directly.
+  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+    try {
+      const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
+      const primary = sources.find(s => s.id.startsWith('screen:')) || sources[0];
+      callback(primary ? { video: primary } : {});
+    } catch (err) {
+      console.error('[main] setDisplayMediaRequestHandler error:', err);
+      callback({});
+    }
+  });
+
   createMainWindow();
   createTray();
 
@@ -431,6 +447,70 @@ ipcMain.handle('get-desktop-sources', async (_event, opts) => {
   } catch (err) {
     console.error('[main] get-desktop-sources failed:', err);
     return [];
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCREEN RECORDING FLOATING CONTROLS WINDOW
+// ─────────────────────────────────────────────────────────────────────────────
+
+let recordingControlsWindow = null;
+
+ipcMain.handle('show-recording-controls', async (_event) => {
+  if (recordingControlsWindow && !recordingControlsWindow.isDestroyed()) {
+    recordingControlsWindow.showInactive();
+    return;
+  }
+
+  const { screen } = require('electron');
+  const display = screen.getPrimaryDisplay();
+  const { width, height } = display.workAreaSize;
+  const W = 360, H = 56;
+
+  recordingControlsWindow = new BrowserWindow({
+    width: W,
+    height: H,
+    x: Math.round((width - W) / 2),
+    y: height - H - 12,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    movable: true,
+    skipTaskbar: true,
+    hasShadow: true,
+    roundedCorners: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'recording-controls-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    }
+  });
+
+  recordingControlsWindow.loadFile(path.join(__dirname, 'recording-controls.html'));
+
+  recordingControlsWindow.on('closed', () => {
+    recordingControlsWindow = null;
+  });
+});
+
+ipcMain.on('update-recording-controls', (_event, state) => {
+  if (recordingControlsWindow && !recordingControlsWindow.isDestroyed()) {
+    recordingControlsWindow.webContents.send('recording-state-update', state);
+  }
+});
+
+ipcMain.on('hide-recording-controls', (_event) => {
+  if (recordingControlsWindow && !recordingControlsWindow.isDestroyed()) {
+    try { recordingControlsWindow.close(); } catch (_) {}
+    recordingControlsWindow = null;
+  }
+});
+
+// Actions from the floating window (pause / stop / cancel) → forward to main renderer
+ipcMain.on('recording-control-action', (_event, action) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('recording-control-action', action);
   }
 });
 

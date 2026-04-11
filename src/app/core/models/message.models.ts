@@ -5,7 +5,7 @@ export interface Message {
   senderName?: string;
   senderAvatar?: string;
   content: string;
-  messageType: 'Text' | 'Image' | 'File' | 'System';
+  messageType: 'Text' | 'Image' | 'File' | 'Audio' | 'Video' | 'System';
   sentAt: string;
   isRead: boolean;
   isPending?: boolean;

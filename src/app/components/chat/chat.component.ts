@@ -41,7 +41,9 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../../shared/layout/confirmation-dialog.component';
 import { EmojiStickerPickerComponent, PickerTab } from '../../shared/components/emoji-sticker-picker/emoji-sticker-picker.component';
 import { VoiceNoteService, RecordingState } from '../../core/services/voice-note.service';
+import { ScreenRecorderService, ScreenRecordingState } from '../../core/services/screen-recorder.service';
 import { ChatAudioPlayerComponent } from '../../shared/components/chat-audio-player/chat-audio-player.component';
+import { ChatVideoPlayerComponent } from '../../shared/components/chat-video-player/chat-video-player.component';
 
 
 declare var bootstrap: any;
@@ -66,7 +68,8 @@ interface InAppToast {
     InitialsPipe,
     ActivityFeedComponent,
     EmojiStickerPickerComponent,
-    ChatAudioPlayerComponent
+    ChatAudioPlayerComponent,
+    ChatVideoPlayerComponent
   ],
   templateUrl: './chat.component.html',
   styleUrls: ['./chat.component.scss']
@@ -201,6 +204,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   recordingBlob: Blob | null = null;
   isSendingVoiceNote = false;
 
+  // Screen Recording
+  screenRecordingState: ScreenRecordingState = { isRecording: false, isPaused: false, duration: 0 };
+  isSendingScreenRecording = false;
+
   toggleToolbar(): void {
     this.isToolbarVisible = !this.isToolbarVisible;
     this.cdr.detectChanges();
@@ -277,6 +284,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     public notificationService: NotificationService,
     private signalRService: SignalRService,
     private voiceNoteService: VoiceNoteService,
+    private screenRecorderService: ScreenRecorderService,
     private dialog: MatDialog
   ) {
     this.currentUserId = this.sessionService.getOISMeetUserId();
@@ -402,6 +410,38 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       this.recordingState = state;
       this.cdr.detectChanges();
     });
+
+    this.screenRecorderService.state$.pipe(takeUntil(this.destroy$)).subscribe(state => {
+      const wasRecording = this.screenRecordingState.isRecording;
+      this.screenRecordingState = state;
+      this.cdr.detectChanges();
+
+      // Sync Electron floating control window
+      const oisMeet = (window as any).oisMeet;
+      if (oisMeet) {
+        if (state.isRecording) {
+          if (!wasRecording) oisMeet.showRecordingControls?.().catch(() => {});
+          oisMeet.updateRecordingControls?.({ duration: state.duration, isPaused: state.isPaused });
+        } else if (wasRecording) {
+          oisMeet.hideRecordingControls?.();
+        }
+      }
+    });
+
+    // Handle native "Stop sharing" button — auto-send what was recorded
+    this.screenRecorderService.nativeStopped$.pipe(takeUntil(this.destroy$)).subscribe(blob => {
+      this.sendScreenRecording(blob);
+    });
+
+    // Electron: listen for actions from the floating recording-controls window
+    const oisMeet = (window as any).oisMeet;
+    if (oisMeet?.onRecordingControlAction) {
+      oisMeet.onRecordingControlAction((action: string) => {
+        if (action === 'stop')   this.stopScreenRecording();
+        if (action === 'cancel') this.cancelScreenRecording();
+        if (action === 'pause')  this.toggleScreenRecordingPause();
+      });
+    }
 
     this.shareMeetingIdHandler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -989,14 +1029,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.conversationSwitch$.complete();
   }
 
-  sendMessage(fileUrl?: string, fileName?: string): void {
+  sendMessage(fileUrl?: string, fileName?: string, messageType?: string): void {
     const content = this.newMessage?.trim();
     if (!content && !fileUrl) return;
 
     const conversationId = this.selectedConversation?.id;
     if (!conversationId) return;
 
-    const msgType = fileUrl ? 'File' : 'Text';
+    const msgType = messageType ?? (fileUrl ? 'File' : 'Text');
 
     this.store.dispatch(MessagesActions.sendMessage({
       conversationId,
@@ -1149,12 +1189,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   private uploadFile(file: File): void {
     this.isUploading = true;
+    const msgType = this.detectMessageType(file);
     this.fileService.uploadFile(file).subscribe({
       next: (event: any) => {
-        if (event.type === 4) { // Sent
+        if (event.type === 4) {
           const res = event.body;
           if (res.success && res.data) {
-            this.sendMessage(res.data.url, res.data.fileName);
+            this.sendMessage(res.data.url, res.data.fileName, msgType);
           }
           this.isUploading = false;
         }
@@ -1164,6 +1205,26 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         this.isUploading = false;
       }
     });
+  }
+
+  private detectMessageType(file: File): string {
+    const mime = file.type;
+    if (mime.startsWith('image/')) return 'Image';
+    if (mime.startsWith('video/')) return 'Video';
+    if (mime.startsWith('audio/')) return 'Audio';
+    return 'File';
+  }
+
+  getFileExtension(fileName: string): string {
+    return fileName?.split('.').pop()?.toLowerCase() ?? '';
+  }
+
+  isImageFile(fileName: string): boolean {
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(this.getFileExtension(fileName));
+  }
+
+  isVideoFile(fileName: string): boolean {
+    return ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(this.getFileExtension(fileName));
   }
 
 
@@ -3106,6 +3167,78 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // ——————————————————————————————————————————————————————————————————————————————
+  // SCREEN RECORDING
+  // ——————————————————————————————————————————————————————————————————————————————
+
+  async startScreenRecording() {
+    if (this.recordingState.isRecording || this.screenRecordingState.isRecording) return;
+    try {
+      await this.screenRecorderService.startRecording();
+    } catch (err: any) {
+      // Suppress user-cancellation errors — they are normal UX, not errors
+      const name: string = err?.name ?? '';
+      const isCancellation = name === 'NotAllowedError'   // user denied / closed picker
+                          || name === 'AbortError'         // picker dismissed
+                          || name === 'InvalidStateError'; // picker cancelled mid-flight
+      if (!isCancellation) {
+        console.error('Screen recording error:', err);
+        this.showAlert('Screen recording is not supported on this device.', 'Notice');
+      }
+    }
+  }
+
+  async stopScreenRecording() {
+    const blob = await this.screenRecorderService.stopRecording();
+    if (blob) {
+      this.sendScreenRecording(blob);
+    }
+  }
+
+  cancelScreenRecording() {
+    this.screenRecorderService.cancelRecording();
+  }
+
+  toggleScreenRecordingPause() {
+    if (this.screenRecordingState.isPaused) {
+      this.screenRecorderService.resumeRecording();
+    } else {
+      this.screenRecorderService.pauseRecording();
+    }
+  }
+
+  private sendScreenRecording(blob: Blob) {
+    if (!this.selectedConversation) return;
+    this.isSendingScreenRecording = true;
+    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+    const fileName = `screen_recording_${Date.now()}.${ext}`;
+    const file = new File([blob], fileName, { type: blob.type });
+
+    this.fileService.uploadFile(file).subscribe({
+      next: (event: any) => {
+        if (event.type === 4) {
+          const res = event.body;
+          if (res.success && res.data) {
+            this.store.dispatch(MessagesActions.sendMessage({
+              conversationId: this.selectedConversation!.id,
+              content: 'Screen Recording',
+              messageType: 'Video',
+              fileUrl: res.data.url,
+              fileName,
+              replyToMessageId: this.replyToMessage?.id
+            }));
+            this.cancelReply();
+          }
+          this.isSendingScreenRecording = false;
+        }
+      },
+      error: () => {
+        this.isSendingScreenRecording = false;
+        this.showAlert('Failed to upload screen recording.', 'Error');
+      }
+    });
   }
 
 }
