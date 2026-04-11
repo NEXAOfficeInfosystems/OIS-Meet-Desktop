@@ -76,11 +76,8 @@
     </div> -->
 
     <!-- ── Screen Share Stage ───────────────────────────────────── -->
-    <div class="screen-share-stage"
-         [class.ss-fullscreen]="ssIsFullScreen"
-         [class.ss-focus-mode]="ssIsFocusMode"
-         [class.ss-pinned]="ssIsPinned"
-         *ngIf="isScreenSharing || isRemoteScreenSharing">
+    <div class="screen-share-stage" [class.ss-fullscreen]="ssIsFullScreen" [class.ss-focus-mode]="ssIsFocusMode"
+      [class.ss-pinned]="ssIsPinned" *ngIf="isScreenSharing || isRemoteScreenSharing">
 
       <!-- ─ Control Banner (always visible) ───────────────────── -->
       <div class="ss-banner">
@@ -101,16 +98,16 @@
 
           <!-- Scale pill -->
           <div class="ss-scale-pill">
-            <button class="ss-pill-btn" [class.active]="ssScaleMode === 'fit'"
-                    (click)="setSsScaleMode('fit')" title="Fit — letterbox">
+            <button class="ss-pill-btn" [class.active]="ssScaleMode === 'fit'" (click)="setSsScaleMode('fit')"
+              title="Fit — letterbox">
               <i class="fas fa-compress-arrows-alt"></i><span>Fit</span>
             </button>
-            <button class="ss-pill-btn" [class.active]="ssScaleMode === 'fill'"
-                    (click)="setSsScaleMode('fill')" title="Fill — crop to frame">
+            <button class="ss-pill-btn" [class.active]="ssScaleMode === 'fill'" (click)="setSsScaleMode('fill')"
+              title="Fill — crop to frame">
               <i class="fas fa-expand"></i><span>Fill</span>
             </button>
-            <button class="ss-pill-btn" [class.active]="ssScaleMode === 'original'"
-                    (click)="setSsScaleMode('original')" title="Original size (1:1)">
+            <button class="ss-pill-btn" [class.active]="ssScaleMode === 'original'" (click)="setSsScaleMode('original')"
+              title="Original size (1:1)">
               <i class="fas fa-dot-circle"></i><span>1:1</span>
             </button>
           </div>
@@ -118,31 +115,29 @@
           <div class="ss-banner-sep"></div>
 
           <!-- Focus mode -->
-          <button class="ss-ctrl-btn" [class.ss-ctrl-active]="ssIsFocusMode"
-                  (click)="toggleSsFocusMode()"
-                  [title]="(ssIsFocusMode ? 'Exit focus' : 'Focus mode') + ' · Ctrl+Shift+X'">
+          <button class="ss-ctrl-btn" [class.ss-ctrl-active]="ssIsFocusMode" (click)="toggleSsFocusMode()"
+            [title]="(ssIsFocusMode ? 'Exit focus' : 'Focus mode') + ' · Ctrl+Shift+X'">
             <i class="fas" [class.fa-compress-alt]="ssIsFocusMode" [class.fa-expand-alt]="!ssIsFocusMode"></i>
             <span>{{ ssIsFocusMode ? 'Exit focus' : 'Focus' }}</span>
           </button>
 
           <!-- Pin / Spotlight -->
-          <button class="ss-ctrl-btn" [class.ss-ctrl-active]="ssIsPinned"
-                  (click)="toggleSsPinned()" title="Pin / spotlight this view">
+          <button class="ss-ctrl-btn" [class.ss-ctrl-active]="ssIsPinned" (click)="toggleSsPinned()"
+            title="Pin / spotlight this view">
             <i class="fas fa-thumbtack" [style.transform]="ssIsPinned ? 'none' : 'rotate(45deg)'"></i>
             <span>{{ ssIsPinned ? 'Unpin' : 'Pin' }}</span>
           </button>
 
           <!-- Full screen -->
-          <button class="ss-ctrl-btn" [class.ss-ctrl-active]="ssIsFullScreen"
-                  (click)="toggleSsFullScreen()"
-                  [title]="(ssIsFullScreen ? 'Exit full screen' : 'Full screen') + ' · Ctrl+Shift+F'">
+          <button class="ss-ctrl-btn" [class.ss-ctrl-active]="ssIsFullScreen" (click)="toggleSsFullScreen()"
+            [title]="(ssIsFullScreen ? 'Exit full screen' : 'Full screen') + ' · Ctrl+Shift+F'">
             <i class="fas" [class.fa-compress]="ssIsFullScreen" [class.fa-expand]="!ssIsFullScreen"></i>
             <span>{{ ssIsFullScreen ? 'Exit full' : 'Full screen' }}</span>
           </button>
 
           <!-- Switch display source (presenter only) -->
-          <button class="ss-ctrl-btn" *ngIf="isScreenSharing"
-                  (click)="openSsSourcePicker()" title="Switch display or window source">
+          <button class="ss-ctrl-btn" *ngIf="isScreenSharing" (click)="openSsSourcePicker()"
+            title="Switch display or window source">
             <i class="fas fa-layer-group"></i>
             <span>Switch</span>
           </button>
@@ -155,10 +150,11 @@
           <div class="ss-shortcut-group">
             <span class="ss-shortcut-pill" title="Ctrl+Shift+F — Full screen"><kbd>⌃⇧F</kbd></span>
             <span class="ss-shortcut-pill" title="Ctrl+Shift+X — Focus mode"><kbd>⌃⇧X</kbd></span>
-            <span class="ss-shortcut-pill" *ngIf="isScreenSharing" title="Ctrl+Shift+S — Stop sharing"><kbd>⌃⇧S</kbd></span>
+            <span class="ss-shortcut-pill" *ngIf="isScreenSharing"
+              title="Ctrl+Shift+S — Stop sharing"><kbd>⌃⇧S</kbd></span>
           </div>
           <button class="ss-stop-btn" *ngIf="isScreenSharing" (click)="toggleScreenShare()"
-                  title="Stop sharing (Ctrl+Shift+S)">
+            title="Stop sharing (Ctrl+Shift+S)">
             <i class="fas fa-stop-circle"></i>
             Stop sharing
           </button>
@@ -167,11 +163,9 @@
 
       <!-- ─ Main shared screen ─────────────────────────────────── -->
       <div class="ss-main">
-        <video #screenShareVideo autoplay playsinline [muted]="true"
-               class="ss-main-video"
-               [class.ss-scale-fit]="ssScaleMode === 'fit'"
-               [class.ss-scale-fill]="ssScaleMode === 'fill'"
-               [class.ss-scale-original]="ssScaleMode === 'original'">
+        <video #screenShareVideo autoplay playsinline [muted]="true" class="ss-main-video"
+          [class.ss-scale-fit]="ssScaleMode === 'fit'" [class.ss-scale-fill]="ssScaleMode === 'fill'"
+          [class.ss-scale-original]="ssScaleMode === 'original'">
         </video>
         <div class="ss-no-stream" *ngIf="isRemoteScreenSharing && !isScreenSharing">
           <i class="fas fa-desktop"></i>
@@ -356,8 +350,8 @@
       <!-- Idle: start recording -->
       <div class="rec-start-group" *ngIf="recStatus === 'idle'">
         <!-- Main record button -->
-        <button class="control-btn-light icon-only rec-btn"
-                (click)="startRecording('video')" title="Record meeting (video+audio)">
+        <button class="control-btn-light icon-only rec-btn" (click)="startRecording('video')"
+          title="Record meeting (video+audio)">
           <i class="fas fa-circle" style="color:#ef4444;"></i>
         </button>
         <!-- Mode sub-buttons -->
@@ -374,16 +368,14 @@
       <!-- Active: pause / resume / stop / discard -->
       <ng-container *ngIf="recStatus !== 'idle'">
         <!-- Pause / Resume -->
-        <button class="control-btn-light icon-only" [class.active-mode]="isRecPaused"
-                (click)="toggleRecordingPause()" [title]="isRecPaused ? 'Resume recording' : 'Pause recording'"
-                *ngIf="recStatus !== 'saving'">
+        <button class="control-btn-light icon-only" [class.active-mode]="isRecPaused" (click)="toggleRecordingPause()"
+          [title]="isRecPaused ? 'Resume recording' : 'Pause recording'" *ngIf="recStatus !== 'saving'">
           <i class="fas" [class.fa-pause]="!isRecPaused" [class.fa-play]="isRecPaused"></i>
         </button>
 
         <!-- Stop & save -->
-        <button class="control-btn-light icon-only rec-stop-btn"
-                (click)="stopRecording()" title="Stop recording & save"
-                *ngIf="recStatus !== 'saving'">
+        <button class="control-btn-light icon-only rec-stop-btn" (click)="stopRecording()" title="Stop recording & save"
+          *ngIf="recStatus !== 'saving'">
           <i class="fas fa-stop"></i>
         </button>
 
@@ -393,9 +385,8 @@
         </button>
 
         <!-- Discard -->
-        <button class="control-btn-light icon-only rec-discard-btn"
-                (click)="cancelRecording()" title="Discard recording"
-                *ngIf="recStatus !== 'saving'">
+        <button class="control-btn-light icon-only rec-discard-btn" (click)="cancelRecording()"
+          title="Discard recording" *ngIf="recStatus !== 'saving'">
           <i class="fas fa-trash-alt"></i>
         </button>
       </ng-container>
@@ -541,7 +532,7 @@
             <input type="text" class="flex-grow-1 border-0 bg-transparent fs-6 py-1"
               style="font-size:0.85rem !important;" placeholder="Type a message…" [(ngModel)]="newMessage"
               (keydown.enter)="sendMessage()">
-            <button class="btn p-0" style="color:#6366f1;" (click)="sendMessage()" [disabled]="!newMessage.trim()">
+            <button class="btn-send" (click)="sendMessage()" [disabled]="!newMessage.trim()">
               <i class="fas fa-paper-plane"></i>
             </button>
           </div>
@@ -605,7 +596,8 @@
         <div class="custom-dialog-header">
           <div class="d-flex align-items-center gap-2">
             <div class="icon-wrapper" [class.destructive]="dialogState.isDestructive">
-              <i class="fas" [class.fa-exclamation-triangle]="dialogState.isDestructive" [class.fa-info-circle]="!dialogState.isDestructive"></i>
+              <i class="fas" [class.fa-exclamation-triangle]="dialogState.isDestructive"
+                [class.fa-info-circle]="!dialogState.isDestructive"></i>
             </div>
             <span class="fw-bold">{{ dialogState.title }}</span>
           </div>
@@ -616,7 +608,8 @@
         </div>
         <div class="custom-dialog-footer">
           <button class="dialog-btn-cancel" (click)="dialogState.onCancel()">{{ dialogState.cancelText }}</button>
-          <button class="dialog-btn-confirm" [class.destructive]="dialogState.isDestructive" (click)="dialogState.onConfirm()">{{ dialogState.confirmText }}</button>
+          <button class="dialog-btn-confirm" [class.destructive]="dialogState.isDestructive"
+            (click)="dialogState.onConfirm()">{{ dialogState.confirmText }}</button>
         </div>
       </div>
     </div>

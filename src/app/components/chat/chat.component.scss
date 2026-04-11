@@ -1301,7 +1301,7 @@
   .action-btn-v2 {
     background: transparent;
     border: none;
-    color: #6b7280;
+    // color: #6b7280;
     font-size: 1.1rem;
     width: 32px;
     height: 32px;
@@ -1314,13 +1314,13 @@
 
     &:hover {
       background: #f3f4f6;
-      color: #111827;
+      // color: #111827;
     }
 
     &.send-icon-only {
       width: 38px;
       height: 32px;
-      color: #6b7280;
+      // color: #6b7280;
 
       i {
         font-size: 1.3rem;

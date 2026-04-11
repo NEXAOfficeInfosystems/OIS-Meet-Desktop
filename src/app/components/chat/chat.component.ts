@@ -93,6 +93,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   regularUsers: any[] = [];
   currentUserId: string | null = null;
   isEmojiPickerVisible = false;
+  isStickerPickerVisible = false;
+  isEditStickerPickerVisible = false;
+  commonStickers = ['✨', '🔥', '🎉', '😂', '🥰', '👍', '👏', '🚀', '💡', '🏆', '💯', '🤔'];
   commonEmojis = ['👍', '❤️', '😄', '😮', '😢', '🔥', '👏', '✅'];
   showRightPanel: boolean = true;
   mainActiveTab: 'chat' | 'attachments' | 'info' = 'chat';
@@ -2060,6 +2063,52 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   showEmojiPicker(event: MouseEvent): void {
     event.stopPropagation();
     this.isEmojiPickerVisible = !this.isEmojiPickerVisible;
+    this.isStickerPickerVisible = false;
+  }
+
+  toggleStickerPicker(event: MouseEvent): void {
+    event.stopPropagation();
+    this.isStickerPickerVisible = !this.isStickerPickerVisible;
+    this.isEmojiPickerVisible = false;
+  }
+
+  sendSticker(sticker: string): void {
+    this.isStickerPickerVisible = false;
+    const conversationId = this.selectedConversation?.id;
+    if (!conversationId) return;
+
+    // Send sticker as high-impact formatted HTML
+    const stickerHtml = `<div class="msg-sticker" style="font-size: 5rem; cursor: default; line-height: 1.2;">${sticker}</div>`;
+
+    this.store.dispatch(MessagesActions.sendMessage({
+      conversationId,
+      content: '[Sticker]',
+      messageType: 'Text',
+      formattedContent: stickerHtml,
+      replyToMessageId: this.replyToMessage?.id
+    }));
+
+    this.replyToMessage = null;
+    this.cdr.detectChanges();
+  }
+
+  toggleEditStickerPicker(event: MouseEvent): void {
+    event.stopPropagation();
+    this.isEditStickerPickerVisible = !this.isEditStickerPickerVisible;
+  }
+
+  saveEditAsSticker(sticker: string): void {
+    if (!this.editingMessage) return;
+    this.isEditStickerPickerVisible = false;
+    const stickerHtml = `<div class="msg-sticker" style="font-size: 5rem; cursor: default; line-height: 1.2;">${sticker}</div>`;
+    this.store.dispatch(MessagesActions.editMessage({
+      messageId: this.editingMessage.id,
+      content: '[Sticker]',
+      formattedContent: stickerHtml
+    }));
+    this.editingMessage = null;
+    this.editContent = '';
+    this.cdr.detectChanges();
   }
 
   @HostListener('document:click', ['$event'])
@@ -2092,6 +2141,24 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       const insidePicker = target.closest('.msg-emoji-picker') || target.closest('.react-btn');
       if (!insidePicker) {
         this.activeReactionMsgId = null;
+        this.cdr.detectChanges();
+      }
+    }
+
+    // Close edit sticker picker on outside click
+    if (this.isEditStickerPickerVisible) {
+      const insideEditSticker = target.closest('.msg-edit-sticker-container');
+      if (!insideEditSticker) {
+        this.isEditStickerPickerVisible = false;
+        this.cdr.detectChanges();
+      }
+    }
+
+    // Close main sticker picker on outside click
+    if (this.isStickerPickerVisible) {
+      const insideSticker = target.closest('.sticker-picker-container');
+      if (!insideSticker) {
+        this.isStickerPickerVisible = false;
         this.cdr.detectChanges();
       }
     }

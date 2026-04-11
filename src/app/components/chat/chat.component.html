@@ -283,7 +283,8 @@
           <button class="action-btn-v4 call-btn-v4" (click)="startCall('Audio')"
             [disabled]="!selectedUser || isCalling || isGroupCallStarting" title="Voice Call">
             <i class="bi bi-telephone" *ngIf="!(isCalling && callType === 'Audio') && !isGroupCallStarting"></i>
-            <div class="spinner-border spinner-border-sm" *ngIf="(isCalling && callType === 'Audio') || isGroupCallStarting"></div>
+            <div class="spinner-border spinner-border-sm"
+              *ngIf="(isCalling && callType === 'Audio') || isGroupCallStarting"></div>
           </button>
 
           <button class="action-btn-v4 call-btn-v4" (click)="startCall('Video')"
@@ -354,13 +355,30 @@
                     <!-- Inline edit mode -->
                     <ng-container *ngIf="editingMessage?.id === (msg.id || msg.Id); else msgDisplay">
                       <div class="msg-edit-area">
-                        <textarea class="msg-edit-textarea" #editTextarea
-                          [(ngModel)]="editContent"
-                          (keydown)="onEditKeydown($event)"
-                          rows="1"></textarea>
+                        <textarea class="msg-edit-textarea" #editTextarea [(ngModel)]="editContent"
+                          (keydown)="onEditKeydown($event)" rows="1"></textarea>
                         <div class="msg-edit-actions">
-                          <span class="edit-hint">Esc to <button class="edit-link-btn" (click)="cancelEdit()">cancel</button> · Enter to <button class="edit-link-btn" (click)="saveEdit()">save</button></span>
+                          <span class="edit-hint">Esc to <button class="edit-link-btn"
+                              (click)="cancelEdit()">cancel</button> · Enter to <button class="edit-link-btn"
+                              (click)="saveEdit()">save</button></span>
                           <div class="edit-btns">
+                            <div class="msg-edit-sticker-container" style="position: relative; display: inline-block;">
+                              <button class="edit-sticker-btn" title="Send sticker" (click)="toggleEditStickerPicker($event)"
+                                style="background: none; border: 1px solid #dee2e6; border-radius: 6px; padding: 2px 7px; cursor: pointer; font-size: 0.85rem; color: #6c757d; line-height: 1.5;">
+                                <i class="bi bi-sticky"></i>
+                              </button>
+                              <div class="sticker-picker-popover shadow border rounded p-2 bg-white animate-slide-up"
+                                *ngIf="isEditStickerPickerVisible"
+                                style="position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; min-width: 250px;">
+                                <button class="btn btn-light sticker-btn p-2" *ngFor="let s of commonStickers"
+                                  (click)="saveEditAsSticker(s)"
+                                  style="font-size: 2.2rem; line-height: 1; border-radius: 12px; transition: transform 0.2s ease, background 0.2s ease; overflow: hidden; display: flex; align-items: center; justify-content: center;"
+                                  (mousedown)="$event.preventDefault()"
+                                  onmouseover="this.style.transform='scale(1.15)';" onmouseout="this.style.transform='scale(1)';">
+                                  {{ s }}
+                                </button>
+                              </div>
+                            </div>
                             <button class="edit-cancel-btn" (click)="cancelEdit()">Cancel</button>
                             <button class="edit-save-btn" (click)="saveEdit()">Save</button>
                           </div>
@@ -369,33 +387,33 @@
                     </ng-container>
                     <!-- Normal display mode -->
                     <ng-template #msgDisplay>
-                    <div class="mb-0" *ngIf="msg.formattedContent || msg.content"
-                      [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
+                      <div class="mb-0" *ngIf="msg.formattedContent || msg.content"
+                        [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
 
-                    <!-- Legacy Attachments -->
-                    <div class="msg-attachments"
-                      *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
-                      <div class="file-chip animate-fade-in" *ngFor="let file of (msg.attachments || msg.Attachments)"
-                        (click)="openPreview(file)">
-                        <i class="bi fs-4" [class]="getFileIcon(file.fileName || file.FileName)"></i>
-                        <div class="file-info">
-                          <span class="file-name text-truncate" style="max-width: 150px;">{{ file.fileName ||
-                            file.FileName }}</span>
+                      <!-- Legacy Attachments -->
+                      <div class="msg-attachments"
+                        *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
+                        <div class="file-chip animate-fade-in" *ngFor="let file of (msg.attachments || msg.Attachments)"
+                          (click)="openPreview(file)">
+                          <i class="bi fs-4" [class]="getFileIcon(file.fileName || file.FileName)"></i>
+                          <div class="file-info">
+                            <span class="file-name text-truncate" style="max-width: 150px;">{{ file.fileName ||
+                              file.FileName }}</span>
+                          </div>
+                          <button class="btn-download"
+                            (click)="downloadFile(file.fileUrl || file.FileUrl, file.fileName || file.FileName); $event.stopPropagation()">
+                            <i class="bi bi-download"></i>
+                          </button>
                         </div>
-                        <button class="btn-download"
-                          (click)="downloadFile(file.fileUrl || file.FileUrl, file.fileName || file.FileName); $event.stopPropagation()">
-                          <i class="bi bi-download"></i>
-                        </button>
                       </div>
-                    </div>
-                    <div class="msg-attachments-hidden mt-1"
-                      *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
-                      <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
-                        <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}}
-                        Attachment(s)
-                        hidden
-                      </span>
-                    </div>
+                      <div class="msg-attachments-hidden mt-1"
+                        *ngIf="(msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
+                        <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
+                          <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}}
+                          Attachment(s)
+                          hidden
+                        </span>
+                      </div>
                     </ng-template>
                   </div> <!-- end msg-content -->
 
@@ -415,21 +433,16 @@
                   <!-- Hover action bar -->
                   <div class="msg-hover-bar" (click)="$event.stopPropagation()">
                     <!-- Emoji picker popup -->
-                    <div class="msg-emoji-picker"
-                         *ngIf="activeReactionMsgId === (msg.id || msg.Id)">
-                      <button class="pick-emoji"
-                              *ngFor="let e of commonEmojis"
-                              [class.picked]="hasReacted(msg, e)"
-                              [title]="e"
-                              (click)="toggleReaction(msg, e); closeReactionPicker()">
+                    <div class="msg-emoji-picker" *ngIf="activeReactionMsgId === (msg.id || msg.Id)">
+                      <button class="pick-emoji" *ngFor="let e of commonEmojis" [class.picked]="hasReacted(msg, e)"
+                        [title]="e" (click)="toggleReaction(msg, e); closeReactionPicker()">
                         {{ e }}
                       </button>
                     </div>
                     <!-- React button -->
-                    <button class="msg-act-btn react-btn"
-                            title="Add reaction"
-                            [class.active]="activeReactionMsgId === (msg.id || msg.Id)"
-                            (click)="openReactionPicker(msg.id || msg.Id, $event)">
+                    <button class="msg-act-btn react-btn" title="Add reaction"
+                      [class.active]="activeReactionMsgId === (msg.id || msg.Id)"
+                      (click)="openReactionPicker(msg.id || msg.Id, $event)">
                       <i class="bi bi-emoji-smile"></i>
                     </button>
                     <!-- Reply button -->
@@ -438,8 +451,7 @@
                     </button>
                     <!-- Edit button (own messages only) -->
                     <button class="msg-act-btn" title="Edit"
-                            *ngIf="msg.senderId?.toString() === currentUserId?.toString()"
-                            (click)="editMessage(msg)">
+                      *ngIf="msg.senderId?.toString() === currentUserId?.toString()" (click)="editMessage(msg)">
                       <i class="bi bi-pencil"></i>
                     </button>
                   </div>
@@ -548,9 +560,20 @@
                       </div>
                     </div>
 
-                    <button class="action-btn-v2" title="Stickers">
-                      <i class="bi bi-sticky"></i>
-                    </button>
+                    <div class="sticker-picker-container" style="position: relative;">
+                      <button class="action-btn-v2" title="Stickers" (click)="toggleStickerPicker($event)">
+                        <i class="bi bi-sticky"></i>
+                      </button>
+                      <div class="sticker-picker-popover shadow border rounded p-2 bg-white animate-slide-up" *ngIf="isStickerPickerVisible"
+                        style="position: absolute; bottom: calc(100% + 10px); left: -60px; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; min-width: 250px;">
+                        <button class="btn btn-light sticker-btn p-2" *ngFor="let s of commonStickers" (click)="sendSticker(s)" 
+                          style="font-size: 2.2rem; line-height: 1; border-radius: 12px; transition: transform 0.2s ease, background 0.2s ease; overflow: hidden; display: flex; align-items: center; justify-content: center;"
+                          (mousedown)="$event.preventDefault()"
+                          onmouseover="this.style.transform='scale(1.15)';" onmouseout="this.style.transform='scale(1)';">
+                          {{ s }}
+                        </button>
+                      </div>
+                    </div>
 
                     <input type="file" #fileInput style="display: none" (change)='onFileSelected($event)'>
                     <button class="action-btn-v2" (click)="fileInput.click()" title="Attach file">
@@ -560,9 +583,9 @@
 
                   <div class="actions-right">
                     <span class="v-separator"></span>
-                    <button class="action-btn-v2 send-icon-only" (click)="sendMessage()"
+                    <button class="action-btn-v2  btn-send" (click)="sendMessage()"
                       [disabled]="isSendingMessage || (!newMessage.trim() && !isUploading)">
-                      <i class="bi bi-send" *ngIf="!isSendingMessage"></i>
+                      <i class="bi bi-send-fill" *ngIf="!isSendingMessage"></i>
                       <div class="spinner-border spinner-border-sm" *ngIf="isSendingMessage"></div>
                     </button>
                   </div>

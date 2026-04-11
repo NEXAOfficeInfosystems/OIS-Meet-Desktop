@@ -33,6 +33,31 @@
   --bg-card: var(--fluent-bg-surface);
   --bg-main: var(--fluent-bg-canvas);
   --text-primary: var(--fluent-text-primary);
+
+
+
+
+  --accent-color: #6366f1;
+  --accent-glow: rgba(99, 102, 241, 0.2);
+  --danger-color: #ef4444;
+  --success-color: #10b981;
+  --glass-bg: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --card-bg: #ffffff;
+  --sidebar-width: 360px;
+
+  --meeting-bg: #f8fafc;
+  --meeting-text: #1e293b;
+  --header-bg: #ffffff;
+  --sidebar-bg: #ffffff;
+  --card-bg: #ffffff;
+  --border-color: #e2e8f0;
+  --border-color-soft: #edf0f5;
+  --control-bar-bg: #ffffff;
+  --chat-bubble-me: #4f46e5;
+  --chat-bubble-other: #f1f5f9;
+  --chat-text-me: #ffffff;
+  --chat-text-other: #1e293b;
 }
 
 body.theme-dark {
@@ -170,4 +195,16 @@ body.theme-dark {
       color: var(--text-primary);
     }
   }
+}
+
+
+.btn-send {
+  color: var(--accent-color);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
 }

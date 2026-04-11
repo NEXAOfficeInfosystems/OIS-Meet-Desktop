@@ -12,27 +12,6 @@
   overflow: hidden;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 
-  --accent-color: #6366f1;
-  --accent-glow: rgba(99, 102, 241, 0.2);
-  --danger-color: #ef4444;
-  --success-color: #10b981;
-  --glass-bg: rgba(255, 255, 255, 0.95);
-  --glass-border: rgba(0, 0, 0, 0.08);
-  --card-bg: #ffffff;
-  --sidebar-width: 360px;
-
-  --meeting-bg: #f8fafc;
-  --meeting-text: #1e293b;
-  --header-bg: #ffffff;
-  --sidebar-bg: #ffffff;
-  --card-bg: #ffffff;
-  --border-color: #e2e8f0;
-  --border-color-soft: #edf0f5;
-  --control-bar-bg: #ffffff;
-  --chat-bubble-me: #4f46e5;
-  --chat-bubble-other: #f1f5f9;
-  --chat-text-me: #ffffff;
-  --chat-text-other: #1e293b;
 
 }
 
@@ -1490,16 +1469,29 @@
 
   input {
     color: #1a202c !important;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
 
     &::placeholder {
       color: #94a3b8 !important;
     }
+
+    &:focus,
+    &:active {
+      color: #1a202c !important;
+      background: #f8fafc !important;
+      border: none !important
+    }
+
   }
 
   &:focus-within {
     border-color: var(--accent-color) !important;
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
   }
+
+
 }
 
 /* ── Add Participant Panel ────────────────────────────────────── */
