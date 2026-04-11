@@ -32,6 +32,17 @@
       </div>
     </header>
 
+    <!-- ── Recording Indicator (shows when recording is active) ── -->
+    <div class="rec-indicator-bar" *ngIf="recStatus !== 'idle'">
+      <span class="rec-dot" [class.rec-dot-paused]="isRecPaused"></span>
+      <i class="fas" [class.fa-video]="recMode === 'video'" [class.fa-microphone]="recMode === 'audio'"></i>
+      <span class="rec-label" *ngIf="recStatus === 'recording'">REC</span>
+      <span class="rec-label rec-label-paused" *ngIf="recStatus === 'paused'">PAUSED</span>
+      <span class="rec-label rec-label-saving" *ngIf="recStatus === 'saving'">Saving…</span>
+      <span class="rec-timer">{{ recTime }}</span>
+      <span class="rec-size" *ngIf="recSizeKb > 0">{{ recSizeKb }} KB</span>
+    </div>
+
     <!-- ── Info Bar ────────────────────────────────────────────── -->
     <!-- <div class="meeting-info-bar">
       <div class="info-left">
@@ -65,44 +76,118 @@
     </div> -->
 
     <!-- ── Screen Share Stage ───────────────────────────────────── -->
-    <div class="screen-share-stage" *ngIf="isScreenSharing || isRemoteScreenSharing">
+    <div class="screen-share-stage"
+         [class.ss-fullscreen]="ssIsFullScreen"
+         [class.ss-focus-mode]="ssIsFocusMode"
+         [class.ss-pinned]="ssIsPinned"
+         *ngIf="isScreenSharing || isRemoteScreenSharing">
 
-      <!-- Banner -->
+      <!-- ─ Control Banner (always visible) ───────────────────── -->
       <div class="ss-banner">
+
+        <!-- LEFT: status -->
         <div class="ss-banner-left">
           <span class="ss-live-dot"></span>
           <i class="fas fa-desktop"></i>
           <span *ngIf="isScreenSharing">You are presenting</span>
           <span *ngIf="!isScreenSharing">{{ screenShareOwnerName }} is presenting</span>
-        </div>
-        <div class="ss-banner-right">
           <span class="ss-participant-chip">
-            <i class="fas fa-users"></i> {{ participants.length + 1 }} in call
+            <i class="fas fa-users"></i> {{ participants.length + 1 }}
           </span>
-          <button class="ss-stop-btn" *ngIf="isScreenSharing" (click)="toggleScreenShare()">
+        </div>
+
+        <!-- CENTRE: Scale mode + view controls -->
+        <div class="ss-banner-centre">
+
+          <!-- Scale pill -->
+          <div class="ss-scale-pill">
+            <button class="ss-pill-btn" [class.active]="ssScaleMode === 'fit'"
+                    (click)="setSsScaleMode('fit')" title="Fit — letterbox">
+              <i class="fas fa-compress-arrows-alt"></i><span>Fit</span>
+            </button>
+            <button class="ss-pill-btn" [class.active]="ssScaleMode === 'fill'"
+                    (click)="setSsScaleMode('fill')" title="Fill — crop to frame">
+              <i class="fas fa-expand"></i><span>Fill</span>
+            </button>
+            <button class="ss-pill-btn" [class.active]="ssScaleMode === 'original'"
+                    (click)="setSsScaleMode('original')" title="Original size (1:1)">
+              <i class="fas fa-dot-circle"></i><span>1:1</span>
+            </button>
+          </div>
+
+          <div class="ss-banner-sep"></div>
+
+          <!-- Focus mode -->
+          <button class="ss-ctrl-btn" [class.ss-ctrl-active]="ssIsFocusMode"
+                  (click)="toggleSsFocusMode()"
+                  [title]="(ssIsFocusMode ? 'Exit focus' : 'Focus mode') + ' · Ctrl+Shift+X'">
+            <i class="fas" [class.fa-compress-alt]="ssIsFocusMode" [class.fa-expand-alt]="!ssIsFocusMode"></i>
+            <span>{{ ssIsFocusMode ? 'Exit focus' : 'Focus' }}</span>
+          </button>
+
+          <!-- Pin / Spotlight -->
+          <button class="ss-ctrl-btn" [class.ss-ctrl-active]="ssIsPinned"
+                  (click)="toggleSsPinned()" title="Pin / spotlight this view">
+            <i class="fas fa-thumbtack" [style.transform]="ssIsPinned ? 'none' : 'rotate(45deg)'"></i>
+            <span>{{ ssIsPinned ? 'Unpin' : 'Pin' }}</span>
+          </button>
+
+          <!-- Full screen -->
+          <button class="ss-ctrl-btn" [class.ss-ctrl-active]="ssIsFullScreen"
+                  (click)="toggleSsFullScreen()"
+                  [title]="(ssIsFullScreen ? 'Exit full screen' : 'Full screen') + ' · Ctrl+Shift+F'">
+            <i class="fas" [class.fa-compress]="ssIsFullScreen" [class.fa-expand]="!ssIsFullScreen"></i>
+            <span>{{ ssIsFullScreen ? 'Exit full' : 'Full screen' }}</span>
+          </button>
+
+          <!-- Switch display source (presenter only) -->
+          <button class="ss-ctrl-btn" *ngIf="isScreenSharing"
+                  (click)="openSsSourcePicker()" title="Switch display or window source">
+            <i class="fas fa-layer-group"></i>
+            <span>Switch</span>
+          </button>
+
+        </div>
+
+        <!-- RIGHT: stop button + keyboard hints -->
+        <div class="ss-banner-right">
+          <!-- Keyboard shortcut hints pill -->
+          <div class="ss-shortcut-group">
+            <span class="ss-shortcut-pill" title="Ctrl+Shift+F — Full screen"><kbd>⌃⇧F</kbd></span>
+            <span class="ss-shortcut-pill" title="Ctrl+Shift+X — Focus mode"><kbd>⌃⇧X</kbd></span>
+            <span class="ss-shortcut-pill" *ngIf="isScreenSharing" title="Ctrl+Shift+S — Stop sharing"><kbd>⌃⇧S</kbd></span>
+          </div>
+          <button class="ss-stop-btn" *ngIf="isScreenSharing" (click)="toggleScreenShare()"
+                  title="Stop sharing (Ctrl+Shift+S)">
             <i class="fas fa-stop-circle"></i>
             Stop sharing
           </button>
         </div>
       </div>
 
-      <!-- Main shared screen -->
+      <!-- ─ Main shared screen ─────────────────────────────────── -->
       <div class="ss-main">
-        <video #screenShareVideo autoplay playsinline [muted]="true" class="ss-main-video"></video>
+        <video #screenShareVideo autoplay playsinline [muted]="true"
+               class="ss-main-video"
+               [class.ss-scale-fit]="ssScaleMode === 'fit'"
+               [class.ss-scale-fill]="ssScaleMode === 'fill'"
+               [class.ss-scale-original]="ssScaleMode === 'original'">
+        </video>
         <div class="ss-no-stream" *ngIf="isRemoteScreenSharing && !isScreenSharing">
           <i class="fas fa-desktop"></i>
           <p>{{ screenShareOwnerName }}'s screen</p>
         </div>
       </div>
 
-      <!-- Participant thumbnail strip -->
-      <div class="ss-thumbs">
+      <!-- ─ Participant thumbnail strip ─────────────────────────── -->
+      <div class="ss-thumbs" [class.ss-thumbs-hidden]="ssIsFocusMode">
         <!-- Local -->
         <div class="ss-thumb" [class.ss-thumb-speaking]="isSpeaking" [class.ss-thumb-muted]="isMuted">
           <video *ngIf="!isVideoOff && localStream" [srcObject]="localStream" autoplay playsinline muted
             class="ss-thumb-vid"></video>
-          <div class="ss-thumb-avatar" *ngIf="isVideoOff || !localStream" style="background:#6366f1;">{{
-            getInitials(userFullName) }}</div>
+          <div class="ss-thumb-avatar" *ngIf="isVideoOff || !localStream" style="background:#6366f1;">
+            {{ getInitials(userFullName) }}
+          </div>
           <div class="ss-thumb-label">You</div>
           <div class="ss-thumb-mic">
             <i class="fas" [class.fa-microphone]="!isMuted" [class.fa-microphone-slash]="isMuted"></i>
@@ -260,6 +345,60 @@
         (click)="toggleLiveTranscriptionFromButton()" title="Live transcription">
         <i class="fas fa-closed-captioning"></i>
       </button>
+
+      <div class="controls-divider"></div>
+
+      <!-- ─ Recording controls ────────────────────────────────────
+           When idle: a single record button with a mode dropdown.
+           When active: pause/resume + stop + discard controls.
+      ─────────────────────────────────────────────────────────── -->
+
+      <!-- Idle: start recording -->
+      <div class="rec-start-group" *ngIf="recStatus === 'idle'">
+        <!-- Main record button -->
+        <button class="control-btn-light icon-only rec-btn"
+                (click)="startRecording('video')" title="Record meeting (video+audio)">
+          <i class="fas fa-circle" style="color:#ef4444;"></i>
+        </button>
+        <!-- Mode sub-buttons -->
+        <div class="rec-mode-btns">
+          <button class="rec-mode-btn" (click)="startRecording('video')" title="Record video + audio">
+            <i class="fas fa-video"></i>
+          </button>
+          <button class="rec-mode-btn" (click)="startRecording('audio')" title="Record audio only">
+            <i class="fas fa-microphone"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Active: pause / resume / stop / discard -->
+      <ng-container *ngIf="recStatus !== 'idle'">
+        <!-- Pause / Resume -->
+        <button class="control-btn-light icon-only" [class.active-mode]="isRecPaused"
+                (click)="toggleRecordingPause()" [title]="isRecPaused ? 'Resume recording' : 'Pause recording'"
+                *ngIf="recStatus !== 'saving'">
+          <i class="fas" [class.fa-pause]="!isRecPaused" [class.fa-play]="isRecPaused"></i>
+        </button>
+
+        <!-- Stop & save -->
+        <button class="control-btn-light icon-only rec-stop-btn"
+                (click)="stopRecording()" title="Stop recording & save"
+                *ngIf="recStatus !== 'saving'">
+          <i class="fas fa-stop"></i>
+        </button>
+
+        <!-- Saving spinner -->
+        <button class="control-btn-light icon-only" disabled *ngIf="recStatus === 'saving'">
+          <i class="fas fa-spinner fa-spin"></i>
+        </button>
+
+        <!-- Discard -->
+        <button class="control-btn-light icon-only rec-discard-btn"
+                (click)="cancelRecording()" title="Discard recording"
+                *ngIf="recStatus !== 'saving'">
+          <i class="fas fa-trash-alt"></i>
+        </button>
+      </ng-container>
 
       <div class="controls-divider"></div>
 

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit, NgZone, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit, NgZone, ChangeDetectionStrategy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -30,6 +30,8 @@ import {
 } from '../../core/services/live-transcription.service';
 import { UserService } from '../../core/services/user.service';
 import { CallService } from '../../core/services/call.service';
+import { ScreenShareStateService, ScreenShareState } from '../../core/services/screen-share-state.service';
+import { MeetingRecorderService, RecordingMode, RecordingState } from '../../core/services/meeting-recorder.service';
 
 @Component({
   selector: 'app-meeting',
@@ -60,7 +62,6 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   isScreenSharing: boolean = false;
   isRemoteScreenSharing: boolean = false;
   screenShareOwnerName: string = 'Your Screen';
-  isRecording: boolean = false;
   isSpeaking: boolean = false;
   showParticipants: boolean = false;
   showChat: boolean = false;
@@ -170,6 +171,26 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private readonly maxPeerRestartAttempts = 1;
 
+  // ── Screen-share overlay auto-hide timer ─────────────────────────────────
+  private ssControlsHideTimer: any = null;
+
+  // ── ScreenShare state proxy (used by template) ────────────────────────────
+  get ssState(): ScreenShareState { return this.ssStateService.state; }
+  get ssIsFullScreen(): boolean   { return this.ssStateService.state.isFullScreen; }
+  get ssIsFocusMode(): boolean    { return this.ssStateService.state.isFocusMode; }
+  get ssIsPinned(): boolean       { return this.ssStateService.state.isPinned; }
+  get ssScaleMode(): string       { return this.ssStateService.state.scaleMode; }
+  get ssShowControls(): boolean   { return this.ssStateService.state.showControls; }
+
+  // ── Recording state proxies (used by template) ────────────────────────────
+  get recState(): RecordingState  { return this.recorderService.state; }
+  get isRecording(): boolean      { return this.recorderService.isRecording; }
+  get isRecPaused(): boolean      { return this.recorderService.isPaused; }
+  get recStatus(): string         { return this.recorderService.state.status; }
+  get recTime(): string           { return this.recorderService.state.formattedTime; }
+  get recSizeKb(): number         { return this.recorderService.state.sizeKb; }
+  get recMode(): string           { return this.recorderService.state.mode; }
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
@@ -186,7 +207,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     private settingsService: SettingsService,
     private userService: UserService,
     private cdr: ChangeDetectorRef,
-    private callService: CallService
+    private callService: CallService,
+    public  ssStateService: ScreenShareStateService,
+    public  recorderService: MeetingRecorderService
   ) {
     this.userFullName = this.sessionService.getFullName() || 'User';
     this.oisMeetUserId = this.sessionService.getOISMeetUserId() || '';
@@ -2229,7 +2252,278 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.mediaStream;
   }
 
+  // ── Keyboard Shortcuts ────────────────────────────────────────────────────
+  // Ctrl/Cmd + Shift + F → toggle full screen
+  // Ctrl/Cmd + Shift + X → toggle focus mode
+  // Ctrl/Cmd + Shift + S → stop sharing
+  @HostListener('document:keydown', ['$event'])
+  onKeyboardShortcut(event: KeyboardEvent): void {
+    const ctrl = event.ctrlKey || event.metaKey;
+    if (!ctrl || !event.shiftKey) { return; }
+
+    switch (event.code) {
+      case 'KeyF':
+        if (this.isScreenSharing || this.isRemoteScreenSharing) {
+          event.preventDefault();
+          this.toggleSsFullScreen();
+        }
+        break;
+      case 'KeyX':
+        if (this.isScreenSharing || this.isRemoteScreenSharing) {
+          event.preventDefault();
+          this.toggleSsFocusMode();
+        }
+        break;
+      case 'KeyS':
+        if (this.isScreenSharing) {
+          event.preventDefault();
+          this.toggleScreenShare();
+        }
+        break;
+    }
+  }
+
+  // ── Full-Screen ───────────────────────────────────────────────────────────
+  // Electron's renderer blocks requestFullscreen() in many configurations.
+  // Strategy: ALWAYS toggle the CSS state first (.ss-fullscreen applies
+  // position:fixed; inset:0; z-index:9999) so the button works regardless.
+  // Then attempt the native Fullscreen API as a bonus — if it succeeds, great;
+  // if it throws, the CSS overlay is already in effect.
+  toggleSsFullScreen(): void {
+    const isCurrentlyFull = this.ssStateService.state.isFullScreen;
+
+    if (isCurrentlyFull) {
+      // ── EXIT: remove CSS class first, then try native exit ──────────────
+      this.ssStateService.patch({ isFullScreen: false });
+      this.cdr.markForCheck();
+
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } else {
+      // ── ENTER: apply CSS class first, then try native API ───────────────
+      this.ssStateService.patch({ isFullScreen: true });
+      this.cdr.markForCheck();
+
+      const el = document.querySelector('.screen-share-stage') as HTMLElement | null;
+      if (el && el.requestFullscreen) {
+        // Fire-and-forget; don't await — don't let a rejected promise revert state
+        el.requestFullscreen().catch((err) => {
+          console.info('[FullScreen] Native API unavailable (Electron), using CSS overlay:', err?.message ?? err);
+          // CSS overlay is already active — no rollback needed
+        });
+      }
+    }
+  }
+
+  // Sync state if the OS/browser exits native fullscreen (e.g. user presses Escape
+  // in a real browser). In Electron this event usually never fires.
+  @HostListener('document:fullscreenchange')
+  onFullScreenChange(): void {
+    // Only update state if native fullscreen is actually being used
+    // (i.e. we have a fullscreenElement). Don't override CSS-only mode.
+    if (document.fullscreenElement) {
+      this.ssStateService.patch({ isFullScreen: true });
+    } else if (!document.fullscreenElement && this.ssStateService.state.isFullScreen) {
+      // The browser exited native fullscreen (e.g. Escape in browser) — mirror it
+      this.ssStateService.patch({ isFullScreen: false });
+    }
+    this.cdr.markForCheck();
+  }
+
+  // Escape key: exit CSS full-screen (works in Electron where native API is unavailable)
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.ssStateService.state.isFullScreen) {
+      this.ssStateService.patch({ isFullScreen: false });
+      this.cdr.markForCheck();
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }
+
+  // ── Focus Mode ────────────────────────────────────────────────────────────
+  toggleSsFocusMode(): void {
+    this.ssStateService.toggleFocusMode();
+    this.cdr.markForCheck();
+  }
+
+  // ── Pin / Spotlight ───────────────────────────────────────────────────────
+  toggleSsPinned(): void {
+    this.ssStateService.togglePinned();
+    this.cdr.markForCheck();
+  }
+
+  // ── Aspect Ratio / Scale Mode ─────────────────────────────────────────────
+  cycleSsScaleMode(): void {
+    const modes: Array<ScreenShareState['scaleMode']> = ['fit', 'fill', 'original'];
+    const cur = this.ssStateService.state.scaleMode;
+    const next = modes[(modes.indexOf(cur) + 1) % modes.length];
+    this.ssStateService.setScaleMode(next);
+    this.cdr.markForCheck();
+  }
+
+  setSsScaleMode(mode: ScreenShareState['scaleMode']): void {
+    this.ssStateService.setScaleMode(mode);
+    this.cdr.markForCheck();
+  }
+
+  // ── Presenter Controls Auto-hide ─────────────────────────────────────────
+  // Run mouse-move detection outside Angular to avoid triggering CD on every
+  // mouse event; only re-enter when the timer fires.
+  onSsMouseMove(): void {
+    // Show controls immediately (already inside Angular from the template event)
+    this.ssStateService.showPresenterControls();
+    this.cdr.markForCheck();
+
+    if (this.ssControlsHideTimer) {
+      clearTimeout(this.ssControlsHideTimer);
+    }
+    // Hide after 3 s of inactivity – run timer outside zone to avoid CD ticks
+    this.ngZone.runOutsideAngular(() => {
+      this.ssControlsHideTimer = setTimeout(() => {
+        this.ngZone.run(() => {
+          this.ssStateService.hidePresenterControls();
+          this.cdr.markForCheck();
+        });
+      }, 3000);
+    });
+  }
+
+  // ── Multi-Display / Window Source Picker ─────────────────────────────────
+  // Re-starts the screen share with a freshly chosen source from the OS picker.
+  async openSsSourcePicker(): Promise<void> {
+    if (!this.isScreenSharing) { return; }
+
+    const oisMeet = (window as any).oisMeet;
+    if (!oisMeet || typeof oisMeet.getDesktopSources !== 'function') {
+      // Browser: re-trigger getDisplayMedia which shows the built-in picker
+      await this.stopScreenSharing();
+      await this.toggleScreenShare();
+      return;
+    }
+
+    // Electron: fetch all screen + window sources and let the user pick
+    // For now we cycle to the next available screen source (a full picker
+    // dialog can be built as a future enhancement using these thumbnails).
+    const sources: Array<{ id: string; name: string; thumbnail: string }> =
+      await oisMeet.getDesktopSources({ types: ['screen', 'window'] });
+
+    if (!sources || sources.length <= 1) {
+      this.snackBar.open('No other sources available', 'Close', { duration: 2000 });
+      return;
+    }
+
+    // Stop the current share and immediately restart with the next source
+    const oldStream = this.screenStream;
+    const currentId = (oldStream?.getVideoTracks()[0] as any)?.getSettings?.()?.deviceId ?? '';
+    const next = sources.find(s => s.id !== currentId) ?? sources[0];
+
+    try {
+      const newStream = await (navigator.mediaDevices as any).getUserMedia({
+        audio: false,
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: next.id,
+            minWidth: 1280, maxWidth: 1920, minHeight: 720, maxHeight: 1080
+          }
+        }
+      });
+
+      this.screenStream = newStream;
+      if (this.screenShareVideo) {
+        this.screenShareVideo.nativeElement.srcObject = newStream;
+      }
+
+      // Replace video track in all peers
+      const newTrack = newStream.getVideoTracks()[0];
+      this.peers.forEach(peer => {
+        try {
+          const pc: RTCPeerConnection = (peer as any)._pc;
+          const sender = pc?.getSenders().find(s => s.track?.kind === 'video');
+          sender?.replaceTrack(newTrack);
+        } catch { }
+      });
+
+      // Stop old tracks
+      oldStream?.getTracks().forEach(t => t.stop());
+      this.snackBar.open(`Switched to: ${next.name}`, 'Close', { duration: 2000 });
+    } catch (err) {
+      console.error('Source picker switch failed:', err);
+    }
+  }
+
+  // ── Recording ─────────────────────────────────────────────────────────────
+
+  /**
+   * Start a new recording.
+   * @param mode 'video' captures camera/screen + mic; 'audio' captures mic only.
+   */
+  async startRecording(mode: RecordingMode = 'video'): Promise<void> {
+    if (!this.recorderService.isIdle) { return; }
+
+    const streams: MediaStream[] = [];
+
+    // Always include the local mic+camera stream
+    if (this.mediaStream) {
+      streams.push(this.mediaStream);
+    }
+
+    // If screen sharing is active, add the screen stream (gives best composite)
+    if (this.isScreenSharing && this.screenStream) {
+      streams.push(this.screenStream);
+    }
+
+    if (streams.length === 0) {
+      this.snackBar.open('No media stream available to record.', 'Close', { duration: 3000 });
+      return;
+    }
+
+    try {
+      await this.recorderService.start(streams, mode);
+      // Subscribe to state changes so the template (timer/size) re-renders
+      this.recorderService.state$
+        .pipe(takeUntil(this.destroy$))
+        .subscribe(() => this.cdr.markForCheck());
+
+      this.snackBar.open(
+        `${mode === 'audio' ? '🎙️ Audio' : '🎥 Video'} recording started`,
+        'OK', { duration: 2500 }
+      );
+    } catch (err) {
+      console.error('Recording start failed:', err);
+      this.snackBar.open('Could not start recording. Check permissions.', 'Close', { duration: 4000 });
+    }
+  }
+
+  /** Pause if recording, resume if paused. */
+  toggleRecordingPause(): void {
+    if (this.recorderService.isRecording) {
+      this.recorderService.pause();
+    } else if (this.recorderService.isPaused) {
+      this.recorderService.resume();
+    }
+    this.cdr.markForCheck();
+  }
+
+  /** Stop recording and trigger auto-download of the .webm file. */
+  stopRecording(): void {
+    this.recorderService.stop();
+    this.snackBar.open('Recording saved — check your Downloads folder.', '✔', { duration: 4000 });
+    this.cdr.markForCheck();
+  }
+
+  /** Discard the current recording without saving. */
+  cancelRecording(): void {
+    this.recorderService.cancel();
+    this.snackBar.open('Recording discarded.', 'Close', { duration: 2000 });
+    this.cdr.markForCheck();
+  }
+
   // ── Volume ────────────────────────────────────────────────────────────────
+
   toggleVolumeControl(event?: MouseEvent): void {
     event?.stopPropagation();
     this.showVolumeControl = !this.showVolumeControl;
@@ -2521,6 +2815,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
       this.isScreenSharing = true;
       this.screenShareOwnerName = 'Your Screen';
+      this.ssStateService.patch({ isSharing: true, showControls: true });
       this.cdr.detectChanges(); // render screen-share-stage so #screenShareVideo is in DOM
       if (this.screenShareVideo) {
         this.screenShareVideo.nativeElement.srcObject = this.screenStream;
@@ -2559,6 +2854,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async stopScreenSharing() {
     console.log('Stopping screen share');
+
+    // Reset centralized state and exit full-screen if active
+    this.ssStateService.reset();
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    if (this.ssControlsHideTimer) {
+      clearTimeout(this.ssControlsHideTimer);
+      this.ssControlsHideTimer = null;
+    }
 
     if (this.livekitActive) {
       this.isScreenSharing = false;
@@ -2625,89 +2930,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  async toggleRecording() {
-    if (!this.isRecording) {
-      await this.startMeetingRecording();
-    } else {
-      await this.stopMeetingRecording();
-    }
-    this.refreshTooltips();
-  }
-
   setSidebarTab(tab: 'chat' | 'transcription'): void {
     this.activeSidebarTab = tab;
 
     if (tab === 'chat') {
       this.scrollChatToBottom();
-    }
-  }
-
-  private async startMeetingRecording() {
-    if (!this.mediaStream) {
-      this.snackBar.open('No audio stream available', 'Close', { duration: 3000 });
-      return;
-    }
-
-    const audioTracks = this.mediaStream.getAudioTracks();
-    const hasLocalAudio = audioTracks.length > 0;
-    const hasRemoteAudio = this.remoteAudioStreams.size > 0;
-
-    if (!hasLocalAudio && !hasRemoteAudio) {
-      this.snackBar.open('No audio sources available for recording', 'Close', { duration: 3000 });
-      return;
-    }
-
-    console.log(`🎙️ Starting recording with local audio: ${hasLocalAudio}, remote streams: ${this.remoteAudioStreams.size}`);
-
-    const started = await this.audioRecorderService.startRecordingFromMeeting(this.mediaStream, this.remoteAudioStreams);
-
-    // Fallback: also add any already-tracked remote streams (covers edge cases where
-    // DOM audio elements aren't found yet even though streams are present).
-    if (started && this.remoteAudioStreams.size > 0) {
-      this.remoteAudioStreams.forEach((stream, id) => {
-        this.audioRecorderService.addRemoteStream(id, stream);
-      });
-    }
-
-    if (started) {
-      this.isRecording = true;
-      this.snackBar.open('Recording started', 'Close', { duration: 2000 });
-      console.log('🎙️ Meeting recording started');
-    } else {
-      this.snackBar.open('Failed to start recording', 'Close', { duration: 3000 });
-    }
-  }
-
-  private async stopMeetingRecording() {
-    // Requirement: after stopping recording, open the sidebar and select Transcription tab
-    this.showChat = true;
-    this.activeSidebarTab = 'transcription';
-    this.transcriptionLoading = true;
-    this.transcriptionError = null;
-    this.transcriptionSegments = [];
-
-    const audioBlob = await this.audioRecorderService.stopRecording();
-
-    if (audioBlob) {
-      this.isRecording = false;
-      this.snackBar.open('Recording stopped. Saving...', 'Close', { duration: 2000 });
-
-      const result = await this.audioRecorderService.saveRecordingAsWav(audioBlob, this.meetingId);
-
-      if (result.success) {
-        if (result.filePath) {
-          this.snackBar.open(`Recording saved: ${result.filePath}`, 'Close', { duration: 5000 });
-        } else {
-          this.snackBar.open('Recording saved successfully', 'Close', { duration: 3000 });
-        }
-        console.log('🎙️ Meeting recording saved:', result.filePath);
-      } else if (!result.canceled) {
-        this.snackBar.open(`Failed to save recording: ${result.error}`, 'Close', { duration: 5000 });
-      }
-    } else {
-      this.isRecording = false;
-      this.transcriptionLoading = false;
-      this.snackBar.open('No recording data available', 'Close', { duration: 3000 });
     }
   }
 
@@ -3237,6 +3464,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private performComponentCleanup(leaveMeeting: boolean): void {
     this.stopTimer();
+
+    // Stop any active recording so MediaRecorder/timer don't outlive the component
+    if (!this.recorderService.isIdle) {
+      this.recorderService.cancel();
+    }
 
     if (this.connectPeersTimeout) {
       clearTimeout(this.connectPeersTimeout);
