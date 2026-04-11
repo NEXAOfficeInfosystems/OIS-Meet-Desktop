@@ -88,7 +88,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   oisMeetUsers: any[] = [];
   filteredInviteUsers: any[] = [];
   inviteSearchQuery: string = '';
-  isInviting: boolean = false;
+  invitingUserIds = new Set<string>();
+  invitedUserIds = new Set<string>();
+  participantSearchQuery: string = '';
   isVoiceMode: boolean = false;
   showAddParticipantPanel: boolean = false;
 
@@ -3367,14 +3369,39 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     this.cdr.markForCheck();
   }
 
+  get filteredParticipants(): Participant[] {
+    if (!this.participantSearchQuery.trim()) return this.participants;
+    const q = this.participantSearchQuery.toLowerCase();
+    return this.participants.filter(p => p.name.toLowerCase().includes(q));
+  }
+
+  matchesSelfSearch(): boolean {
+    if (!this.participantSearchQuery.trim()) return true;
+    return this.userFullName.toLowerCase().includes(this.participantSearchQuery.toLowerCase());
+  }
+
+  filterParticipantsList(): void {
+    this.cdr.markForCheck();
+  }
+
   inviteUser(user: any): void {
-    if (this.isInviting) return;
-    this.isInviting = true;
+    const uid = user.oisMeetUserId;
+    if (this.invitingUserIds.has(uid)) return;
+    this.invitingUserIds = new Set([...this.invitingUserIds, uid]);
     this.cdr.markForCheck();
 
-    const finalize = (msg: string) => {
+    const finalize = (msg: string, success = true) => {
       this.ngZone.run(() => {
-        this.isInviting = false;
+        this.invitingUserIds.delete(uid);
+        this.invitingUserIds = new Set(this.invitingUserIds);
+        if (success) {
+          this.invitedUserIds = new Set([...this.invitedUserIds, uid]);
+          setTimeout(() => {
+            this.invitedUserIds.delete(uid);
+            this.invitedUserIds = new Set(this.invitedUserIds);
+            this.cdr.markForCheck();
+          }, 5000);
+        }
         this.snackBar.open(msg, 'OK', { duration: 2500 });
         this.cdr.markForCheck();
       });
@@ -3382,15 +3409,15 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Use CallService to "call" the participant into the meeting
     this.callService.startCall(user.oisMeetUserId, user.fullName, this.userFullName, 'Video', this.meetingId)
-      .then(() => finalize(`Calling ${user.fullName}…`))
+      .then(() => finalize(`Calling ${user.fullName}…`, true))
       .catch(err => {
         console.error('Call failed, falling back to meeting invite:', err);
         // Fallback: send a meeting invite notification
         this.signalRService.inviteToMeeting(user.oisMeetUserId, this.meetingId, this.userFullName)
-          .then(() => finalize(`Invitation sent to ${user.fullName}`))
+          .then(() => finalize(`Invitation sent to ${user.fullName}`, true))
           .catch(e => {
             console.error('Invite fallback failed:', e);
-            finalize(`Could not reach ${user.fullName}`);
+            finalize(`Could not reach ${user.fullName}`, false);
           });
       });
   }

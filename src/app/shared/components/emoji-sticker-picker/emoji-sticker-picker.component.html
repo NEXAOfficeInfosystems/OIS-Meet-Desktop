@@ -1,0 +1,218 @@
+<div class="esp-container" role="dialog" aria-label="Emoji and Sticker Picker">
+
+  <!-- ── Tab bar ─────────────────────────────────────────────────────────── -->
+  <div class="esp-tab-bar" role="tablist">
+    <button class="esp-tab" role="tab"
+      [class.active]="activeTab === 'emoji'"
+      [attr.aria-selected]="activeTab === 'emoji'"
+      (click)="setTab('emoji')"
+      title="Emoji">
+      <span class="esp-tab-icon">😊</span>
+      <span class="esp-tab-label">Emoji</span>
+    </button>
+    <button class="esp-tab" role="tab"
+      [class.active]="activeTab === 'sticker'"
+      [attr.aria-selected]="activeTab === 'sticker'"
+      (click)="setTab('sticker')"
+      title="Stickers">
+      <span class="esp-tab-icon">✨</span>
+      <span class="esp-tab-label">Stickers</span>
+    </button>
+  </div>
+
+  <!-- ── Search bar ──────────────────────────────────────────────────────── -->
+  <div class="esp-search-bar">
+    <div class="esp-search-inner">
+      <i class="bi bi-search esp-search-icon" aria-hidden="true"></i>
+      <input #searchInput
+        class="esp-search-input"
+        type="text"
+        [placeholder]="activeTab === 'emoji' ? 'Search emoji…' : 'Search stickers…'"
+        [(ngModel)]="searchQuery"
+        (input)="onSearchInput()"
+        autocomplete="off"
+        aria-label="Search"
+        aria-autocomplete="list" />
+      <button *ngIf="isSearching" class="esp-search-clear"
+        (click)="clearSearch()"
+        aria-label="Clear search"
+        title="Clear">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════ EMOJI MODE ══════════════════════════════════ -->
+  <ng-container *ngIf="activeTab === 'emoji'">
+
+    <!-- Category tab strip -->
+    <div class="esp-cat-strip" *ngIf="!isSearching" role="tablist" aria-label="Emoji categories">
+      <button *ngFor="let cat of emojiCategories; trackBy: trackById"
+        class="esp-cat-btn"
+        role="tab"
+        [class.active]="activeCategoryId === cat.id"
+        [attr.aria-selected]="activeCategoryId === cat.id"
+        [title]="cat.label"
+        (click)="setCategory(cat.id)">
+        {{ cat.icon }}
+      </button>
+    </div>
+
+    <!-- ── Emoji grid body ──────────────────────────────────────────────── -->
+    <div class="esp-body" #scrollBody (scroll)="onBodyScroll()" role="listbox" aria-label="Emojis">
+
+      <!-- Search results -->
+      <ng-container *ngIf="isSearching">
+        <div *ngIf="emojiSearchResults.length; else noEmojiResults" class="esp-section">
+          <div class="esp-section-label">Results for "{{ searchQuery }}"</div>
+          <div class="esp-grid">
+            <button *ngFor="let e of emojiSearchResults; let i = index; trackBy: trackByChar"
+              class="esp-item"
+              [class.focused]="focusedIndex === i"
+              role="option"
+              [attr.aria-label]="e.name"
+              [title]="e.name"
+              (click)="selectEmoji(e)"
+              (mousedown)="$event.preventDefault()">
+              {{ e.char }}
+            </button>
+          </div>
+        </div>
+        <ng-template #noEmojiResults>
+          <div class="esp-empty">
+            <span class="esp-empty-icon">🔍</span>
+            <span>No emoji found for "{{ searchQuery }}"</span>
+          </div>
+        </ng-template>
+      </ng-container>
+
+      <!-- Browse mode -->
+      <ng-container *ngIf="!isSearching">
+
+        <!-- Recently used -->
+        <div class="esp-section" *ngIf="recentEmojis.length > 0" data-section="recent">
+          <div class="esp-section-label">Recently Used</div>
+          <div class="esp-grid">
+            <button *ngFor="let e of recentEmojis; trackBy: trackByChar"
+              class="esp-item"
+              role="option"
+              [attr.aria-label]="e.name"
+              [title]="e.name"
+              (click)="selectEmoji(e)"
+              (mousedown)="$event.preventDefault()">
+              {{ e.char }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Category sections -->
+        <div class="esp-section" *ngFor="let cat of emojiCategories; trackBy: trackById"
+          [attr.data-section]="cat.id">
+          <div class="esp-section-label">{{ cat.label }}</div>
+          <div class="esp-grid">
+            <button *ngFor="let e of cat.emojis; trackBy: trackByChar"
+              class="esp-item"
+              role="option"
+              [attr.aria-label]="e.name"
+              [title]="e.name"
+              (click)="selectEmoji(e)"
+              (mousedown)="$event.preventDefault()">
+              {{ e.char }}
+            </button>
+          </div>
+        </div>
+
+      </ng-container>
+    </div><!-- /esp-body -->
+
+  </ng-container>
+  <!-- ── END EMOJI MODE ───────────────────────────────────────────────────── -->
+
+
+  <!-- ══════════════════════ STICKER MODE ════════════════════════════════ -->
+  <ng-container *ngIf="activeTab === 'sticker'">
+
+    <!-- Pack tab strip -->
+    <div class="esp-cat-strip" *ngIf="!isSearching" role="tablist" aria-label="Sticker packs">
+      <button *ngFor="let pack of stickerPacks; trackBy: trackById"
+        class="esp-cat-btn"
+        role="tab"
+        [class.active]="activePackId === pack.id"
+        [attr.aria-selected]="activePackId === pack.id"
+        [title]="pack.label"
+        (click)="setPack(pack.id)">
+        {{ pack.icon }}
+      </button>
+    </div>
+
+    <!-- ── Sticker grid body ────────────────────────────────────────────── -->
+    <div class="esp-body esp-body--sticker" #scrollBody (scroll)="onBodyScroll()" role="listbox" aria-label="Stickers">
+
+      <!-- Search results -->
+      <ng-container *ngIf="isSearching">
+        <div *ngIf="stickerSearchResults.length; else noStickerResults" class="esp-section">
+          <div class="esp-section-label">Results for "{{ searchQuery }}"</div>
+          <div class="esp-grid esp-grid--sticker">
+            <button *ngFor="let s of stickerSearchResults; let i = index; trackBy: trackByChar"
+              class="esp-item esp-item--sticker"
+              [class.focused]="focusedIndex === i"
+              role="option"
+              [attr.aria-label]="s.name"
+              [title]="s.name"
+              (click)="selectSticker(s)"
+              (mousedown)="$event.preventDefault()">
+              {{ s.char }}
+            </button>
+          </div>
+        </div>
+        <ng-template #noStickerResults>
+          <div class="esp-empty">
+            <span class="esp-empty-icon">🔍</span>
+            <span>No stickers found for "{{ searchQuery }}"</span>
+          </div>
+        </ng-template>
+      </ng-container>
+
+      <!-- Browse mode -->
+      <ng-container *ngIf="!isSearching">
+
+        <!-- Recently used stickers -->
+        <div class="esp-section" *ngIf="recentStickers.length > 0" data-section="recent">
+          <div class="esp-section-label">Recently Used</div>
+          <div class="esp-grid esp-grid--sticker">
+            <button *ngFor="let s of recentStickers; trackBy: trackByChar"
+              class="esp-item esp-item--sticker"
+              role="option"
+              [attr.aria-label]="s.name"
+              [title]="s.name"
+              (click)="selectSticker(s)"
+              (mousedown)="$event.preventDefault()">
+              {{ s.char }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Pack sections -->
+        <div class="esp-section" *ngFor="let pack of stickerPacks; trackBy: trackById"
+          [attr.data-section]="pack.id">
+          <div class="esp-section-label">{{ pack.label }}</div>
+          <div class="esp-grid esp-grid--sticker">
+            <button *ngFor="let s of pack.stickers; trackBy: trackByChar"
+              class="esp-item esp-item--sticker"
+              role="option"
+              [attr.aria-label]="s.name"
+              [title]="s.name"
+              (click)="selectSticker(s)"
+              (mousedown)="$event.preventDefault()">
+              {{ s.char }}
+            </button>
+          </div>
+        </div>
+
+      </ng-container>
+    </div><!-- /esp-body -->
+
+  </ng-container>
+  <!-- ── END STICKER MODE ─────────────────────────────────────────────────── -->
+
+</div>

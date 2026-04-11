@@ -355,28 +355,59 @@
                     <!-- Inline edit mode -->
                     <ng-container *ngIf="editingMessage?.id === (msg.id || msg.Id); else msgDisplay">
                       <div class="msg-edit-area">
-                        <textarea class="msg-edit-textarea" #editTextarea [(ngModel)]="editContent"
-                          (keydown)="onEditKeydown($event)" rows="1"></textarea>
+
+                        <!-- Edit mini formatting toolbar -->
+                        <div class="msg-edit-toolbar" role="toolbar" aria-label="Edit text formatting">
+                          <button class="rte-btn rte-btn--sm" (mousedown)="$event.preventDefault()"
+                            (click)="formatEditDoc('bold')" title="Bold (Ctrl+B)"><strong>B</strong></button>
+                          <button class="rte-btn rte-btn--sm rte-btn--italic" (mousedown)="$event.preventDefault()"
+                            (click)="formatEditDoc('italic')" title="Italic (Ctrl+I)"><em>I</em></button>
+                          <button class="rte-btn rte-btn--sm rte-btn--underline" (mousedown)="$event.preventDefault()"
+                            (click)="formatEditDoc('underline')" title="Underline (Ctrl+U)"><u>U</u></button>
+                          <button class="rte-btn rte-btn--sm rte-btn--strike" (mousedown)="$event.preventDefault()"
+                            (click)="formatEditDoc('strikeThrough')" title="Strikethrough"><s>S</s></button>
+                          <span class="rte-divider"></span>
+                          <button class="rte-btn rte-btn--sm" (mousedown)="$event.preventDefault()"
+                            (click)="formatEditDoc('insertUnorderedList')" title="Bullet list">
+                            <i class="bi bi-list-ul"></i></button>
+                          <button class="rte-btn rte-btn--sm" (mousedown)="$event.preventDefault()"
+                            (click)="formatEditDoc('formatBlock', 'pre')" title="Code">
+                            <i class="bi bi-code-slash"></i></button>
+                          <button class="rte-btn rte-btn--sm" (mousedown)="$event.preventDefault()"
+                            (click)="insertEditLink()" title="Link">
+                            <i class="bi bi-link-45deg"></i></button>
+                        </div>
+
+                        <!-- Rich contenteditable edit field -->
+                        <div #editEditor class="msg-edit-editor" contenteditable="true" role="textbox"
+                          aria-multiline="true" aria-label="Edit message" (input)="onEditEditorInput($event)"
+                          (keydown)="onEditKeydown($event)">
+                        </div>
+
+                        <!-- Edit action row -->
                         <div class="msg-edit-actions">
-                          <span class="edit-hint">Esc to <button class="edit-link-btn"
-                              (click)="cancelEdit()">cancel</button> · Enter to <button class="edit-link-btn"
-                              (click)="saveEdit()">save</button></span>
+                          <span class="edit-hint-text">
+                            <kbd>Esc</kbd> <button class="edit-link-btn" (click)="cancelEdit()">cancel</button>
+                            &nbsp;·&nbsp;
+                            <kbd>Enter</kbd> <button class="edit-link-btn" (click)="saveEdit()">save</button>
+                            &nbsp;·&nbsp;
+                            <kbd>Shift</kbd>+<kbd>↵</kbd> new line
+                          </span>
                           <div class="edit-btns">
-                            <div class="msg-edit-sticker-container" style="position: relative; display: inline-block;">
-                              <button class="edit-sticker-btn" title="Send sticker" (click)="toggleEditStickerPicker($event)"
-                                style="background: none; border: 1px solid #dee2e6; border-radius: 6px; padding: 2px 7px; cursor: pointer; font-size: 0.85rem; color: #6c757d; line-height: 1.5;">
-                                <i class="bi bi-sticky"></i>
+                            <div class="picker-anchor picker-anchor--edit"
+                              style="position: relative; display: inline-block;">
+                              <button class="rte-btn rte-btn--sm" [class.rte-btn--active]="isPickerVisible.edit"
+                                (click)="openPicker('edit', 'emoji', $event)" aria-haspopup="dialog"
+                                [attr.aria-expanded]="isPickerVisible.edit" title="Emoji / Sticker">
+                                <i class="bi bi-emoji-smile"></i>
                               </button>
-                              <div class="sticker-picker-popover shadow border rounded p-2 bg-white animate-slide-up"
-                                *ngIf="isEditStickerPickerVisible"
-                                style="position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; min-width: 250px;">
-                                <button class="btn btn-light sticker-btn p-2" *ngFor="let s of commonStickers"
-                                  (click)="saveEditAsSticker(s)"
-                                  style="font-size: 2.2rem; line-height: 1; border-radius: 12px; transition: transform 0.2s ease, background 0.2s ease; overflow: hidden; display: flex; align-items: center; justify-content: center;"
-                                  (mousedown)="$event.preventDefault()"
-                                  onmouseover="this.style.transform='scale(1.15)';" onmouseout="this.style.transform='scale(1)';">
-                                  {{ s }}
-                                </button>
+                              <div class="picker-popover-fixed animate-slide-up" *ngIf="isPickerVisible.edit"
+                                [style.top.px]="pickerPosition.top" [style.left.px]="pickerPosition.left">
+                                <app-emoji-sticker-picker [initialTab]="pickerInitialTab"
+                                  (emojiSelect)="onPickerEmojiSelect($event, 'edit')"
+                                  (stickerSelect)="onPickerStickerSelect($event, 'edit')"
+                                  (pickerClose)="closePicker('edit')">
+                                </app-emoji-sticker-picker>
                               </div>
                             </div>
                             <button class="edit-cancel-btn" (click)="cancelEdit()">Cancel</button>
@@ -473,8 +504,9 @@
 
           <!-- Message Input -->
           <footer class="workspace-input-area">
+
             <!-- Reply Preview -->
-            <div class="reply-preview-v2 mb-2 animate-slide-up" *ngIf="replyToMessage">
+            <div class="reply-preview-v2 animate-slide-up" *ngIf="replyToMessage">
               <div class="reply-border"></div>
               <div class="reply-content-wrapper">
                 <div class="reply-header">
@@ -483,52 +515,91 @@
                 </div>
                 <div class="reply-text text-truncate">{{ replyToMessage.content || 'Attachment' }}</div>
               </div>
-              <button class="btn-close-reply" (click)="cancelReply()">
+              <button class="btn-close-reply" (click)="cancelReply()" aria-label="Cancel reply">
                 <i class="bi bi-x-lg"></i>
               </button>
             </div>
 
-            <div class="toolbar-v2" *ngIf="isToolbarVisible">
-              <button class="tool-btn-v2" (click)="formatDoc('bold')" title="Bold (Ctrl+B)">B</button>
-              <button class="tool-btn-v2" (click)="formatDoc('italic')" title="Italic (Ctrl+I)">I</button>
-              <button class="tool-btn-v2" (click)="formatDoc('underline')" title="Underline (Ctrl+U)">U</button>
-              <button class="tool-btn-v2" (click)="formatDoc('strikeThrough')" title="Strikethrough">S</button>
-              <span class="v-divider-v2"></span>
-              <button class="tool-btn-v2" (click)="formatDoc('insertUnorderedList')" title="Bulleted List">
-                <i class="bi bi-list-ul"></i>
-              </button>
-              <button class="tool-btn-v2" (click)="formatDoc('insertOrderedList')" title="Numbered List">
-                <i class="bi bi-list-ol"></i>
-              </button>
-              <span class="v-divider-v2"></span>
-              <button class="tool-btn-v2" (click)="formatDoc('formatBlock', 'pre')" title="Code Block">
-                <i class="bi bi-code-slash"></i>
-              </button>
-              <button class="tool-btn-v2" (click)="formatDoc('createLink', 'https://')" title="Add Link">
-                <i class="bi bi-link-45deg"></i>
-              </button>
-              <span class="v-divider-v2"></span>
+            <!-- Editor Card -->
+            <div class="editor-card" [class.editor-card--focused]="true">
 
-              <!-- <div class="emoji-picker-container" style="position: relative;">
-                <button class="tool-btn-v2" id="emojiPickerBtn" (click)="showEmojiPicker($event)" title="Emoji">
-                  <i class="bi bi-emoji-smile"></i>
+              <!-- ── Formatting Toolbar (collapsible) ──────────────────────── -->
+              <div class="rte-toolbar" *ngIf="isToolbarVisible" role="toolbar" aria-label="Text formatting">
+
+                <!-- Text style -->
+                <button class="rte-btn" [class.rte-btn--active]="formatState['bold']"
+                  (mousedown)="$event.preventDefault()" (click)="formatDoc('bold')" title="Bold (Ctrl+B)"
+                  aria-label="Bold">
+                  <strong>B</strong>
                 </button>
-                <div class="emoji-picker-popover shadow border rounded-3 p-2 bg-white" *ngIf="isEmojiPickerVisible"
-                  style="position: fixed; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; min-width: 190px;">
-                  <button class="btn btn-light emoji-btn p-1" *ngFor="let e of commonEmojis" (click)="addEmoji(e)"
-                    (mousedown)="$event.preventDefault()">{{ e }}</button>
-                </div>
-              </div> -->
-            </div>
+                <button class="rte-btn rte-btn--italic" [class.rte-btn--active]="formatState['italic']"
+                  (mousedown)="$event.preventDefault()" (click)="formatDoc('italic')" title="Italic (Ctrl+I)"
+                  aria-label="Italic">
+                  <em>I</em>
+                </button>
+                <button class="rte-btn rte-btn--underline" [class.rte-btn--active]="formatState['underline']"
+                  (mousedown)="$event.preventDefault()" (click)="formatDoc('underline')" title="Underline (Ctrl+U)"
+                  aria-label="Underline">
+                  <u>U</u>
+                </button>
+                <button class="rte-btn rte-btn--strike" [class.rte-btn--active]="formatState['strikeThrough']"
+                  (mousedown)="$event.preventDefault()" (click)="formatDoc('strikeThrough')" title="Strikethrough"
+                  aria-label="Strikethrough">
+                  <s>S</s>
+                </button>
 
-            <div class="message-input-wrapper-v2">
-              <div class="message-field-container-v2">
+                <span class="rte-divider"></span>
+
+                <!-- Lists -->
+                <button class="rte-btn" [class.rte-btn--active]="formatState['insertUnorderedList']"
+                  (mousedown)="$event.preventDefault()" (click)="formatDoc('insertUnorderedList')" title="Bullet list"
+                  aria-label="Bullet list">
+                  <i class="bi bi-list-ul"></i>
+                </button>
+                <button class="rte-btn" [class.rte-btn--active]="formatState['insertOrderedList']"
+                  (mousedown)="$event.preventDefault()" (click)="formatDoc('insertOrderedList')" title="Numbered list"
+                  aria-label="Numbered list">
+                  <i class="bi bi-list-ol"></i>
+                </button>
+
+                <span class="rte-divider"></span>
+
+                <!-- Code & Quote -->
+                <button class="rte-btn" [class.rte-btn--active]="formatState['pre']"
+                  (mousedown)="$event.preventDefault()" (click)="formatDoc('formatBlock', 'pre')" title="Code block"
+                  aria-label="Code block">
+                  <i class="bi bi-code-slash"></i>
+                </button>
+                <button class="rte-btn" [class.rte-btn--active]="formatState['blockquote']"
+                  (mousedown)="$event.preventDefault()" (click)="formatDoc('formatBlock', 'blockquote')"
+                  title="Blockquote" aria-label="Blockquote">
+                  <i class="bi bi-quote"></i>
+                </button>
+                <button class="rte-btn" (mousedown)="$event.preventDefault()" (click)="insertLink()" title="Insert link"
+                  aria-label="Insert link">
+                  <i class="bi bi-link-45deg"></i>
+                </button>
+
+                <span class="rte-divider"></span>
+
+                <!-- Clear formatting -->
+                <button class="rte-btn" (mousedown)="$event.preventDefault()" (click)="formatDoc('removeFormat')"
+                  title="Clear formatting" aria-label="Clear formatting">
+                  <i class="bi bi-eraser"></i>
+                </button>
+              </div>
+
+              <!-- ── Editor Area ─────────────────────────────────────────────── -->
+              <div class="rte-body" style="position: relative;">
+
                 <!-- Mentions Popover -->
                 <div class="mention-popover shadow border rounded-3 p-1 bg-white"
-                  *ngIf="mentionsVisible && filteredMentionList.length > 0">
+                  *ngIf="mentionsVisible && filteredMentionList.length > 0" role="listbox"
+                  aria-label="Mention suggestions">
                   <div class="mention-item d-flex align-items-center gap-2 p-2 rounded cursor-pointer"
-                    *ngFor="let m of filteredMentionList; let i = index" [class.active]="i === mentionSelectedIndex"
-                    (mousedown)="$event.preventDefault()" (click)="insertMention(m); $event.stopPropagation()">
+                    *ngFor="let m of filteredMentionList; let i = index" role="option"
+                    [class.active]="i === mentionSelectedIndex" (mousedown)="$event.preventDefault()"
+                    (click)="insertMention(m); $event.stopPropagation()">
                     <div class="dm-avatar-xs" [style.background-color]="m.avatarColor || '#3b82f6'">
                       {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
                     </div>
@@ -536,62 +607,75 @@
                   </div>
                 </div>
 
-                <!-- Rich Text ContentEditable Area -->
-                <div #messageEditor class="message-editor-v2" contenteditable="true" (input)="onEditorInput($event)"
-                  (keydown)="onEditorKeydown($event)" (paste)="onEditorPaste($event)"
-                  [attr.placeholder]="'Reply to ' + (selectedUser ? (selectedUser.fullName || selectedUser.name) : (activeChannel ? '#' + activeChannel : 'QA Team'))">
-                </div>
-
-                <!-- Bottom Actions Area (Teams Style) -->
-                <div class="editor-actions-footer">
-                  <div class="actions-left">
-                    <button class="action-btn-v2" (click)="toggleToolbar()" title="Format options">
-                      <i class="bi bi-type"></i>
-                    </button>
-
-                    <div class="emoji-picker-container">
-                      <button class="action-btn-v2" id="emojiPickerBtn" (click)="showEmojiPicker($event)" title="Emoji">
-                        <i class="bi bi-emoji-smile"></i>
-                      </button>
-                      <div class="emoji-picker-popover shadow border rounded p-2 bg-white" *ngIf="isEmojiPickerVisible"
-                        style="position: absolute; bottom: calc(100% + 10px); left: -33px; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; min-width: 190px;">
-                        <button class="btn btn-light emoji-btn p-1" *ngFor="let e of commonEmojis" (click)="addEmoji(e)"
-                          (mousedown)="$event.preventDefault()">{{ e }}</button>
-                      </div>
-                    </div>
-
-                    <div class="sticker-picker-container" style="position: relative;">
-                      <button class="action-btn-v2" title="Stickers" (click)="toggleStickerPicker($event)">
-                        <i class="bi bi-sticky"></i>
-                      </button>
-                      <div class="sticker-picker-popover shadow border rounded p-2 bg-white animate-slide-up" *ngIf="isStickerPickerVisible"
-                        style="position: absolute; bottom: calc(100% + 10px); left: -60px; z-index: 99999; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; min-width: 250px;">
-                        <button class="btn btn-light sticker-btn p-2" *ngFor="let s of commonStickers" (click)="sendSticker(s)" 
-                          style="font-size: 2.2rem; line-height: 1; border-radius: 12px; transition: transform 0.2s ease, background 0.2s ease; overflow: hidden; display: flex; align-items: center; justify-content: center;"
-                          (mousedown)="$event.preventDefault()"
-                          onmouseover="this.style.transform='scale(1.15)';" onmouseout="this.style.transform='scale(1)';">
-                          {{ s }}
-                        </button>
-                      </div>
-                    </div>
-
-                    <input type="file" #fileInput style="display: none" (change)='onFileSelected($event)'>
-                    <button class="action-btn-v2" (click)="fileInput.click()" title="Attach file">
-                      <i class="bi bi-plus-lg"></i>
-                    </button>
-                  </div>
-
-                  <div class="actions-right">
-                    <span class="v-separator"></span>
-                    <button class="action-btn-v2  btn-send" (click)="sendMessage()"
-                      [disabled]="isSendingMessage || (!newMessage.trim() && !isUploading)">
-                      <i class="bi bi-send-fill" *ngIf="!isSendingMessage"></i>
-                      <div class="spinner-border spinner-border-sm" *ngIf="isSendingMessage"></div>
-                    </button>
-                  </div>
+                <!-- Contenteditable Rich Editor -->
+                <div #messageEditor class="rte-editor" contenteditable="true" role="textbox" aria-multiline="true"
+                  [attr.aria-label]="'Message ' + (selectedUser ? (selectedUser.fullName || selectedUser.name) : (activeChannel ? '#' + activeChannel : ''))"
+                  [attr.data-placeholder]="'Message ' + (selectedUser ? (selectedUser.fullName || selectedUser.name) : (activeChannel ? '#' + activeChannel : 'the team')) + '…'"
+                  (input)="onEditorInput($event)" (keydown)="onEditorKeydown($event)" (paste)="onEditorPaste($event)">
                 </div>
               </div>
-            </div>
+
+              <!-- ── Bottom Action Bar ───────────────────────────────────────── -->
+              <div class="rte-footer">
+                <div class="rte-footer-left">
+
+                  <!-- Format toggle -->
+                  <button class="rte-action-btn" [class.rte-action-btn--active]="isToolbarVisible"
+                    (click)="toggleToolbar()" title="Formatting options" aria-label="Toggle formatting toolbar">
+                    <i class="bi bi-type"></i>
+                  </button>
+
+                  <!-- Emoji & Sticker picker -->
+                  <div class="picker-anchor picker-anchor--compose" style="position: relative;">
+                    <button class="rte-action-btn"
+                      [class.rte-action-btn--active]="isPickerVisible.compose && pickerInitialTab === 'emoji'"
+                      title="Emoji" aria-label="Insert emoji" aria-haspopup="dialog"
+                      [attr.aria-expanded]="isPickerVisible.compose && pickerInitialTab === 'emoji'"
+                      (click)="openPicker('compose', 'emoji', $event)">
+                      <i class="bi bi-emoji-smile"></i>
+                    </button>
+                    <button class="rte-action-btn"
+                      [class.rte-action-btn--active]="isPickerVisible.compose && pickerInitialTab === 'sticker'"
+                      title="Stickers" aria-label="Insert sticker" aria-haspopup="dialog"
+                      [attr.aria-expanded]="isPickerVisible.compose && pickerInitialTab === 'sticker'"
+                      (click)="openPicker('compose', 'sticker', $event)">
+                      <i class="bi bi-sticky"></i>
+                    </button>
+                    <div class="picker-popover-fixed animate-slide-up" *ngIf="isPickerVisible.compose"
+                      [style.top.px]="pickerPosition.top" [style.left.px]="pickerPosition.left">
+                      <app-emoji-sticker-picker [initialTab]="pickerInitialTab"
+                        (emojiSelect)="onPickerEmojiSelect($event, 'compose')"
+                        (stickerSelect)="onPickerStickerSelect($event, 'compose')"
+                        (pickerClose)="closePicker('compose')">
+                      </app-emoji-sticker-picker>
+                    </div>
+                  </div>
+
+                  <!-- Attach file -->
+                  <input type="file" #fileInput style="display: none" (change)="onFileSelected($event)">
+                  <button class="rte-action-btn" (click)="fileInput.click()" title="Attach file"
+                    aria-label="Attach file">
+                    <i class="bi bi-paperclip"></i>
+                  </button>
+
+                </div>
+
+                <div class="rte-footer-right">
+                  <span class="rte-hint" *ngIf="newMessage">
+                    <kbd>Shift</kbd>+<kbd>↵</kbd> new line
+                  </span>
+                  <button class="rte-send-btn" (click)="sendMessage()"
+                    [disabled]="isSendingMessage || (!newMessage.trim() && !isUploading)" title="Send message (Enter)"
+                    aria-label="Send message">
+                    <i class="bi bi-send-fill" *ngIf="!isSendingMessage"></i>
+                    <div class="spinner-border spinner-border-sm" *ngIf="isSendingMessage" role="status">
+                      <span class="visually-hidden">Sending…</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+            </div><!-- /editor-card -->
           </footer>
         </div>
 

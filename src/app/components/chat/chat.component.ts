@@ -38,6 +38,7 @@ import { ActivityFeedComponent } from '../activity-feed/activity-feed.component'
 import { SignalRService } from '../../core/services/signalr.service';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../../shared/layout/confirmation-dialog.component';
+import { EmojiStickerPickerComponent, PickerTab } from '../../shared/components/emoji-sticker-picker/emoji-sticker-picker.component';
 
 
 declare var bootstrap: any;
@@ -59,7 +60,8 @@ interface InAppToast {
     HttpClientModule,
     MeetingLinkPipe,
     SafeHtmlPipe,
-    ActivityFeedComponent
+    ActivityFeedComponent,
+    EmojiStickerPickerComponent
   ],
   templateUrl: './chat.component.html',
   styleUrls: ['./chat.component.scss']
@@ -92,10 +94,12 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   favoriteUsers: any[] = [];
   regularUsers: any[] = [];
   currentUserId: string | null = null;
-  isEmojiPickerVisible = false;
-  isStickerPickerVisible = false;
-  isEditStickerPickerVisible = false;
-  commonStickers = ['✨', '🔥', '🎉', '😂', '🥰', '👍', '👏', '🚀', '💡', '🏆', '💯', '🤔'];
+  // ── Unified emoji/sticker picker state ──────────────────────────────────────
+  // 'compose' = main footer picker, 'edit' = inline message edit picker
+  isPickerVisible: { compose: boolean; edit: boolean } = { compose: false, edit: false };
+  pickerInitialTab: PickerTab = 'emoji';
+  pickerPosition: { top: number; left: number } = { top: 0, left: 0 };
+  // Kept for reaction bar (small inline quick-react strip — unchanged)
   commonEmojis = ['👍', '❤️', '😄', '😮', '😢', '🔥', '👏', '✅'];
   showRightPanel: boolean = true;
   mainActiveTab: 'chat' | 'attachments' | 'info' = 'chat';
@@ -167,7 +171,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   isSidebarSearching: boolean = false;
   isConnected: boolean = false;
   isUploading: boolean = false;
-  isToolbarVisible: boolean = false; // Controls formatting toolbar visibility
+  isToolbarVisible: boolean = false;
+  // Active format state for toolbar button highlights
+  formatState: Record<string, boolean> = {
+    bold: false, italic: false, underline: false, strikeThrough: false,
+    insertUnorderedList: false, insertOrderedList: false
+  };
+  // Inline-edit rich text content (HTML)
+  editFormattedContent: string = '';
 
   toggleSidebarSearch(): void {
     this.isSidebarSearching = !this.isSidebarSearching;
@@ -472,21 +483,90 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   @ViewChild('messageEditor') messageEditor!: ElementRef;
+  @ViewChild('editEditor') editEditorRef!: ElementRef;
 
   // ——————————————————————————————————————————————————————————————————————————————
   // RICH TEXT EDITOR
   // ——————————————————————————————————————————————————————————————————————————————
 
   formatDoc(command: string, value?: string): void {
-    document.execCommand(command, false, value || '');
     this.messageEditor.nativeElement.focus();
+    // Toggle formatBlock: if already in the same block type, revert to <p>
+    if (command === 'formatBlock' && value) {
+      const ctx = this.getCursorBlockContext(this.messageEditor.nativeElement);
+      const inSame = (value === 'pre' && (ctx === 'pre' || ctx === 'code')) ||
+                     (value === 'blockquote' && ctx === 'blockquote');
+      if (inSame) {
+        document.execCommand('formatBlock', false, 'p');
+        this.updateFormatState();
+        this.onEditorInput({ target: this.messageEditor.nativeElement });
+        return;
+      }
+    }
+    document.execCommand(command, false, value ?? undefined);
+    this.updateFormatState();
+    this.onEditorInput({ target: this.messageEditor.nativeElement });
+  }
+
+  formatEditDoc(command: string, value?: string): void {
+    const el = this.editEditorRef?.nativeElement;
+    if (!el) return;
+    el.focus();
+    document.execCommand(command, false, value ?? undefined);
+    this.editFormattedContent = el.innerHTML;
+    this.editContent = el.innerText;
+  }
+
+  updateFormatState(): void {
+    const cmds = ['bold', 'italic', 'underline', 'strikeThrough', 'insertUnorderedList', 'insertOrderedList'];
+    for (const cmd of cmds) {
+      this.formatState[cmd] = document.queryCommandState(cmd);
+    }
+    // Detect block-level context for pre / blockquote active states
+    const editorEl = this.messageEditor?.nativeElement;
+    if (editorEl) {
+      const ctx = this.getCursorBlockContext(editorEl);
+      this.formatState['pre'] = ctx === 'pre' || ctx === 'code';
+      this.formatState['blockquote'] = ctx === 'blockquote';
+    }
+    this.cdr.markForCheck();
+  }
+
+  private getCursorBlockContext(editorEl: HTMLElement): string | null {
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) return null;
+    let node: Node | null = selection.anchorNode;
+    while (node && node !== editorEl) {
+      if (node instanceof HTMLElement) {
+        const tag = node.tagName.toLowerCase();
+        if (['li', 'pre', 'blockquote', 'code'].includes(tag)) return tag;
+      }
+      node = node.parentNode;
+    }
+    return null;
   }
 
   onEditorInput(event: any): void {
     const html = event.target.innerHTML;
     this.formattedMessage = html;
     this.newMessage = event.target.innerText;
+    this.updateFormatState();
     this.checkForMentions(event);
+  }
+
+  onEditEditorInput(event: any): void {
+    this.editFormattedContent = event.target.innerHTML;
+    this.editContent = event.target.innerText;
+  }
+
+  insertLink(): void {
+    const url = prompt('Enter URL:');
+    if (url) this.formatDoc('createLink', url);
+  }
+
+  insertEditLink(): void {
+    const url = prompt('Enter URL:');
+    if (url) this.formatEditDoc('createLink', url);
   }
 
   getFileIcon(type: string): string {
@@ -502,6 +582,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   onEditorKeydown(event: KeyboardEvent): void {
+    // ── Mention popover navigation ─────────────────────────────────────────────
     if (this.mentionsVisible && this.filteredMentionList.length > 0) {
       if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -518,9 +599,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       if (event.key === 'Enter' || event.key === 'Tab') {
         event.preventDefault();
         const selected = this.filteredMentionList[this.mentionSelectedIndex];
-        if (selected) {
-          this.insertMention(selected);
-        }
+        if (selected) this.insertMention(selected);
         return;
       }
       if (event.key === 'Escape') {
@@ -532,10 +611,62 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       return;
     }
 
-    if (event.key === 'Enter' && !event.shiftKey) {
+    const ctrl = event.ctrlKey || event.metaKey;
+
+    // ── Rich text keyboard shortcuts ───────────────────────────────────────────
+    if (ctrl) {
+      switch (event.key.toLowerCase()) {
+        case 'b': event.preventDefault(); this.formatDoc('bold'); return;
+        case 'i': event.preventDefault(); this.formatDoc('italic'); return;
+        case 'u': event.preventDefault(); this.formatDoc('underline'); return;
+      }
+    }
+
+    // ── Enter key ─────────────────────────────────────────────────────────────
+    if (event.key === 'Enter') {
+      const ctx = this.getCursorBlockContext(this.messageEditor.nativeElement);
+
+      // Inside a list item: let browser create / exit the <li> naturally
+      if (ctx === 'li') {
+        setTimeout(() => this.onEditorInput({ target: this.messageEditor.nativeElement }), 0);
+        return;
+      }
+
+      // Inside a blockquote (no Shift): let browser extend the blockquote
+      if (ctx === 'blockquote' && !event.shiftKey) {
+        setTimeout(() => this.onEditorInput({ target: this.messageEditor.nativeElement }), 0);
+        return;
+      }
+
+      // Inside <pre> / <code>: insert a literal newline instead of a block element
+      if (ctx === 'pre' || ctx === 'code') {
+        event.preventDefault();
+        document.execCommand('insertText', false, '\n');
+        setTimeout(() => this.onEditorInput({ target: this.messageEditor.nativeElement }), 0);
+        return;
+      }
+
+      // Shift+Enter outside a block: browser inserts <br> — just sync the model
+      if (event.shiftKey) {
+        setTimeout(() => this.onEditorInput({ target: this.messageEditor.nativeElement }), 0);
+        return;
+      }
+
+      // Plain Enter outside any block: send the message
       event.preventDefault();
       this.sendMessage();
       return;
+    }
+
+    // ── Tab / Shift+Tab: indent / outdent list items ───────────────────────────
+    if (event.key === 'Tab') {
+      const ctx = this.getCursorBlockContext(this.messageEditor.nativeElement);
+      if (ctx === 'li') {
+        event.preventDefault();
+        document.execCommand(event.shiftKey ? 'outdent' : 'indent', false);
+        setTimeout(() => this.onEditorInput({ target: this.messageEditor.nativeElement }), 0);
+        return;
+      }
     }
 
     if (event.key === 'Backspace') {
@@ -868,58 +999,97 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   editMessage(message: any): void {
     this.editingMessage = { ...message };
-    // Strip HTML from formattedContent for plain-text editing
-    const raw = message.formattedContent || message.content || '';
-    const div = document.createElement('div');
-    div.innerHTML = raw;
-    this.editContent = div.textContent || div.innerText || message.content || '';
+    // Preserve formatted HTML; plain text fallback
+    this.editFormattedContent = message.formattedContent || message.content || '';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this.editFormattedContent;
+    this.editContent = tmp.innerText || message.content || '';
     this.cdr.detectChanges();
-    // Auto-focus textarea after render
+    // Populate contenteditable and focus it after render
     setTimeout(() => {
-      const ta = document.querySelector('.msg-edit-textarea') as HTMLTextAreaElement;
-      if (ta) {
-        ta.focus();
-        ta.selectionStart = ta.selectionEnd = ta.value.length;
-        this._autoResizeTextarea(ta);
+      const el = this.editEditorRef?.nativeElement as HTMLElement;
+      if (el) {
+        el.innerHTML = this.editFormattedContent;
+        el.focus();
+        // Move cursor to end
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
       }
     }, 0);
   }
 
   saveEdit(): void {
-    if (!this.editingMessage || !this.editContent.trim()) return;
+    const el = this.editEditorRef?.nativeElement as HTMLElement;
+    const html = el ? el.innerHTML : this.editFormattedContent;
+    const text = el ? el.innerText : this.editContent;
+    if (!this.editingMessage || !text.trim()) return;
     this.store.dispatch(MessagesActions.editMessage({
       messageId: this.editingMessage.id,
-      content: this.editContent.trim(),
-      formattedContent: this.editContent.trim()
+      content: text.trim(),
+      formattedContent: html
     }));
     this.editingMessage = null;
     this.editContent = '';
+    this.editFormattedContent = '';
   }
 
   cancelEdit(): void {
     this.editingMessage = null;
     this.editContent = '';
+    this.editFormattedContent = '';
   }
 
   onEditKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    const ctrl = event.ctrlKey || event.metaKey;
+    if (ctrl) {
+      switch (event.key.toLowerCase()) {
+        case 'b': event.preventDefault(); this.formatEditDoc('bold'); return;
+        case 'i': event.preventDefault(); this.formatEditDoc('italic'); return;
+        case 'u': event.preventDefault(); this.formatEditDoc('underline'); return;
+      }
+    }
+
+    if (event.key === 'Enter') {
+      const editorEl = this.editEditorRef?.nativeElement as HTMLElement | undefined;
+      const ctx = editorEl ? this.getCursorBlockContext(editorEl) : null;
+      const syncEdit = () => {
+        if (editorEl) {
+          this.editFormattedContent = editorEl.innerHTML;
+          this.editContent = editorEl.innerText;
+        }
+      };
+
+      if (ctx === 'li') {
+        setTimeout(syncEdit, 0);
+        return;
+      }
+      if (ctx === 'blockquote' && !event.shiftKey) {
+        setTimeout(syncEdit, 0);
+        return;
+      }
+      if (ctx === 'pre' || ctx === 'code') {
+        event.preventDefault();
+        document.execCommand('insertText', false, '\n');
+        setTimeout(syncEdit, 0);
+        return;
+      }
+      if (event.shiftKey) {
+        setTimeout(syncEdit, 0);
+        return;
+      }
       event.preventDefault();
       this.saveEdit();
-    } else if (event.key === 'Escape') {
+      return;
+    }
+
+    if (event.key === 'Escape') {
       event.preventDefault();
       this.cancelEdit();
-    } else {
-      // Auto-resize textarea as user types
-      setTimeout(() => {
-        this._autoResizeTextarea(event.target as HTMLTextAreaElement);
-      }, 0);
     }
-  }
-
-  private _autoResizeTextarea(ta: HTMLTextAreaElement): void {
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
   }
 
   // ——————————————————————————————————————————————————————————————————————————————
@@ -2060,20 +2230,80 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .join(', ');
   }
 
-  showEmojiPicker(event: MouseEvent): void {
+  openPicker(context: 'compose' | 'edit', tab: PickerTab, event: MouseEvent): void {
     event.stopPropagation();
-    this.isEmojiPickerVisible = !this.isEmojiPickerVisible;
-    this.isStickerPickerVisible = false;
+    const isOpen = this.isPickerVisible[context];
+
+    // Close all pickers first
+    this.isPickerVisible = { compose: false, edit: false };
+
+    if (!isOpen) {
+      this.pickerInitialTab = tab;
+
+      // Calculate viewport-safe fixed position from the trigger button
+      const btn = event.currentTarget as HTMLElement;
+      const rect = btn.getBoundingClientRect();
+      const PICKER_WIDTH = 360;
+      const PICKER_HEIGHT = 460;
+      const MARGIN = 8;
+
+      // Horizontal: prefer left-aligned with button, clamp to viewport
+      let left = rect.left;
+      if (left + PICKER_WIDTH > window.innerWidth - MARGIN) {
+        left = window.innerWidth - PICKER_WIDTH - MARGIN;
+      }
+      if (left < MARGIN) left = MARGIN;
+
+      // Vertical: prefer opening upward; fall back to downward if not enough space
+      const spaceAbove = rect.top - MARGIN;
+      const top = spaceAbove >= PICKER_HEIGHT
+        ? rect.top - PICKER_HEIGHT - MARGIN      // open upward
+        : rect.bottom + MARGIN;                  // open downward
+
+      this.pickerPosition = { top, left };
+      this.isPickerVisible[context] = true;
+    }
+
+    this.cdr.detectChanges();
   }
 
+  closePicker(context: 'compose' | 'edit'): void {
+    this.isPickerVisible[context] = false;
+    this.cdr.detectChanges();
+  }
+
+  onPickerEmojiSelect(emoji: string, context: 'compose' | 'edit'): void {
+    if (context === 'compose') {
+      this.addEmoji(emoji);
+    } else {
+      this.editContent += emoji;
+    }
+    this.isPickerVisible[context] = false;
+    this.cdr.detectChanges();
+  }
+
+  onPickerStickerSelect(sticker: string, context: 'compose' | 'edit'): void {
+    if (context === 'compose') {
+      this.sendSticker(sticker);
+    } else {
+      this.saveEditAsSticker(sticker);
+    }
+    this.isPickerVisible[context] = false;
+    this.cdr.detectChanges();
+  }
+
+  /** @deprecated kept for legacy inline emoji button in toolbar */
+  showEmojiPicker(event: MouseEvent): void {
+    this.openPicker('compose', 'emoji', event);
+  }
+
+  /** @deprecated kept for legacy sticker button */
   toggleStickerPicker(event: MouseEvent): void {
-    event.stopPropagation();
-    this.isStickerPickerVisible = !this.isStickerPickerVisible;
-    this.isEmojiPickerVisible = false;
+    this.openPicker('compose', 'sticker', event);
   }
 
   sendSticker(sticker: string): void {
-    this.isStickerPickerVisible = false;
+    this.isPickerVisible.compose = false;
     const conversationId = this.selectedConversation?.id;
     if (!conversationId) return;
 
@@ -2092,14 +2322,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  toggleEditStickerPicker(event: MouseEvent): void {
-    event.stopPropagation();
-    this.isEditStickerPickerVisible = !this.isEditStickerPickerVisible;
-  }
-
   saveEditAsSticker(sticker: string): void {
     if (!this.editingMessage) return;
-    this.isEditStickerPickerVisible = false;
+    this.isPickerVisible.edit = false;
     const stickerHtml = `<div class="msg-sticker" style="font-size: 5rem; cursor: default; line-height: 1.2;">${sticker}</div>`;
     this.store.dispatch(MessagesActions.editMessage({
       messageId: this.editingMessage.id,
@@ -2109,6 +2334,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.editingMessage = null;
     this.editContent = '';
     this.cdr.detectChanges();
+  }
+
+  @HostListener('document:selectionchange')
+  onSelectionChange(): void {
+    // Update toolbar active states whenever selection moves inside the editor
+    if (this.messageEditor?.nativeElement.contains(window.getSelection()?.anchorNode)) {
+      this.updateFormatState();
+    }
   }
 
   @HostListener('document:click', ['$event'])
@@ -2126,12 +2359,18 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       }
     }
 
-    // Handle emoji picker popup (message input toolbar)
-    if (this.isEmojiPickerVisible) {
-      const isEmojiBtn = target.closest('#emojiPickerBtn');
-      const isEmojiPicker = target.closest('.emoji-picker-container') || target.closest('.emoji-picker-popover');
-      if (!isEmojiBtn && !isEmojiPicker) {
-        this.isEmojiPickerVisible = false;
+    // Handle unified emoji/sticker picker popup
+    if (this.isPickerVisible.compose) {
+      const inside = target.closest('.picker-anchor--compose') || target.closest('app-emoji-sticker-picker');
+      if (!inside) {
+        this.isPickerVisible.compose = false;
+        this.cdr.detectChanges();
+      }
+    }
+    if (this.isPickerVisible.edit) {
+      const inside = target.closest('.picker-anchor--edit') || target.closest('app-emoji-sticker-picker');
+      if (!inside) {
+        this.isPickerVisible.edit = false;
         this.cdr.detectChanges();
       }
     }
@@ -2145,23 +2384,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       }
     }
 
-    // Close edit sticker picker on outside click
-    if (this.isEditStickerPickerVisible) {
-      const insideEditSticker = target.closest('.msg-edit-sticker-container');
-      if (!insideEditSticker) {
-        this.isEditStickerPickerVisible = false;
-        this.cdr.detectChanges();
-      }
-    }
-
-    // Close main sticker picker on outside click
-    if (this.isStickerPickerVisible) {
-      const insideSticker = target.closest('.sticker-picker-container');
-      if (!insideSticker) {
-        this.isStickerPickerVisible = false;
-        this.cdr.detectChanges();
-      }
-    }
   }
 
   addEmoji(emoji: string): void {
@@ -2172,7 +2394,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       this.newMessage = this.messageEditor.nativeElement.innerText;
       this.formattedMessage = this.messageEditor.nativeElement.innerHTML;
     }
-    this.isEmojiPickerVisible = false;
+    this.isPickerVisible.compose = false;
   }
 
   formatTime(value: any): string {
