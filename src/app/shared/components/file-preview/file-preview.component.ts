@@ -2,6 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { ConfirmationDialogComponent } from '../../layout/confirmation-dialog.component';
 
 export interface FilePreviewData {
   fileName: string;
@@ -16,7 +18,7 @@ export interface FilePreviewData {
 @Component({
   selector: 'app-file-preview',
   standalone: true,
-  imports: [CommonModule, HttpClientModule],
+  imports: [CommonModule, HttpClientModule, MatDialogModule],
   templateUrl: './file-preview.component.html',
   styleUrls: ['./file-preview.component.scss']
 })
@@ -35,7 +37,8 @@ export class FilePreviewComponent implements OnInit {
 
   constructor(
     private sanitizer: DomSanitizer,
-    private http: HttpClient
+    private http: HttpClient,
+    private dialog: MatDialog
   ) {}
 
   ngOnInit() {
@@ -79,7 +82,14 @@ export class FilePreviewComponent implements OnInit {
 
   startEdit() {
     if (!this.data.editUrl && this.previewType === 'office') {
-      alert('This file requires a Microsoft 365 integration with a WOPI host to be edited directly. Fallback: opening Office Online with generic viewer (read-only).');
+      this.dialog.open(ConfirmationDialogComponent, {
+        data: {
+          title: 'Notice',
+          message: 'This file requires a Microsoft 365 integration with a WOPI host to be edited directly. Fallback: opening Office Online with generic viewer (read-only).',
+          isAlert: true,
+          type: 'info'
+        }
+      });
       return;
     }
     
@@ -91,7 +101,14 @@ export class FilePreviewComponent implements OnInit {
   saveChanges() {
     // This would normally call an API to save the content
     // For now, it's a placeholder
-    alert('Changes saved to the cloud storage.');
+    this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Success',
+        message: 'Changes saved to the cloud storage.',
+        isAlert: true,
+        type: 'success'
+      }
+    });
     this.isEditing = false;
     this.isLoading = true;
     this.prepareSafeUrl();

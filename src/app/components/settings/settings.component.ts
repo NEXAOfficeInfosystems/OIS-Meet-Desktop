@@ -2,11 +2,13 @@ import { Component, OnInit, ViewChild, ElementRef, ChangeDetectorRef } from '@an
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SettingsService, UserSettings } from '../../core/services/settings.service';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { ConfirmationDialogComponent } from '../../shared/layout/confirmation-dialog.component';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MatDialogModule],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss'
 })
@@ -36,7 +38,8 @@ export class SettingsComponent implements OnInit {
 
   constructor(
     private settingsService: SettingsService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private dialog: MatDialog
   ) {}
 
   scrollToSection(sectionId: string): void {
@@ -127,9 +130,23 @@ export class SettingsComponent implements OnInit {
       console.error('Error starting preview:', err);
       
       if (!this.isElectron) {
-        alert('Could not access camera/microphone. Please ensure you have granted permissions in your browser and that no other application is using them.');
+        this.dialog.open(ConfirmationDialogComponent, {
+          data: {
+            title: 'Permission Denied',
+            message: 'Could not access camera/microphone. Please ensure you have granted permissions in your browser and that no other application is using them.',
+            isAlert: true,
+            type: 'error'
+          }
+        });
       } else {
-        alert('Could not access camera/microphone. Please ensure your devices are connected and not in use by another application.');
+        this.dialog.open(ConfirmationDialogComponent, {
+          data: {
+            title: 'Device Error',
+            message: 'Could not access camera/microphone. Please ensure your devices are connected and not in use by another application.',
+            isAlert: true,
+            type: 'error'
+          }
+        });
       }
     }
   }
@@ -184,8 +201,19 @@ export class SettingsComponent implements OnInit {
   }
 
   resetDefaults(): void {
-    if (confirm('Are you sure you want to reset all settings to default?')) {
-      this.settingsService.resetToDefault();
-    }
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Reset Settings',
+        message: 'Are you sure you want to reset all settings to default?',
+        type: 'warning',
+        confirmText: 'Reset'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.settingsService.resetToDefault();
+      }
+    });
   }
 }

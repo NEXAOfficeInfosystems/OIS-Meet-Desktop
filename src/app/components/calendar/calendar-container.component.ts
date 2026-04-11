@@ -4,19 +4,22 @@ import { CalendarHeaderComponent } from './calendar-header/calendar-header.compo
 import { CalendarGridComponent } from './calendar-grid/calendar-grid.component';
 import { EventDialogComponent } from './event-dialog/event-dialog.component';
 import { CalendarService } from '../../core/services/calendar.service';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { ConfirmationDialogComponent } from '../../shared/layout/confirmation-dialog.component';
 
 import { CalendarEvent, CalendarViewType } from '../../core/models/calendar.model';
 
 @Component({
   selector: 'app-calendar-container',
   standalone: true,
-  imports: [CommonModule, CalendarHeaderComponent, CalendarGridComponent, EventDialogComponent],
+  imports: [CommonModule, CalendarHeaderComponent, CalendarGridComponent, EventDialogComponent, MatDialogModule],
   templateUrl: './calendar-container.component.html',
   styleUrls: ['./calendar-container.component.scss']
 })
 
 export class CalendarContainerComponent implements OnInit {
   private calendarService = inject(CalendarService);
+  private dialog = inject(MatDialog);
 
   // Use Angular Signals for state management
   viewType = signal<CalendarViewType>('month');
@@ -125,12 +128,23 @@ export class CalendarContainerComponent implements OnInit {
   }
 
   onDeleteEvent(id: string) {
-    if (confirm('Are you sure you want to delete this meeting?')) {
-      this.calendarService.deleteEvent(id).subscribe(() => {
-        this.closeDialog();
-        this.loadEvents();
-      });
-    }
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Delete Meeting',
+        message: 'Are you sure you want to delete this meeting?',
+        type: 'warning',
+        confirmText: 'Delete'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.calendarService.deleteEvent(id).subscribe(() => {
+          this.closeDialog();
+          this.loadEvents();
+        });
+      }
+    });
   }
 
   closeDialog() {

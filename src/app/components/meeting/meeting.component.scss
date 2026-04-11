@@ -134,11 +134,22 @@
     }
   }
 
-  i { font-size: 0.85rem; margin-right: 2px; }
+  i {
+    font-size: 0.85rem;
+    margin-right: 2px;
+  }
 
-  .rec-label { letter-spacing: 0.5px; }
-  .rec-label-paused { color: #f59e0b; }
-  .rec-label-saving { color: #8b5cf6; }
+  .rec-label {
+    letter-spacing: 0.5px;
+  }
+
+  .rec-label-paused {
+    color: #f59e0b;
+  }
+
+  .rec-label-saving {
+    color: #8b5cf6;
+  }
 
   .rec-timer {
     margin-left: 6px;
@@ -284,21 +295,41 @@
     animation: none; // don't re-run fadeInStage when toggling
 
     // Banner stays slim so more space goes to the video
-    .ss-banner { min-height: 48px; }
+    .ss-banner {
+      min-height: 48px;
+    }
 
     // Video fills all remaining height
-    .ss-main { flex: 1; padding: 8px; }
-    .ss-main-video { border-radius: 8px; }
+    .ss-main {
+      flex: 1;
+      padding: 8px;
+    }
+
+    .ss-main-video {
+      border-radius: 8px;
+    }
 
     // Keep thumbnails visible (user can use Focus mode to hide them)
-    .ss-thumbs { max-height: 96px; }
+    .ss-thumbs {
+      max-height: 96px;
+    }
   }
 
   // ── Focus mode: video fills entire stage, thumbs slide away ──
   &.ss-focus-mode {
-    .ss-main { padding: 0; }
-    .ss-main-video { border-radius: 0; }
-    .ss-thumbs { height: 0; padding: 0; overflow: hidden; }
+    .ss-main {
+      padding: 0;
+    }
+
+    .ss-main-video {
+      border-radius: 0;
+    }
+
+    .ss-thumbs {
+      height: 0;
+      padding: 0;
+      overflow: hidden;
+    }
   }
 
   // ── Pinned / Spotlight indicator ring ────────────────────────
@@ -309,8 +340,13 @@
 }
 
 @keyframes fadeInStage {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 // ── Utility: animate-away hidden elements ─────────────────────
@@ -321,8 +357,14 @@
 }
 
 // ── Scale modes on the video element ─────────────────────────
-.ss-scale-fit     { object-fit: contain !important; }
-.ss-scale-fill    { object-fit: cover !important; }
+.ss-scale-fit {
+  object-fit: contain !important;
+}
+
+.ss-scale-fill {
+  object-fit: cover !important;
+}
+
 .ss-scale-original {
   object-fit: none !important;
   width: auto !important;
@@ -345,7 +387,7 @@
 
 .ss-presenter-overlay {
   position: absolute;
-  bottom: 0;   // sits just above thumbnail strip
+  bottom: 0; // sits just above thumbnail strip
   left: 0;
   right: 0;
   padding: 10px 18px;
@@ -376,9 +418,18 @@
   gap: 8px;
   flex: 1;
 
-  &.ss-overlay-left  { justify-content: flex-start; }
-  &.ss-overlay-centre { justify-content: center; flex: 2; }
-  &.ss-overlay-right { justify-content: flex-end; }
+  &.ss-overlay-left {
+    justify-content: flex-start;
+  }
+
+  &.ss-overlay-centre {
+    justify-content: center;
+    flex: 2;
+  }
+
+  &.ss-overlay-right {
+    justify-content: flex-end;
+  }
 }
 
 // ── Scale-mode pill selector ─────────────────────────────────
@@ -407,7 +458,9 @@
   cursor: pointer;
   transition: background 0.18s, color 0.18s;
 
-  i { font-size: 0.7rem; }
+  i {
+    font-size: 0.7rem;
+  }
 
   &:hover {
     background: rgba(255, 255, 255, 0.1);
@@ -465,10 +518,14 @@
   transition: all 0.18s ease;
   white-space: nowrap;
 
-  i { font-size: 0.78rem; }
+  i {
+    font-size: 0.78rem;
+  }
 
   span {
-    @media (max-width: 900px) { display: none; }
+    @media (max-width: 900px) {
+      display: none;
+    }
   }
 
   &:hover {
@@ -516,7 +573,10 @@
     color: #e2e8f0;
     flex-shrink: 0;
 
-    i.fa-desktop { color: var(--accent-color, #6366f1); font-size: 0.9rem; }
+    i.fa-desktop {
+      color: var(--accent-color, #6366f1);
+      font-size: 0.9rem;
+    }
   }
 
   // CENTRE — mode controls
@@ -558,15 +618,17 @@
 
   .ss-participant-chip {
     font-size: 0.72rem;
-    color: rgba(255,255,255,0.45);
+    color: rgba(255, 255, 255, 0.45);
     display: flex;
     align-items: center;
     gap: 4px;
-    background: rgba(255,255,255,0.07);
+    background: rgba(255, 255, 255, 0.07);
     padding: 2px 8px;
     border-radius: 12px;
 
-    i { font-size: 0.65rem; }
+    i {
+      font-size: 0.65rem;
+    }
   }
 
   .ss-stop-btn {
@@ -584,7 +646,9 @@
     transition: background 0.18s, transform 0.15s;
     white-space: nowrap;
 
-    i { font-size: 0.8rem; }
+    i {
+      font-size: 0.8rem;
+    }
 
     &:hover {
       background: #dc2626;
@@ -609,10 +673,15 @@
   transition: all 0.18s ease;
   white-space: nowrap;
 
-  i { font-size: 0.77rem; transition: transform 0.18s; }
+  i {
+    font-size: 0.77rem;
+    transition: transform 0.18s;
+  }
 
   span {
-    @media (max-width: 920px) { display: none; }
+    @media (max-width: 920px) {
+      display: none;
+    }
   }
 
   &:hover {
@@ -641,7 +710,9 @@
   align-items: center;
   gap: 4px;
 
-  @media (max-width: 960px) { display: none; }
+  @media (max-width: 960px) {
+    display: none;
+  }
 }
 
 .ss-shortcut-pill {
@@ -664,7 +735,9 @@
 
 // ── Presenter overlay: now hidden — controls live in banner ──────────
 // Kept in CSS for backward-compat; set display:none so it doesn't interfere
-.ss-presenter-overlay { display: none !important; }
+.ss-presenter-overlay {
+  display: none !important;
+}
 
 /* ── Main Screen Area ─────────────────────────────────────────── */
 .ss-main {
@@ -698,8 +771,15 @@
   gap: 10px;
   pointer-events: none;
 
-  i { font-size: 2.5rem; opacity: 0.4; }
-  p { font-size: 0.85rem; margin: 0; }
+  i {
+    font-size: 2.5rem;
+    opacity: 0.4;
+  }
+
+  p {
+    font-size: 0.85rem;
+    margin: 0;
+  }
 }
 
 /* ── Thumbnail Strip ──────────────────────────────────────────── */
@@ -712,9 +792,18 @@
   overflow-y: hidden;
 
   // Custom slim scrollbar
-  &::-webkit-scrollbar { height: 4px; }
-  &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 4px; }
+  &::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+  }
 }
 
 /* ── Individual Thumbnail ─────────────────────────────────────── */
@@ -794,7 +883,9 @@
     font-size: 0.58rem;
     color: #e2e8f0;
 
-    .fa-microphone-slash { color: #ef4444; }
+    .fa-microphone-slash {
+      color: #ef4444;
+    }
   }
 }
 
@@ -1052,7 +1143,9 @@
     font-weight: 600;
     color: #1a202c;
 
-    i { color: var(--accent-color); }
+    i {
+      color: var(--accent-color);
+    }
 
     .vol-pct {
       margin-left: auto;
@@ -1179,12 +1272,20 @@
   /* Recording specific button variants */
   &.rec-stop-btn {
     color: #ef4444;
-    &:hover { background: #fee2e2; border-color: #fca5a5; }
+
+    &:hover {
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
   }
 
   &.rec-discard-btn {
     color: #64748b;
-    &:hover { background: #e2e8f0; color: #1e293b; }
+
+    &:hover {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
   }
 }
 
@@ -1199,7 +1300,11 @@
     // slightly larger to stand out
     background: #fff;
     border-color: #cbd5e0;
-    i { color: #ef4444 !important; font-size: 1rem; }
+
+    i {
+      color: #ef4444 !important;
+      font-size: 1rem;
+    }
   }
 
   .rec-mode-btns {
@@ -1225,6 +1330,7 @@
       border-color: #ef4444;
       background: #fffafa;
     }
+
     .rec-mode-btns {
       opacity: 1;
       transform: translateX(10px);
@@ -1243,7 +1349,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     transition: all 0.2s;
 
     &:hover {
@@ -1803,6 +1909,148 @@
   50% {
     transform: scaleY(1.4);
     opacity: 1;
+  }
+}
+
+/* ── Custom Dialog ────────────────────────────────────────────── */
+.custom-dialog-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeInStage 0.2s ease;
+}
+
+.custom-dialog-box {
+  width: 400px;
+  background: #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: panelReveal 0.25s ease;
+  border: 1px solid #e2e8f0;
+
+  &.destructive {
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  .custom-dialog-header {
+    padding: 10px 20px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+
+    .icon-wrapper {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(99, 102, 241, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-color);
+      font-size: 1.1rem;
+
+      &.destructive {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+      }
+    }
+
+    .fw-bold {
+      font-size: 1.05rem;
+      color: #1e293b;
+    }
+
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:hover {
+        background: #e2e8f0;
+        color: #1e293b;
+      }
+    }
+  }
+
+  .custom-dialog-body {
+    padding: 24px 20px;
+    color: #475569;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    text-align: center;
+
+    p {
+      margin: 0;
+    }
+  }
+
+  .custom-dialog-footer {
+    padding: 7px 20px;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    background: #f8fafc;
+
+    button {
+      padding: 5px 20px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+
+    .dialog-btn-cancel {
+      background: #ffffff;
+      color: #64748b;
+      border: 1px solid #e2e8f0;
+
+      &:hover {
+        background: #f1f5f9;
+        color: #1e293b;
+        border-color: #cbd5e0;
+      }
+    }
+
+    .dialog-btn-confirm {
+      background: var(--accent-color);
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+
+      &:hover {
+        background: #4f46e5;
+        transform: translateY(-1px);
+      }
+
+      &.destructive {
+        background: #ef4444;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+
+        &:hover {
+          background: #dc2626;
+        }
+      }
+    }
   }
 }
 

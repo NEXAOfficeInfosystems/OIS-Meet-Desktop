@@ -36,6 +36,8 @@ import { NotificationService } from '../../core/services/notification.service';
 import { NotificationRecipient } from '../../core/models/notification.models';
 import { ActivityFeedComponent } from '../activity-feed/activity-feed.component';
 import { SignalRService } from '../../core/services/signalr.service';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { ConfirmationDialogComponent } from '../../shared/layout/confirmation-dialog.component';
 
 
 declare var bootstrap: any;
@@ -63,6 +65,21 @@ interface InAppToast {
   styleUrls: ['./chat.component.scss']
 })
 export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
+  private showAlert(message: string, title: string = 'Notice') {
+    this.dialog.open(ConfirmationDialogComponent, {
+      data: { title, message, isAlert: true, type: 'info' }
+    });
+  }
+
+  private showConfirm(message: string, confirmText: string = 'Confirm', callback: () => void) {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: { title: 'Confirm Action', message, type: 'warning', confirmText, isDestructive: true }
+    });
+    dialogRef.afterClosed().subscribe((result: any) => {
+      if (result) callback();
+    });
+  }
+
   @ViewChild('chatMessages') private chatMessagesContainer!: ElementRef;
   @ViewChild('fileInput') fileInput!: ElementRef;
 
@@ -234,7 +251,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private settingsService: SettingsService,
     private previewService: PreviewService,
     public notificationService: NotificationService,
-    private signalRService: SignalRService
+    private signalRService: SignalRService,
+    private dialog: MatDialog
   ) {
     this.currentUserId = this.sessionService.getOISMeetUserId();
 
@@ -696,7 +714,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.callService.callRejected$.pipe(takeUntil(this.destroy$)).subscribe(data => {
       console.log('❌ Call rejected by remote user', data.reason);
       this.resetOutgoingCallState();
-      alert(`Call rejected: ${data.reason}`);
+      this.showAlert(`Call rejected: ${data.reason}`);
       this.cdr.detectChanges();
     });
 
@@ -717,7 +735,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     // Use exact SignalR mapped ID (priority: oisMeetUserId, then db id)
     const targetUserId = this.selectedUser.oisMeetUserId || this.selectedUser.id;
-    if (!targetUserId) return alert('Selected user is missing a valid call identity.');
+    if (!targetUserId) return this.showAlert('Selected user is missing a valid call identity.');
 
     console.log(`🚀 Initiating ${type} call to user: ${this.selectedUser.fullName} (Target ID: ${targetUserId})`);
     this.callType = type;
@@ -740,7 +758,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         this.callService.stopRingtones();
         this.resetOutgoingCallState();
         this.callService.outgoingCall.set(null);
-        alert('Could not start call. Please ensure you are connected and try again.');
+        this.showAlert('Could not start call. Please ensure you are connected and try again.');
         this.cdr.detectChanges();
       });
   }
@@ -838,9 +856,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   deleteMessage(messageId: string): void {
-    if (confirm('Are you sure you want to delete this message?')) {
+    this.showConfirm('Are you sure you want to delete this message?', 'Delete', () => {
+
       this.store.dispatch(MessagesActions.deleteMessage({ messageId }));
-    }
+    
+});
   }
 
   editMessage(message: any): void {
@@ -1715,13 +1735,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const meetingId = chip.getAttribute('data-meeting-id');
     if (!meetingId) return;
 
-    const confirmed = confirm(
-      `Join meeting?\n\nMeeting ID: ${meetingId}\n\nClick OK to join.`
-    );
-    if (!confirmed) return;
+    this.showConfirm(
+      `Join meeting?\n\nMeeting ID: ${meetingId}\n\nClick OK to join.`,
+      'Join',
+      () => {
 
     // Validate the meeting via API then open the window as participant
-    this.validateAndJoinMeeting(meetingId);
+    this.validateAndJoinMeeting(meetingId);}
+    );
   }
 
   /**
@@ -1735,7 +1756,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const userName = this.sessionService.getFullName() || 'User';
 
     if (!userId) {
-      alert('User not authenticated. Please log in again.');
+      this.showAlert('User not authenticated. Please log in again.');
       return;
     }
 
@@ -1744,7 +1765,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     if (electronApi?.isElectron && typeof electronApi.isMeetingActive === 'function') {
       const isActive = await electronApi.isMeetingActive();
       if (isActive) {
-        alert('You are already in an active meeting. Please leave it before joining another.');
+        this.showAlert('You are already in an active meeting. Please leave it before joining another.');
         return;
       }
     }
@@ -1753,7 +1774,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.meetingService.validateMeeting(meetingId).subscribe({
       next: (validateRes: any) => {
         if (!validateRes.success) {
-          alert(validateRes.message || 'Invalid or expired meeting ID.');
+          this.showAlert(validateRes.message || 'Invalid or expired meeting ID.');
           return;
         }
 
@@ -1763,13 +1784,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
             if (joinRes.success) {
               this.openMeetingWindow(meetingId, false);
             } else {
-              alert('Could not join meeting. Please try again.');
+              this.showAlert('Could not join meeting. Please try again.');
             }
           },
-          error: () => alert('Failed to join meeting. Please try again.')
+          error: () => this.showAlert('Failed to join meeting. Please try again.')
         });
       },
-      error: () => alert('Could not validate meeting. Please try again.')
+      error: () => this.showAlert('Could not validate meeting. Please try again.')
     });
   }
 
@@ -1955,7 +1976,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       }).toPromise();
 
       if (!res?.success || !res?.data?.meetingId) {
-        alert('Could not create group call. Please try again.');
+        this.showAlert('Could not create group call. Please try again.');
         return;
       }
 
@@ -1979,7 +2000,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       }
     } catch (err) {
       console.error('Failed to start group call:', err);
-      alert('Could not start group call. Please try again.');
+      this.showAlert('Could not start group call. Please try again.');
     } finally {
       this.isGroupCallStarting = false;
       this.cdr.detectChanges();
@@ -2502,7 +2523,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       },
       error: (err) => {
         console.error('Failed to update group name:', err);
-        alert('Failed to update group name. Please try again.');
+        this.showAlert('Failed to update group name. Please try again.');
         this.isEditingName = false;
       }
     });
@@ -2522,13 +2543,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     // Validate type
     const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!validTypes.includes(file.type)) {
-      alert('Please select a valid image (JPG, PNG, or WEBP)');
+      this.showAlert('Please select a valid image (JPG, PNG, or WEBP)');
       return;
     }
 
     // Validate size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image too large. Max size is 5MB.');
+      this.showAlert('Image too large. Max size is 5MB.');
       return;
     }
 
@@ -2638,7 +2659,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       error: (err) => {
         console.error('Avatar upload failed', err);
         this.isUploadingAvatar = false;
-        alert('Failed to upload avatar. Please try again.');
+        this.showAlert('Failed to upload avatar. Please try again.');
       }
     });
   }

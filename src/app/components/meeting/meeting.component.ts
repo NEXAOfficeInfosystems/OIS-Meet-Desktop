@@ -67,6 +67,17 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   showChat: boolean = false;
   isLoading: boolean = true;
 
+  // ── Custom Dialog State ────────────────────────────────────────────
+  dialogState = {
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    isDestructive: false,
+    onConfirm: () => {},
+    onCancel: () => {}
+  };
   // Volume & local mute
   volume: number = 1;
   showVolumeControl: boolean = false;
@@ -2978,25 +2989,63 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   leaveMeeting() {
     console.log('Leaving meeting');
-    if (confirm('Are you sure you want to leave the meeting?')) {
-      if (!this.isHost) {
-        this.meetingService.leaveMeeting(this.meetingId, this.oisMeetUserId).subscribe();
+    this.openConfirmDialog({
+      title: 'Leave Meeting',
+      message: 'Are you sure you want to leave the meeting?',
+      confirmText: 'Leave',
+      isDestructive: true,
+      onConfirm: () => {
+        if (!this.isHost) {
+          this.meetingService.leaveMeeting(this.meetingId, this.oisMeetUserId).subscribe();
+        }
+        this.signalRService.leaveMeeting(this.meetingId, this.oisMeetUserId);
+        this.closeMeetingWindow();
       }
-      this.signalRService.leaveMeeting(this.meetingId, this.oisMeetUserId);
-      this.closeMeetingWindow();
-    }
+    });
   }
 
   endMeeting() {
     console.log('Ending meeting');
-    if (this.isHost && confirm('End meeting for everyone?')) {
-      this.meetingService.endMeeting(this.meetingId, this.oisMeetUserId).subscribe({
-        next: () => {
-          this.signalRService.endMeeting(this.meetingId, this.oisMeetUserId);
-          this.closeMeetingWindow();
-        }
-      });
-    }
+    if (!this.isHost) return;
+    this.openConfirmDialog({
+      title: 'End Meeting',
+      message: 'Are you sure you want to end the meeting for everyone?',
+      confirmText: 'End',
+      isDestructive: true,
+      onConfirm: () => {
+        this.meetingService.endMeeting(this.meetingId, this.oisMeetUserId).subscribe({
+          next: () => {
+            this.signalRService.endMeeting(this.meetingId, this.oisMeetUserId);
+            this.closeMeetingWindow();
+          }
+        });
+      }
+    });
+  }
+
+  openConfirmDialog(config: { title: string, message: string, confirmText?: string, cancelText?: string, isDestructive?: boolean, onConfirm: () => void, onCancel?: () => void }) {
+    this.dialogState = {
+      isOpen: true,
+      title: config.title,
+      message: config.message,
+      confirmText: config.confirmText || 'Confirm',
+      cancelText: config.cancelText || 'Cancel',
+      isDestructive: config.isDestructive || false,
+      onConfirm: () => {
+        this.closeDialog();
+        if (config.onConfirm) config.onConfirm();
+      },
+      onCancel: () => {
+        this.closeDialog();
+        if (config.onCancel) config.onCancel();
+      }
+    };
+    this.cdr.detectChanges();
+  }
+
+  closeDialog() {
+    this.dialogState.isOpen = false;
+    this.cdr.detectChanges();
   }
 
   muteParticipant(participantId: string) {

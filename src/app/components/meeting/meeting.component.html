@@ -599,4 +599,26 @@
       </div>
     </div>
 
+    <!-- ── Custom Confirm Dialog ─────────────────────────────────── -->
+    <div class="custom-dialog-overlay" *ngIf="dialogState.isOpen">
+      <div class="custom-dialog-box">
+        <div class="custom-dialog-header">
+          <div class="d-flex align-items-center gap-2">
+            <div class="icon-wrapper" [class.destructive]="dialogState.isDestructive">
+              <i class="fas" [class.fa-exclamation-triangle]="dialogState.isDestructive" [class.fa-info-circle]="!dialogState.isDestructive"></i>
+            </div>
+            <span class="fw-bold">{{ dialogState.title }}</span>
+          </div>
+          <button class="close-btn" (click)="closeDialog()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="custom-dialog-body">
+          <p>{{ dialogState.message }}</p>
+        </div>
+        <div class="custom-dialog-footer">
+          <button class="dialog-btn-cancel" (click)="dialogState.onCancel()">{{ dialogState.cancelText }}</button>
+          <button class="dialog-btn-confirm" [class.destructive]="dialogState.isDestructive" (click)="dialogState.onConfirm()">{{ dialogState.confirmText }}</button>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /meeting-container -->

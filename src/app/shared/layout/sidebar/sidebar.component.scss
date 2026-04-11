@@ -5,7 +5,7 @@
   padding: 10px;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 100%);
+  background: var(--fluent-bg-card);
   border-right: 1px solid rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
   animation: slideInLeft 0.5s cubic-bezier(0.1, 0.9, 0.2, 1);

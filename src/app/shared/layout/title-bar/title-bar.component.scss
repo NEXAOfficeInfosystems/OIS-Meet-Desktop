@@ -3,7 +3,7 @@
   justify-content: space-between;
   align-items: center;
   height: 48px;
-  background-color: var(--fluent-bg-surface);
+  background-color: var(--fluent-bg-card);
   color: var(--fluent-text-primary);
   user-select: none;
   font-family: 'Segoe UI', system-ui, sans-serif;
@@ -25,8 +25,8 @@
   .search-box {
     display: flex;
     align-items: center;
-    background: var(--fluent-bg-canvas);
-    border: 1px solid transparent;
+    background: var(--fluent-bg-surface);
+    border: 1px solid var(--fluent-border);
     border-radius: var(--fluent-radius-lg);
     padding: 6px 14px;
     height: 32px;
