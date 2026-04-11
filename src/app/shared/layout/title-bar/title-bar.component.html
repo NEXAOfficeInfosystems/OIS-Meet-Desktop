@@ -25,7 +25,7 @@
 
   <!-- Right Actions: Only if authenticated and not login page -->
   <div class="main-actions" *ngIf="!isLoginPage && (isAuthenticated$ | async)">
-    <div class="meet-controls d-none d-lg-flex">
+    <div class="meet-controls d-none d-lg-flex" *ngIf="!isMeetingActive">
       <button type="button" class="btn-meet btn-meet-primary" (click)="openMeetNowDialog('meet-now')">
         <i class="fas fa-video"></i>
         <span>Meet Now</span>

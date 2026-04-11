@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { CallService } from '../../../core/services/call.service';
 import { SessionService } from '../../../core/services/session.service';
 import { Router } from '@angular/router';
+import { InitialsPipe } from '../../../shared/pipes/initials.pipe';
 
 @Component({
   selector: 'app-incoming-call-banner',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, InitialsPipe],
   template: `
     <!--
       CALLEE-ONLY BANNER: Rendered only when:
@@ -17,7 +18,7 @@ import { Router } from '@angular/router';
     <div class="global-call-banner shadow-lg animate-in" *ngIf="showBanner() as call">
       <div class="global-call-banner__icon">
         <div class="avatar-circle">
-          {{ call.fromUserName.charAt(0).toUpperCase() }}
+          {{ call.fromUserName | initials }}
         </div>
       </div>
       <div class="global-call-banner__content">

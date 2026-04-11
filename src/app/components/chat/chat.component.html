@@ -79,7 +79,7 @@
           <div class="team-section" *ngFor="let team of teams">
             <div class="team-header d-flex align-items-center gap-2"
               [class.active]="activeTeam === team.name && !selectedUser" (click)="selectTeam(team)">
-              <div class="team-icon" [style.background-color]="team.color">
+              <div class="team-icon rounded-circle" [style.background-color]="team.color || '#E3F2FD'">
                 <i [class]="team.icon"></i>
               </div>
               <span class="team-name">{{ team.name }}</span>
@@ -112,9 +112,9 @@
             <div class="dm-avatar-wrapper position-relative">
               <img *ngIf="user.avatarUrl" [src]="fileService.getFileUrl(user.avatarUrl)" class="dm-avatar-sm"
                 alt="avatar">
-              <div *ngIf="!user.avatarUrl" class="dm-avatar-sm"
-                [style.background-color]="user.avatarColor || '#3b82f6'">
-                {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
+              <div *ngIf="!user.avatarUrl" class="dm-avatar-sm rounded-circle"
+                [style.background-color]="user.avatarColor || '#E3F2FD'">
+                {{ (user.fullName || user.name || 'U') | initials }}
               </div>
               <span class="status-indicator-sm" [class.online]="user.isOnline"></span>
             </div>
@@ -191,9 +191,9 @@
             <div class="dm-avatar-wrapper position-relative">
               <img *ngIf="user.avatarUrl" [src]="fileService.getFileUrl(user.avatarUrl)"
                 class="dm-avatar-sm rounded-circle" alt="avatar">
-              <div *ngIf="!user.avatarUrl" class="dm-avatar-sm"
-                [style.background-color]="user.avatarColor || '#3b82f6'">
-                {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
+              <div *ngIf="!user.avatarUrl" class="dm-avatar-sm rounded-circle"
+                [style.background-color]="user.avatarColor || '#E3F2FD'">
+                {{ (user.fullName || user.name || 'U') | initials }}
               </div>
               <span class="status-indicator-sm" [class.online]="user.isOnline"></span>
             </div>
@@ -243,7 +243,7 @@
             class="dm-avatar-sm" alt="avatar">
           <div *ngIf="!selectedUser?.avatarUrl" [style.background-color]="selectedUser?.avatarColor"
             class="dm-avatar-sm">
-            {{ (selectedUser?.fullName || selectedUser?.name || 'U').charAt(0).toUpperCase() }}
+            {{ (selectedUser?.fullName || selectedUser?.name || 'U') | initials }}
           </div>
           <span class="status-indicator-sm" [class.online]="selectedUser?.isOnline"></span>
         </div>
@@ -343,7 +343,7 @@
                     class="msg-avatar rounded-circle" alt="avatar">
                   <div *ngIf="!msg.senderAvatarUrl" class="msg-avatar"
                     [style.background-color]="getMemberAvatarColor(msg.senderName)">
-                    {{ msg.senderName.charAt(0).toUpperCase() }}
+                    {{ msg.senderName | initials }}
                   </div>
                 </div>
                 <div class="message-data-col">
@@ -603,7 +603,7 @@
                     [class.active]="i === mentionSelectedIndex" (mousedown)="$event.preventDefault()"
                     (click)="insertMention(m); $event.stopPropagation()">
                     <div class="dm-avatar-xs" [style.background-color]="m.avatarColor || '#3b82f6'">
-                      {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+                      {{ (m.fullName || m.name || 'U') | initials }}
                     </div>
                     <span class="fs-xs fw-medium">{{ m.fullName || m.name }}</span>
                   </div>
@@ -738,7 +738,7 @@
                     <td class="py-3">
                       <div class="d-flex align-items-center gap-2">
                         <div class="dm-avatar-xs" [style.background-color]="getMemberAvatarColor(file.owner)">
-                          {{ (file.owner || 'U').charAt(0).toUpperCase() }}
+                          {{ (file.owner || 'U') | initials }}
                         </div>
                         <span class="fs-small text-secondary">{{ file.owner }}</span>
                       </div>
@@ -779,7 +779,7 @@
                     <div class="profile-card-modern border-0 rounded-4 bg-light p-4 text-center">
                       <div class="avatar-xl mx-auto mb-3 shadow-sm border border-4 border-white"
                         [style.background-color]="selectedUser.avatarColor || '#3b82f6'">
-                        {{ (selectedUser.fullName || selectedUser.name || 'U').charAt(0).toUpperCase() }}
+                        {{ (selectedUser.fullName || selectedUser.name || 'U') | initials }}
                       </div>
                       <h5 class="mb-1 fw-bold">{{ selectedUser.fullName || selectedUser.name }}</h5>
                       <p class="text-muted mb-3">{{ selectedUser.email }}</p>
@@ -851,7 +851,7 @@
                         <div class="list-group-item d-flex align-items-center gap-3"
                           *ngFor="let member of filteredGroupMembers">
                           <div class="dm-avatar-sm" [style.background-color]="getMemberAvatarColor(member.name)">
-                            {{ (member.name || 'U').charAt(0).toUpperCase() }}
+                            {{ (member.name || 'U') | initials }}
                           </div>
                           <div>
                             <div class="fw-medium">{{ member.name }}</div>
@@ -958,7 +958,7 @@
           <div class="selected-members-chips d-flex flex-wrap gap-2 mb-2" *ngIf="selectedGroupMembers.length > 0">
             <div class="member-chip animate-fade-in" *ngFor="let m of selectedGroupMembers">
               <div class="chip-avatar" [style.background-color]="m.avatarColor || '#3b82f6'">
-                {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+                {{ (m.fullName || m.name || 'U') | initials }}
               </div>
               <span class="chip-label">{{ m.fullName || m.name }}</span>
               <button type="button" class="chip-remove" (click)="toggleGroupMember(m)" title="Remove">
@@ -975,7 +975,7 @@
                 [class.selected]="isGroupMemberSelected(user)" (click)="toggleGroupMember(user)">
 
                 <div class="dm-avatar-sm flex-shrink-0" [style.background-color]="user.avatarColor || '#3b82f6'">
-                  {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
+                  {{ (user.fullName || user.name || 'U') | initials }}
                 </div>
 
                 <div class="member-info flex-grow-1 min-w-0">
@@ -1045,7 +1045,7 @@
         <div class="selected-members-chips d-flex flex-wrap gap-2 mb-2" *ngIf="selectedNewMembers.length > 0">
           <div class="member-chip animate-fade-in" *ngFor="let m of selectedNewMembers">
             <div class="chip-avatar" [style.background-color]="m.avatarColor || '#3b82f6'">
-              {{ (m.fullName || m.name || 'U').charAt(0).toUpperCase() }}
+              {{ (m.fullName || m.name || 'U') | initials }}
             </div>
             <span class="chip-label">{{ m.fullName || m.name }}</span>
             <button type="button" class="chip-remove" (click)="toggleNewMember(m)" title="Remove">
@@ -1060,7 +1060,7 @@
               class="group-member-item d-flex align-items-center gap-2 p-2 rounded"
               [class.selected]="isNewMemberSelected(user)" (click)="toggleNewMember(user)">
               <div class="dm-avatar-sm flex-shrink-0" [style.background-color]="user.avatarColor || '#3b82f6'">
-                {{ (user.fullName || user.name || 'U').charAt(0).toUpperCase() }}
+                {{ (user.fullName || user.name || 'U') | initials }}
               </div>
               <div class="member-info flex-grow-1 min-w-0">
                 <div class="member-name fs-small text-truncate fw-medium">{{ user.fullName || user.name }}</div>

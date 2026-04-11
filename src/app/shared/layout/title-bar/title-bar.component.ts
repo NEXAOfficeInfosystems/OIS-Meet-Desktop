@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, OnInit, computed, inject } from '@angular/core';
+import { Component, ElementRef, HostListener, OnInit, OnDestroy, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, NavigationEnd } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
@@ -22,7 +22,7 @@ type ThemeMode = 'light' | 'dark';
   templateUrl: './title-bar.component.html',
   styleUrl: './title-bar.component.scss'
 })
-export class TitleBarComponent implements OnInit {
+export class TitleBarComponent implements OnInit, OnDestroy {
   isMaximized = false;
   isElectron = !!(window as any).windowAPI;
   isLoginPage = false;
@@ -37,6 +37,8 @@ export class TitleBarComponent implements OnInit {
   userFullName: string | null = null;
   selectedCompanyId: number | null = null;
   companyList: any[] = [];
+  isMeetingActive = false;
+  private meetingCheckInterval: any;
 
   constructor(
     private hostEl: ElementRef,
@@ -67,6 +69,10 @@ export class TitleBarComponent implements OnInit {
       window.addEventListener('resize', () => {
         this.updateMaximizedState();
       });
+
+      // Periodically check if a meeting is active to show/hide "Meet Now"
+      this.checkMeetingStatus();
+      this.meetingCheckInterval = setInterval(() => this.checkMeetingStatus(), 2000);
     }
 
     const storedCompany = this.storageService.getObject<any>('defaultCompany');
@@ -82,6 +88,23 @@ export class TitleBarComponent implements OnInit {
         this.companyList = companies;
       }
     });
+  }
+
+  ngOnDestroy(): void {
+    if (this.meetingCheckInterval) {
+      clearInterval(this.meetingCheckInterval);
+    }
+  }
+
+  private async checkMeetingStatus() {
+    const electronApi = (window as any).oisMeet;
+    if (electronApi && typeof electronApi.isMeetingActive === 'function') {
+      try {
+        this.isMeetingActive = await electronApi.isMeetingActive();
+      } catch (err) {
+        console.error('Error checking meeting status:', err);
+      }
+    }
   }
 
   private checkRoute(url: string) {

@@ -3,11 +3,13 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { SessionService } from '../../core/services/session.service';
+import { CommonService } from '../../core/services/common.service';
+import { InitialsPipe } from '../../shared/pipes/initials.pipe';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, InitialsPipe],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss'
@@ -54,11 +56,8 @@ export class DashboardComponent implements OnInit {
     { name: 'Emily Clark', status: 'Offline', avatar: 'assets/header/profile.png' },
   ];
 
-  getInitials(name: string): string {
-    if (!name) return 'U';
-    const parts = name.split(' ');
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return name[0].toUpperCase();
+  getInitials(name: string | null | undefined): string {
+    return this.commonService.getInitials(name);
   }
 
   getAvatarColor(name: string): string {
@@ -73,7 +72,8 @@ export class DashboardComponent implements OnInit {
   constructor(
     private authService: AuthService,
     private sessionService: SessionService,
-    private router: Router
+    private router: Router,
+    private commonService: CommonService
   ) {}
 
   ngOnInit() {

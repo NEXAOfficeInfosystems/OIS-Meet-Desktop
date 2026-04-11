@@ -23,12 +23,12 @@ export class CommonService {
   }
 
   // In common.service.ts
-private syncCompleteSource = new Subject<any>();
-syncComplete$ = this.syncCompleteSource.asObservable();
+  private syncCompleteSource = new Subject<any>();
+  syncComplete$ = this.syncCompleteSource.asObservable();
 
-notifySyncComplete(company: any) {
-  this.syncCompleteSource.next(company);
-}
+  notifySyncComplete(company: any) {
+    this.syncCompleteSource.next(company);
+  }
 
   getCompanies() {
     return this.companyListSource.value;
@@ -42,44 +42,60 @@ notifySyncComplete(company: any) {
   }
 
   pickDefaultCompanyForStorage(companyUrlResponse: CompanyUrlResponse): StoredDefaultCompany | null {
-      const items = companyUrlResponse?.data;
-      if (!Array.isArray(items) || items.length === 0) return null;
+    const items = companyUrlResponse?.data;
+    if (!Array.isArray(items) || items.length === 0) return null;
 
-      const preferred = items.find((x: CompanyUrlItem) => x?.isDefault === true)
-        ?? items.find((x: CompanyUrlItem) => x?.company?.isDefault === true)
-        ?? items[0];
+    const preferred = items.find((x: CompanyUrlItem) => x?.isDefault === true)
+      ?? items.find((x: CompanyUrlItem) => x?.company?.isDefault === true)
+      ?? items[0];
 
-      const company = preferred?.company;
-      if (!company) return null;
+    const company = preferred?.company;
+    if (!company) return null;
 
-      return {
-        clientId: company?.clientId,
-        companyId: company?.companyId,
-        companyname: company?.name,
-        companylogo: company?.logo ?? null,
-      };
+    return {
+      clientId: company?.clientId,
+      companyId: company?.companyId,
+      companyname: company?.name,
+      companylogo: company?.logo ?? null,
+    };
   }
 
   getRandomColor(): string {
     const colors = [
-      '#1a73e8',
-      '#e91e63',
-      '#4caf50',
-      '#ff9800',
-      '#9c27b0',
-      '#009688'
+      '#E3F2FD', // Light Blue
+      '#F3E5F5', // Light Purple
+      '#E8F5E9', // Light Green
+      '#FFF3E0', // Light Orange
+      '#FCE4EC', // Light Pink
+      '#E0F2F1', // Light Teal
+      '#F9FBE7', // Light Lime
+      '#FFFDE7'  // Light Yellow
     ];
 
     return colors[Math.floor(Math.random() * colors.length)];
   }
-private selectedCompanySource = new BehaviorSubject<any>(null);
-selectedCompany$ = this.selectedCompanySource.asObservable();
 
-setSelectedCompany(company: any) {
-  this.selectedCompanySource.next(company);
-}
+  private selectedCompanySource = new BehaviorSubject<any>(null);
+  selectedCompany$ = this.selectedCompanySource.asObservable();
 
-getSelectedCompany() {
-  return this.selectedCompanySource.value;
-}
+  setSelectedCompany(company: any) {
+    this.selectedCompanySource.next(company);
+  }
+
+  getSelectedCompany() {
+    return this.selectedCompanySource.value;
+  }
+
+  getInitials(name: string | null | undefined): string {
+    if (!name) return 'U';
+    const trimmed = name.trim();
+    if (!trimmed) return 'U';
+
+    const parts = trimmed.split(/\s+/);
+    if (parts.length > 1) {
+      return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    } else {
+      return trimmed.substring(0, 2).toUpperCase();
+    }
+  }
 }

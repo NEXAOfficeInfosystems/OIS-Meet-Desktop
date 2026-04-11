@@ -28,6 +28,7 @@ import { ChatSignalrService, SendMessageRequest } from '../../core/services/chat
 import { MeetingLinkPipe } from '../../shared/pipes/meeting-link.pipe';
 import { CollaborationService } from '../../core/services/collaboration.service';
 import { SafeHtmlPipe } from '../../shared/pipes/safe-html.pipe';
+import { InitialsPipe } from '../../shared/pipes/initials.pipe';
 import { CallService, CallType, IncomingCall } from '../../core/services/call.service';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { SettingsService, UserSettings } from '../../core/services/settings.service';
@@ -60,6 +61,7 @@ interface InAppToast {
     HttpClientModule,
     MeetingLinkPipe,
     SafeHtmlPipe,
+    InitialsPipe,
     ActivityFeedComponent,
     EmojiStickerPickerComponent
   ],
@@ -495,7 +497,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     if (command === 'formatBlock' && value) {
       const ctx = this.getCursorBlockContext(this.messageEditor.nativeElement);
       const inSame = (value === 'pre' && (ctx === 'pre' || ctx === 'code')) ||
-                     (value === 'blockquote' && ctx === 'blockquote');
+        (value === 'blockquote' && ctx === 'blockquote');
       if (inSame) {
         document.execCommand('formatBlock', false, 'p');
         this.updateFormatState();
@@ -740,7 +742,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       // Ensure there's a space/newline before @, or it's the start of the node
       const matchIndex = atMatch.index || 0;
       const atPos = textBefore.lastIndexOf('@' + atMatch[1]);
-      
+
       if (atPos > 0) {
         const charBefore = textBefore.charAt(atPos - 1);
         if (charBefore !== ' ' && charBefore !== '\n' && charBefore !== '\u00A0') {
@@ -1021,8 +1023,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.showConfirm('Are you sure you want to delete this message?', 'Delete', () => {
 
       this.store.dispatch(MessagesActions.deleteMessage({ messageId }));
-    
-});
+
+    });
   }
 
   editMessage(message: any): void {
@@ -1538,7 +1540,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       senderName,
       preview,
       avatarColor,
-      avatarLetter: senderName.charAt(0).toUpperCase()
+      avatarLetter: this.commonService.getInitials(senderName)
     };
     this.toasts = [...this.toasts, toast];
     setTimeout(() => {
@@ -1907,7 +1909,16 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     if (user?.avatarColor) return user.avatarColor;
 
     // Deterministic fallback color based on name to prevent ExpressionChangedAfterItHasBeenCheckedError
-    const colors = ['#1a73e8', '#e91e63', '#4caf50', '#ff9800', '#9c27b0', '#009688'];
+    const colors = [
+      '#E3F2FD', // Light Blue
+      '#F3E5F5', // Light Purple
+      '#E8F5E9', // Light Green
+      '#FFF3E0', // Light Orange
+      '#FCE4EC', // Light Pink
+      '#E0F2F1', // Light Teal
+      '#F9FBE7', // Light Lime
+      '#FFFDE7'  // Light Yellow
+    ];
     const hash = Array.from(senderName || 'U').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     return colors[hash % colors.length];
   }
@@ -1942,8 +1953,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       'Join',
       () => {
 
-    // Validate the meeting via API then open the window as participant
-    this.validateAndJoinMeeting(meetingId);}
+        // Validate the meeting via API then open the window as participant
+        this.validateAndJoinMeeting(meetingId);
+      }
     );
   }
 

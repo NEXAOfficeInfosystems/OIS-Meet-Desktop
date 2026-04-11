@@ -22,6 +22,8 @@ import { AudioRecorderService, TranscriptionResponse, TranscriptionSegment } fro
 import { MomGeneratorService } from '../../core/services/mom-generator.service';
 import { LivekitService } from '../../core/services/livekit.service';
 import { SettingsService } from '../../core/services/settings.service';
+import { CommonService } from '../../core/services/common.service';
+import { InitialsPipe } from '../../shared/pipes/initials.pipe';
 import {
   LiveTranscriptionService,
   LiveTranscriptionSegment,
@@ -36,7 +38,7 @@ import { MeetingRecorderService, RecordingMode, RecordingState } from '../../cor
 @Component({
   selector: 'app-meeting',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatSnackBarModule],
+  imports: [CommonModule, FormsModule, MatSnackBarModule, InitialsPipe],
   templateUrl: './meeting.component.html',
   styleUrls: ['./meeting.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -75,8 +77,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     confirmText: 'Confirm',
     cancelText: 'Cancel',
     isDestructive: false,
-    onConfirm: () => {},
-    onCancel: () => {}
+    onConfirm: () => { },
+    onCancel: () => { }
   };
   // Volume & local mute
   volume: number = 1;
@@ -189,20 +191,20 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // ── ScreenShare state proxy (used by template) ────────────────────────────
   get ssState(): ScreenShareState { return this.ssStateService.state; }
-  get ssIsFullScreen(): boolean   { return this.ssStateService.state.isFullScreen; }
-  get ssIsFocusMode(): boolean    { return this.ssStateService.state.isFocusMode; }
-  get ssIsPinned(): boolean       { return this.ssStateService.state.isPinned; }
-  get ssScaleMode(): string       { return this.ssStateService.state.scaleMode; }
-  get ssShowControls(): boolean   { return this.ssStateService.state.showControls; }
+  get ssIsFullScreen(): boolean { return this.ssStateService.state.isFullScreen; }
+  get ssIsFocusMode(): boolean { return this.ssStateService.state.isFocusMode; }
+  get ssIsPinned(): boolean { return this.ssStateService.state.isPinned; }
+  get ssScaleMode(): string { return this.ssStateService.state.scaleMode; }
+  get ssShowControls(): boolean { return this.ssStateService.state.showControls; }
 
   // ── Recording state proxies (used by template) ────────────────────────────
-  get recState(): RecordingState  { return this.recorderService.state; }
-  get isRecording(): boolean      { return this.recorderService.isRecording; }
-  get isRecPaused(): boolean      { return this.recorderService.isPaused; }
-  get recStatus(): string         { return this.recorderService.state.status; }
-  get recTime(): string           { return this.recorderService.state.formattedTime; }
-  get recSizeKb(): number         { return this.recorderService.state.sizeKb; }
-  get recMode(): string           { return this.recorderService.state.mode; }
+  get recState(): RecordingState { return this.recorderService.state; }
+  get isRecording(): boolean { return this.recorderService.isRecording; }
+  get isRecPaused(): boolean { return this.recorderService.isPaused; }
+  get recStatus(): string { return this.recorderService.state.status; }
+  get recTime(): string { return this.recorderService.state.formattedTime; }
+  get recSizeKb(): number { return this.recorderService.state.sizeKb; }
+  get recMode(): string { return this.recorderService.state.mode; }
 
   constructor(
     private route: ActivatedRoute,
@@ -221,8 +223,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     private userService: UserService,
     private cdr: ChangeDetectorRef,
     private callService: CallService,
-    public  ssStateService: ScreenShareStateService,
-    public  recorderService: MeetingRecorderService
+    public ssStateService: ScreenShareStateService,
+    public recorderService: MeetingRecorderService,
+    private commonService: CommonService
   ) {
     this.userFullName = this.sessionService.getFullName() || 'User';
     this.oisMeetUserId = this.sessionService.getOISMeetUserId() || '';
@@ -1258,12 +1261,12 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       const settings = this.settingsService.currentSettings;
       const audioConstraints: any = {
-        echoCancellation:   { ideal: true },
-        noiseSuppression:   { ideal: true },
-        autoGainControl:    { ideal: true },
-        channelCount:       { ideal: 1 },   // mono is more effective for voice NS
-        latency:            { ideal: 0 },   // minimise buffering delay
-        sampleRate:         { ideal: 48000 }
+        echoCancellation: { ideal: true },
+        noiseSuppression: { ideal: true },
+        autoGainControl: { ideal: true },
+        channelCount: { ideal: 1 },   // mono is more effective for voice NS
+        latency: { ideal: 0 },   // minimise buffering delay
+        sampleRate: { ideal: 48000 }
       };
 
       if (settings.preferredAudioInputId && settings.preferredAudioInputId !== 'default') {
@@ -1294,7 +1297,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       //   anything below the voice-activity threshold).
       const { processedStream, audioContext } = this.buildNoiseSuppressedStream(rawStream);
       this.noiseSuppressionContext = audioContext;
-      this.processedMicStream      = processedStream;
+      this.processedMicStream = processedStream;
 
       // Merge the processed audio track with the original video track(s).
       const videoTracks = rawStream.getVideoTracks();
@@ -2311,7 +2314,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cdr.markForCheck();
 
       if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
+        document.exitFullscreen().catch(() => { });
       }
     } else {
       // ── ENTER: apply CSS class first, then try native API ───────────────
@@ -2351,7 +2354,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       this.ssStateService.patch({ isFullScreen: false });
       this.cdr.markForCheck();
       if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
+        document.exitFullscreen().catch(() => { });
       }
     }
   }
@@ -2789,8 +2792,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
               mandatory: {
                 chromeMediaSource: 'desktop',
                 chromeMediaSourceId: primary.id,
-                minWidth:  1280,
-                maxWidth:  1920,
+                minWidth: 1280,
+                maxWidth: 1920,
                 minHeight: 720,
                 maxHeight: 1080,
               }
@@ -2871,7 +2874,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     // Reset centralized state and exit full-screen if active
     this.ssStateService.reset();
     if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
+      document.exitFullscreen().catch(() => { });
     }
     if (this.ssControlsHideTimer) {
       clearTimeout(this.ssControlsHideTimer);
@@ -3128,9 +3131,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     }, 100);
   }
 
-  getInitials(name: string): string {
-    if (!name) return 'U';
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+  getInitials(name: string | null | undefined): string {
+    return this.commonService.getInitials(name);
   }
 
 
@@ -3164,7 +3166,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   getRandomColor(seed: string): string {
-    const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+    const colors = [
+      '#E3F2FD', // Light Blue
+      '#F3E5F5', // Light Purple
+      '#E8F5E9', // Light Green
+      '#FFF3E0', // Light Orange
+      '#FCE4EC', // Light Pink
+      '#E0F2F1', // Light Teal
+      '#F9FBE7', // Light Lime
+      '#FFFDE7'  // Light Yellow
+    ];
     let hash = 0;
     for (let i = 0; i < seed.length; i++) {
       hash = seed.charCodeAt(i) + ((hash << 5) - hash);
@@ -3498,23 +3509,23 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
       // ── High-pass filter: cut sub-100 Hz rumble, fan noise, AC hum ──────────
       const highpass = audioContext.createBiquadFilter();
-      highpass.type            = 'highpass';
+      highpass.type = 'highpass';
       highpass.frequency.value = 100;   // Hz — below human voice fundamental
-      highpass.Q.value         = 0.7;
+      highpass.Q.value = 0.7;
 
       // ── Low-pass filter: cut ultra-high hiss above intelligible voice range ──
       const lowpass = audioContext.createBiquadFilter();
-      lowpass.type            = 'lowpass';
+      lowpass.type = 'lowpass';
       lowpass.frequency.value = 8000;  // Hz — keeps full voice clarity
-      lowpass.Q.value         = 0.7;
+      lowpass.Q.value = 0.7;
 
       // ── Dynamics compressor: prevents loud bursts / transient clipping ───────
       const compressor = audioContext.createDynamicsCompressor();
       compressor.threshold.value = -40;   // dBFS — start compressing here
-      compressor.knee.value      = 10;   // soft knee width in dB
-      compressor.ratio.value     = 6;    // 6:1 ratio — moderate compression
-      compressor.attack.value    = 0.003; // 3 ms — fast attack to catch bursts
-      compressor.release.value   = 0.25;  // 250 ms — natural release
+      compressor.knee.value = 10;   // soft knee width in dB
+      compressor.ratio.value = 6;    // 6:1 ratio — moderate compression
+      compressor.attack.value = 0.003; // 3 ms — fast attack to catch bursts
+      compressor.release.value = 0.25;  // 250 ms — natural release
 
       // ── Output gain (unity) ───────────────────────────────────────────────────
       const outputGain = audioContext.createGain();

@@ -1,11 +1,12 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NotificationRecipient, NotificationType } from '../../../core/models/notification.models';
+import { InitialsPipe } from '../../../shared/pipes/initials.pipe';
 
 @Component({
   selector: 'app-activity-item',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, InitialsPipe],
   template: `
     <div class="activity-item" [class.unread]="!recipient.isRead" (click)="clickItem.emit(recipient)">
       <div class="avatar-container">
@@ -13,7 +14,7 @@ import { NotificationRecipient, NotificationType } from '../../../core/models/no
              [src]="recipient.notification?.actorAvatar" class="avatar" alt="avatar" />
         <div *ngIf="!recipient.notification?.actorAvatar" class="avatar-placeholder"
              [style.background-color]="getAvatarColor()">
-          {{ (recipient.notification?.actorName || 'S') | slice:0:1 | uppercase }}
+          {{ (recipient.notification?.actorName || 'S') | initials }}
         </div>
         <div class="type-badge" [ngClass]="getTypeClass()">
           <i [class]="getIcon()"></i>

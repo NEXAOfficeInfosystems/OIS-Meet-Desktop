@@ -18,7 +18,7 @@
           <div class="avatar-wrap">
             <!-- <img [src]="chat.avatar" class="chat-avatar" /> -->
             <div class="initial-avatar" [style.background]="getAvatarColor(chat.name)">
-              {{ getInitials(chat.name) }}
+              {{ chat.name | initials }}
             </div>
             <div class="status-dot" [class]="chat.status.toLowerCase()" *ngIf="chat.status"></div>
           </div>
@@ -150,7 +150,7 @@
           <div class="contact-avatar-wrap">
             <!-- <img [src]="c.avatar" class="contact-avatar" /> -->
             <div class="contact-initial-avatar" [style.background]="getAvatarColor(c.name)">
-              {{ getInitials(c.name) }}
+              {{ c.name | initials }}
             </div>
             <div class="status-dot" [class]="c.status.toLowerCase()"></div>
           </div>

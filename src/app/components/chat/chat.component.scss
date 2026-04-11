@@ -154,7 +154,7 @@
   font-weight: 500;
   padding: 1px 8px;
   background: #f1f3f4;
-  border: 1px solid #e8eaed;
+  border: 1px solid var(--fluent-border);
   border-radius: 4px;
   color: #5f6368;
   margin-left: 8px;
@@ -190,8 +190,9 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      color: white;
+      color: #1e293b;
       font-size: 0.8rem;
+      border: 1px solid var(--fluent-border);
     }
 
     .team-name {
@@ -345,7 +346,7 @@
   right: -2px;
   width: 10px;
   height: 10px;
-  border: 2px solid #f8fafc;
+  border: 2px solid var(--fluent-border);
   border-radius: 50%;
   background: #94a3b8;
 
@@ -426,7 +427,7 @@
   gap: 12px;
   margin: 12px 16px 0;
   padding: 10px 14px;
-  border: 1px solid #dbe7f7;
+  border: 1px solid var(--fluent-border);
   border-radius: 12px;
   background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
@@ -441,7 +442,7 @@
   align-items: center;
   justify-content: center;
   background: #ffffff;
-  border: 1px solid #dbe7f7;
+  border: 1px solid var(--fluent-border);
   flex-shrink: 0;
 }
 
@@ -473,7 +474,7 @@
 .workspace-header {
   grid-row: 1;
   height: 54px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--fluent-border);
   padding: 0 1.5rem;
   display: flex;
   align-items: center;
@@ -569,7 +570,7 @@
     width: 36px;
     height: 36px;
     border-radius: 8px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--fluent-border);
     background: transparent;
     color: #64748b;
     transition: all 0.2s;
@@ -681,7 +682,7 @@
     color: #64748b;
     position: relative;
     z-index: 2;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--fluent-border);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   }
 }
@@ -702,9 +703,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: #1e293b;
     font-weight: 700;
     font-size: 0.9rem;
+    border: 1px solid var(--fluent-border);
   }
 
   .message-data-col {
@@ -729,7 +731,7 @@
       border-radius: 4px;
       display: inline-block;
       text-align: left;
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--fluent-border);
     }
   }
 
@@ -769,7 +771,7 @@
       gap: 4px;
       padding: 2px 8px;
       background: #f1f5f9;
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--fluent-border);
       font-size: 0.75rem;
       color: #64748b;
       transition: all 0.2s;
@@ -2570,9 +2572,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: #1e293b;
   font-weight: bold;
   font-size: 0.75rem;
+  border: 1px solid var(--fluent-border);
 }
 
 /* Profile Modern UI */
@@ -2651,7 +2654,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 2px solid var(--fluent-border);
   background: #94a3b8;
 
   &.online {
@@ -2705,7 +2708,7 @@
     .table {
       thead th {
         background: #f8fafc;
-        border-bottom: 2px solid #f1f5f9;
+        border-bottom: 2px solid var(--fluent-border);
         color: #64748b;
         font-weight: 600;
         white-space: nowrap;
@@ -2874,7 +2877,7 @@
   background: #f1f5f9;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--fluent-border);
 }
 
 .crop-mask {
@@ -2896,7 +2899,7 @@
     width: 200px;
     height: 200px;
     border-radius: 50%;
-    border: 2px dashed #ffffff;
+    border: 2px dashed var(--fluent-border);
   }
 }
 

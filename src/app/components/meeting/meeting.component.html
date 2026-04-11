@@ -435,7 +435,7 @@
               [style.padding]="u.avatarUrl ? '0' : null">
               <img *ngIf="u.avatarUrl" [src]="u.avatarUrl" alt="{{ u.fullName }}"
                 style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />
-              <span *ngIf="!u.avatarUrl">{{ u.fullName?.charAt(0)?.toUpperCase() || 'U' }}</span>
+              <span *ngIf="!u.avatarUrl">{{ u.fullName | initials }}</span>
             </div>
             <div class="participant-details">
               <span class="full-name">{{ u.fullName }}</span>
@@ -445,15 +445,14 @@
           <button class="call-action-btn"
             [disabled]="invitingUserIds.has(u.oisMeetUserId) || invitedUserIds.has(u.oisMeetUserId)"
             [class.call-action-btn--calling]="invitingUserIds.has(u.oisMeetUserId)"
-            [class.call-action-btn--called]="invitedUserIds.has(u.oisMeetUserId)"
-            (click)="inviteUser(u)">
-            <i class="fas"
-              [class.fa-spinner]="invitingUserIds.has(u.oisMeetUserId)"
+            [class.call-action-btn--called]="invitedUserIds.has(u.oisMeetUserId)" (click)="inviteUser(u)">
+            <i class="fas" [class.fa-spinner]="invitingUserIds.has(u.oisMeetUserId)"
               [class.fa-spin]="invitingUserIds.has(u.oisMeetUserId)"
               [class.fa-check]="invitedUserIds.has(u.oisMeetUserId)"
               [class.fa-phone-alt]="!invitingUserIds.has(u.oisMeetUserId) && !invitedUserIds.has(u.oisMeetUserId)">
             </i>
-            <span>{{ invitingUserIds.has(u.oisMeetUserId) ? 'Calling…' : invitedUserIds.has(u.oisMeetUserId) ? 'Called' : 'Call' }}</span>
+            <span>{{ invitingUserIds.has(u.oisMeetUserId) ? 'Calling…' : invitedUserIds.has(u.oisMeetUserId) ? 'Called'
+              : 'Call' }}</span>
           </button>
         </div>
 
@@ -485,8 +484,7 @@
           <div class="pt-search-inner">
             <i class="fas fa-search pt-search-icon"></i>
             <input class="pt-search-input" type="text" placeholder="Search for people"
-              [(ngModel)]="participantSearchQuery" (input)="filterParticipantsList()"
-              autocomplete="off" />
+              [(ngModel)]="participantSearchQuery" (input)="filterParticipantsList()" autocomplete="off" />
           </div>
         </div>
 
@@ -522,12 +520,10 @@
               <span class="pt-role">{{ p.isHost ? 'Meeting host' : 'Participant' }}</span>
             </div>
             <div class="pt-actions">
-              <button class="pt-mic-btn"
-                [class.muted]="isLocallyMuted(p.id) || p.isMuted"
+              <button class="pt-mic-btn" [class.muted]="isLocallyMuted(p.id) || p.isMuted"
                 [title]="isLocallyMuted(p.id) ? 'Unmute for me' : (p.isMuted ? 'Muted by host' : 'Mic on')"
                 (click)="toggleRemoteLocalMute(p)">
-                <i class="fas"
-                  [class.fa-microphone]="!isLocallyMuted(p.id) && !p.isMuted"
+                <i class="fas" [class.fa-microphone]="!isLocallyMuted(p.id) && !p.isMuted"
                   [class.fa-microphone-slash]="isLocallyMuted(p.id) || p.isMuted"></i>
               </button>
               <button class="pt-more-btn" title="More options">
