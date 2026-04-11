@@ -66,7 +66,7 @@ import { CommonModule } from '@angular/common';
           <i class="bi bi-fullscreen"></i>
         </button>
 
-        <button class="ctrl-btn" (click)="download($event)" title="Download">
+        <button class="ctrl-btn" (click)="download($event); $event.stopPropagation()" title="Download">
           <i class="bi bi-download"></i>
         </button>
       </div>
@@ -118,7 +118,7 @@ import { CommonModule } from '@angular/common';
         <span class="time-info">{{ formatTime(fsCurrentTime) }} / {{ formatTime(duration) }}</span>
 
         <button class="ctrl-btn speed-btn" (click)="fsToggleSpeed()">{{ fsSpeed }}x</button>
-        <button class="ctrl-btn" (click)="download($event)" title="Download">
+        <button class="ctrl-btn" (click)="download($event); $event.stopPropagation()" title="Download">
           <i class="bi bi-download"></i>
         </button>
         <button class="ctrl-btn" (click)="closeFullscreen()" title="Exit fullscreen">
@@ -404,9 +404,9 @@ export class ChatVideoPlayerComponent implements OnInit, OnDestroy {
   fsProgress = 0;
   fsSpeed = 1;
 
-  constructor(public cdr: ChangeDetectorRef) {}
+  constructor(public cdr: ChangeDetectorRef) { }
 
-  ngOnInit() {}
+  ngOnInit() { }
 
   // ── Inline player handlers ──────────────────────────────────────────────
 
@@ -515,12 +515,12 @@ export class ChatVideoPlayerComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       const fs = this.fsVideoEl?.nativeElement;
       if (!fs) return;
-      
+
       fs.playbackRate = this.fsSpeed;
       if (isFinite(this.fsCurrentTime)) {
         fs.currentTime = this.fsCurrentTime;
       }
-      
+
       // Auto-play if it was playing, or just let user click
       if (this.fsPlaying) {
         fs.play().catch(() => {
@@ -550,7 +550,7 @@ export class ChatVideoPlayerComponent implements OnInit, OnDestroy {
         v.currentTime = pos;
       }
       if (wasPlaying) {
-        v.play().catch(() => {});
+        v.play().catch(() => { });
       }
     }
   }
@@ -583,7 +583,7 @@ export class ChatVideoPlayerComponent implements OnInit, OnDestroy {
       fs.play().then(() => {
         this.fsPlaying = true;
         this.cdr.detectChanges();
-      }).catch(() => {});
+      }).catch(() => { });
     } else {
       fs.pause();
       this.fsPlaying = false;
@@ -609,14 +609,41 @@ export class ChatVideoPlayerComponent implements OnInit, OnDestroy {
 
   // ── Shared ─────────────────────────────────────────────────────────────
 
-  download(event: Event) {
+  async download(event: Event) {
+    event.preventDefault();
     event.stopPropagation();
-    const a = document.createElement('a');
-    a.href = this.videoUrl;
-    a.download = this.fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    
+    if (!this.videoUrl) return;
+
+    try {
+      // Fetch the video content as a blob to force download behavior
+      const response = await fetch(this.videoUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = this.fileName || 'video-recording.webm';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up
+      setTimeout(() => {
+        if (document.body.contains(a)) {
+          document.body.removeChild(a);
+        }
+        window.URL.revokeObjectURL(url);
+      }, 100);
+    } catch (err) {
+      console.error('Download failed, falling back to direct link:', err);
+      // Fallback for CORS or other fetch issues
+      const a = document.createElement('a');
+      a.href = this.videoUrl;
+      a.download = this.fileName || 'video-recording.webm';
+      a.target = '_blank';
+      a.click();
+    }
   }
 
   formatTime(s: number): string {
