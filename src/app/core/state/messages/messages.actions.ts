@@ -7,7 +7,7 @@ export const MessagesActions = createActionGroup({
     'Load Conversation Messages Success': props<{ conversationId: string; messages: any[]; hasMore: boolean }>(),
     'Load Conversation Messages Failure': props<{ conversationId: string; error: string }>(),
     
-    'Send Message': props<{ conversationId: string; content: string; messageType?: string; fileUrl?: string; fileName?: string; replyToMessageId?: string; formattedContent?: string }>(),
+    'Send Message': props<{ conversationId: string; content: string; messageType?: string; fileUrl?: string; fileName?: string; replyToMessageId?: string; formattedContent?: string; duration?: number }>(),
     'Send Message Success': props<{ message: any }>(),
     'Send Message Failure': props<{ error: string }>(),
     

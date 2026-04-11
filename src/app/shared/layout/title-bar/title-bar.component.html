@@ -2,12 +2,12 @@
   [class.login-mode]="isLoginPage">
   <!-- Brand & Drag Section: Only show if NOT login page OR (is Electron and we want to allow dragging but user said hide drag icon) -->
   <div class="brand-section">
-    <div class="drag-handle" *ngIf="isElectron && !isLoginPage"></div>
-    <button class="icon-btn sidebar-toggle-btn" (click)="toggleSidebar()" title="Toggle Sidebar" *ngIf="!isLoginPage">
+    <!-- <div class="drag-handle" *ngIf="isElectron && !isLoginPage"></div> -->
+    <!-- <button class="icon-btn sidebar-toggle-btn" (click)="toggleSidebar()" title="Toggle Sidebar" *ngIf="!isLoginPage">
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
         <path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M5 7h14M5 12h14M5 17h14" />
       </svg>
-    </button>
+    </button> -->
     <a class="app-brand" [routerLink]="isLoginPage ? '/login' : '/dashboard'" title="Go to Home">
       <img src="assets/login/logo.png" alt="OIS MEET" class="app-logo" />
       <span class="app-title">OIS MEET</span>

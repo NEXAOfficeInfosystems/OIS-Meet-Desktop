@@ -33,8 +33,8 @@ export class MessagesEffects {
   sendMessage$ = createEffect(() =>
     this.actions$.pipe(
       ofType(MessagesActions.sendMessage),
-      switchMap(({ conversationId, content, messageType, fileUrl, fileName, replyToMessageId, formattedContent }) =>
-        this.chatService.sendMessageApi(conversationId, content, messageType || 'Text', fileUrl, fileName, replyToMessageId, formattedContent).pipe(
+      switchMap(({ conversationId, content, messageType, fileUrl, fileName, replyToMessageId, formattedContent, duration }) =>
+        this.chatService.sendMessageApi(conversationId, content, messageType || 'Text', fileUrl, fileName, replyToMessageId, formattedContent, duration).pipe(
           map((response: any) => MessagesActions.sendMessageSuccess({
             message: response?.data
           })),

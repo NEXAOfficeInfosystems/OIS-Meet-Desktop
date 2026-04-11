@@ -40,6 +40,8 @@ import { SignalRService } from '../../core/services/signalr.service';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../../shared/layout/confirmation-dialog.component';
 import { EmojiStickerPickerComponent, PickerTab } from '../../shared/components/emoji-sticker-picker/emoji-sticker-picker.component';
+import { VoiceNoteService, RecordingState } from '../../core/services/voice-note.service';
+import { ChatAudioPlayerComponent } from '../../shared/components/chat-audio-player/chat-audio-player.component';
 
 
 declare var bootstrap: any;
@@ -63,7 +65,8 @@ interface InAppToast {
     SafeHtmlPipe,
     InitialsPipe,
     ActivityFeedComponent,
-    EmojiStickerPickerComponent
+    EmojiStickerPickerComponent,
+    ChatAudioPlayerComponent
   ],
   templateUrl: './chat.component.html',
   styleUrls: ['./chat.component.scss']
@@ -193,6 +196,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   isElectron = !!(window as any).windowAPI;
   settings: UserSettings = { showMessagePreview: true, showMediaPreviews: true, notificationsMentionsOnly: false };
 
+  // Voice Notes
+  recordingState: RecordingState = { isRecording: false, isPaused: false, duration: 0, amplitude: 0 };
+  recordingBlob: Blob | null = null;
+  isSendingVoiceNote = false;
+
   toggleToolbar(): void {
     this.isToolbarVisible = !this.isToolbarVisible;
     this.cdr.detectChanges();
@@ -268,6 +276,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private previewService: PreviewService,
     public notificationService: NotificationService,
     private signalRService: SignalRService,
+    private voiceNoteService: VoiceNoteService,
     private dialog: MatDialog
   ) {
     this.currentUserId = this.sessionService.getOISMeetUserId();
@@ -385,9 +394,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.handleCompanyChange());
 
-    this.syncSubscription = this.commonService.syncComplete$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.handleSyncComplete());
+    this.syncSubscription = this.commonService.syncComplete$.subscribe(() => {
+      this.loadUsersForCurrentCompany();
+    });
+
+    this.voiceNoteService.state$.pipe(takeUntil(this.destroy$)).subscribe(state => {
+      this.recordingState = state;
+      this.cdr.detectChanges();
+    });
 
     this.shareMeetingIdHandler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -3011,6 +3025,87 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         console.error('Failed to update group avatar:', err);
       }
     });
+  }
+
+  // ——————————————————————————————————————————————————————————————————————————————
+  // VOICE NOTES
+  // ——————————————————————————————————————————————————————————————————————————————
+
+  private lastRecordedDuration = 0;
+
+  async startVoiceRecording() {
+    try {
+      await this.voiceNoteService.startRecording();
+    } catch (err) {
+      this.showAlert('Microphone access denied or error starting recording.', 'Error');
+    }
+  }
+
+  async stopVoiceRecording() {
+    this.lastRecordedDuration = this.recordingState.duration;
+    this.recordingBlob = await this.voiceNoteService.stopRecording();
+    if (this.recordingBlob) {
+      this.sendVoiceNote();
+    }
+  }
+
+  cancelVoiceRecording() {
+    this.voiceNoteService.cancelRecording();
+    this.recordingBlob = null;
+    this.lastRecordedDuration = 0;
+  }
+
+  toggleRecordingPause() {
+    if (this.recordingState.isPaused) {
+      this.voiceNoteService.resumeRecording();
+    } else {
+      this.voiceNoteService.pauseRecording();
+    }
+  }
+
+  private sendVoiceNote() {
+    if (!this.recordingBlob || !this.selectedConversation) return;
+
+    this.isSendingVoiceNote = true;
+    const fileName = `voice_note_${Date.now()}.webm`;
+    const audioFile = new File([this.recordingBlob], fileName, { type: 'audio/webm' });
+
+    this.fileService.uploadFile(audioFile).subscribe({
+      next: (event: any) => {
+        if (event.type === 4) { // Success
+          const res = event.body;
+          if (res.success && res.data) {
+            this.store.dispatch(MessagesActions.sendMessage({
+              conversationId: this.selectedConversation!.id,
+              content: 'Voice Note',
+              messageType: 'Audio',
+              fileUrl: res.data.url,
+              fileName: fileName,
+              duration: this.lastRecordedDuration,
+              replyToMessageId: this.replyToMessage?.id
+            }));
+            this.cancelReply();
+          }
+          this.isSendingVoiceNote = false;
+          this.recordingBlob = null;
+          this.lastRecordedDuration = 0;
+        }
+      },
+      error: (err) => {
+        console.error('Voice note upload failed', err);
+        this.isSendingVoiceNote = false;
+        this.recordingBlob = null;
+        this.lastRecordedDuration = 0;
+        this.showAlert('Failed to upload voice note.', 'Error');
+      }
+    });
+  }
+
+  formatDuration(seconds: number): string {
+    if (!seconds || !isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
 }

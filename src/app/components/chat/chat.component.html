@@ -420,7 +420,11 @@
                     </ng-container>
                     <!-- Normal display mode -->
                     <ng-template #msgDisplay>
-                      <div class="mb-0" *ngIf="msg.formattedContent || msg.content"
+                      <div class="mb-0" *ngIf="msg.messageType === 'Audio' || msg.MessageType === 'Audio'">
+                        <app-chat-audio-player [audioUrl]="fileService.getFileUrl(msg.fileUrl || msg.FileUrl)" [duration]="msg.duration || msg.Duration || 0"></app-chat-audio-player>
+                      </div>
+
+                      <div class="mb-0" *ngIf="(msg.messageType !== 'Audio' && msg.MessageType !== 'Audio') && (msg.formattedContent || msg.content)"
                         [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
 
                       <!-- Legacy Attachments -->
@@ -523,7 +527,7 @@
             </div>
 
             <!-- Editor Card -->
-            <div class="editor-card" [class.editor-card--focused]="true">
+            <div class="editor-card" [class.editor-card--focused]="true" [class.recording-mode]="recordingState.isRecording">
 
               <!-- ── Formatting Toolbar (collapsible) ──────────────────────── -->
               <div class="rte-toolbar" *ngIf="isToolbarVisible" role="toolbar" aria-label="Text formatting">
@@ -613,12 +617,36 @@
                 <div #messageEditor class="rte-editor" contenteditable="true" role="textbox" aria-multiline="true"
                   [attr.aria-label]="'Message ' + (selectedUser ? (selectedUser.fullName || selectedUser.name) : (activeChannel ? '#' + activeChannel : ''))"
                   [attr.data-placeholder]="'Message ' + (selectedUser ? (selectedUser.fullName || selectedUser.name) : (activeChannel ? '#' + activeChannel : 'the team')) + '…'"
-                  (input)="onEditorInput($event)" (keydown)="onEditorKeydown($event)" (paste)="onEditorPaste($event)">
+                  (input)="onEditorInput($event)" (keydown)="onEditorKeydown($event)" (paste)="onEditorPaste($event)"
+                  *ngIf="!recordingState.isRecording">
+                </div>
+              </div>
+
+              <!-- Recording Overlay (Moved outside editor container to cover full area) -->
+              <div class="recording-overlay animate-slide-up" *ngIf="recordingState.isRecording">
+                <div class="recording-indicator">
+                  <div class="dot" [class.paused]="recordingState.isPaused"></div>
+                  <span class="timer">{{ formatDuration(recordingState.duration) || '0:00' }}</span>
+                </div>
+                <div class="waveform-viz flex-grow-1">
+                  <div class="wave-bar" *ngFor="let i of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]" 
+                       [style.height.px]="recordingState.amplitude * (15 + (i % 5) * 4)"></div>
+                </div>
+                <div class="recording-actions">
+                  <button class="rec-btn rec-btn--cancel" (click)="cancelVoiceRecording()" title="Discard">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                  <button class="rec-btn rec-btn--pause" (click)="toggleRecordingPause()" [title]="recordingState.isPaused ? 'Resume' : 'Pause'">
+                    <i class="bi" [class.bi-pause-fill]="!recordingState.isPaused" [class.bi-play-fill]="recordingState.isPaused"></i>
+                  </button>
+                  <button class="rec-btn rec-btn--stop" (click)="stopVoiceRecording()" title="Send">
+                    <i class="bi bi-send-fill"></i>
+                  </button>
                 </div>
               </div>
 
               <!-- ── Bottom Action Bar ───────────────────────────────────────── -->
-              <div class="rte-footer">
+              <div class="rte-footer" *ngIf="!recordingState.isRecording">
                 <div class="rte-footer-left">
 
                   <!-- Format toggle -->
@@ -658,6 +686,12 @@
                   <button class="rte-action-btn" (click)="fileInput.click()" title="Attach file"
                     aria-label="Attach file">
                     <i class="bi bi-paperclip"></i>
+                  </button>
+
+                  <!-- Voice Note -->
+                  <button class="rte-action-btn rec-start-btn" [class.recording]="recordingState.isRecording" 
+                    (click)="startVoiceRecording()" title="Record voice note" aria-label="Record voice note">
+                    <i class="bi bi-mic"></i>
                   </button>
 
                 </div>

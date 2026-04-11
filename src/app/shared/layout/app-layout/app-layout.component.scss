@@ -7,17 +7,10 @@
 
   /* Handle Sidebar Collapse */
   app-sidebar {
-    width: 220px;
+    width: 70px;
     /* Default expanded width */
     transition: width 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
     flex-shrink: 0;
-  }
-
-  &.is-collapsed {
-    app-sidebar {
-      width: 72px;
-      /* Collapsed icon-rail width */
-    }
   }
 }
 

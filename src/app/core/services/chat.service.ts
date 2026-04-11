@@ -134,7 +134,8 @@ export class ChatService {
     fileUrl?: string,
     fileName?: string,
     replyToMessageId?: string,
-    formattedContent?: string
+    formattedContent?: string,
+    duration?: number
   ): Observable<any> {
     const currentUserId = this.getCurrentUserId();
     const requestBody: any = {
@@ -144,6 +145,7 @@ export class ChatService {
       messageType: type,
       fileUrl: fileUrl,
       fileName: fileName,
+      duration: duration,
       formattedContent,
       replyToMessageId
     };
