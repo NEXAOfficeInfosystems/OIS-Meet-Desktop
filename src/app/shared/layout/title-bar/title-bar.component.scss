@@ -185,11 +185,11 @@
   }
 
   &.btn-meet-primary {
-    background: var(--fluent-primary);
+    background: var(--accent-color);
     color: #fff;
 
     &:hover {
-      background: var(--fluent-primary-hover);
+      background: var(--accent-color-hover);
       transform: translateY(-1px);
     }
   }
