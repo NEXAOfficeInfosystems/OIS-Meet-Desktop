@@ -194,6 +194,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   selectedImage: any = null;
 
   // ——————————————————————————————————————————————————————————————————————————————
+  activeReactionMsgId: string | null = null;  // tracks which message's emoji picker is open
+
   private typingTimeout: any;
   private callTimeout: any;
   private shouldScroll: boolean = false;
@@ -843,15 +845,29 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   editMessage(message: any): void {
     this.editingMessage = { ...message };
-    this.editContent = message.content;
+    // Strip HTML from formattedContent for plain-text editing
+    const raw = message.formattedContent || message.content || '';
+    const div = document.createElement('div');
+    div.innerHTML = raw;
+    this.editContent = div.textContent || div.innerText || message.content || '';
     this.cdr.detectChanges();
+    // Auto-focus textarea after render
+    setTimeout(() => {
+      const ta = document.querySelector('.msg-edit-textarea') as HTMLTextAreaElement;
+      if (ta) {
+        ta.focus();
+        ta.selectionStart = ta.selectionEnd = ta.value.length;
+        this._autoResizeTextarea(ta);
+      }
+    }, 0);
   }
 
   saveEdit(): void {
     if (!this.editingMessage || !this.editContent.trim()) return;
     this.store.dispatch(MessagesActions.editMessage({
       messageId: this.editingMessage.id,
-      content: this.editContent.trim()
+      content: this.editContent.trim(),
+      formattedContent: this.editContent.trim()
     }));
     this.editingMessage = null;
     this.editContent = '';
@@ -860,6 +876,27 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   cancelEdit(): void {
     this.editingMessage = null;
     this.editContent = '';
+  }
+
+  onEditKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      this.saveEdit();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      this.cancelEdit();
+    } else {
+      // Auto-resize textarea as user types
+      setTimeout(() => {
+        this._autoResizeTextarea(event.target as HTMLTextAreaElement);
+      }, 0);
+    }
+  }
+
+  private _autoResizeTextarea(ta: HTMLTextAreaElement): void {
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
   }
 
   // ——————————————————————————————————————————————————————————————————————————————
@@ -1953,6 +1990,17 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // REACTIONS
   // ——————————————————————————————————————————————————————————————————————————————
 
+  openReactionPicker(msgId: string, event: MouseEvent): void {
+    event.stopPropagation();
+    this.activeReactionMsgId = this.activeReactionMsgId === msgId ? null : msgId;
+    this.cdr.detectChanges();
+  }
+
+  closeReactionPicker(): void {
+    this.activeReactionMsgId = null;
+    this.cdr.detectChanges();
+  }
+
   toggleReaction(message: any, emoji: string): void {
     const userId = this.currentUserId;
     if (!userId) return;
@@ -2008,12 +2056,21 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       }
     }
 
-    // Handle emoji picker popup
+    // Handle emoji picker popup (message input toolbar)
     if (this.isEmojiPickerVisible) {
       const isEmojiBtn = target.closest('#emojiPickerBtn');
       const isEmojiPicker = target.closest('.emoji-picker-container') || target.closest('.emoji-picker-popover');
       if (!isEmojiBtn && !isEmojiPicker) {
         this.isEmojiPickerVisible = false;
+        this.cdr.detectChanges();
+      }
+    }
+
+    // Close per-message reaction picker on outside click
+    if (this.activeReactionMsgId) {
+      const insidePicker = target.closest('.msg-emoji-picker') || target.closest('.react-btn');
+      if (!insidePicker) {
+        this.activeReactionMsgId = null;
         this.cdr.detectChanges();
       }
     }

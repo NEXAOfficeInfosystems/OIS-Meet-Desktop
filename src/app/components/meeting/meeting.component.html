@@ -1,5 +1,5 @@
 <!-- src/app/features/meeting/meeting.component.html -->
-<div class="meeting-container" [class.sidebars-open]="showParticipants || showChat">
+<div class="meeting-container" (click)="onMeetingClick()">
 
   <!-- Loading State -->
   <div class="loading-overlay" *ngIf="isLoading"
@@ -80,7 +80,7 @@
             <i class="fas fa-user-circle"></i>
             You ({{ userFullName }})
           </div>
-          <div class="mic-icon-light">
+          <div class="mic-icon-light clickable-mic" (click)="toggleMute()" [title]="isMuted ? 'Unmute' : 'Mute'">
             <i class="fas" [class.fa-microphone]="!isMuted" [class.fa-microphone-slash]="isMuted"></i>
           </div>
         </div>
@@ -101,8 +101,11 @@
             <i class="fas fa-user"></i>
             {{ p.name }}
           </div>
-          <div class="mic-icon-light">
-            <i class="fas" [class.fa-microphone]="!p.isMuted" [class.fa-microphone-slash]="p.isMuted"></i>
+          <div class="mic-icon-light clickable-mic" (click)="toggleRemoteLocalMute(p)"
+               [title]="isLocallyMuted(p.id) ? 'Unmute locally' : 'Mute locally'">
+            <i class="fas"
+               [class.fa-microphone]="!p.isMuted && !isLocallyMuted(p.id)"
+               [class.fa-microphone-slash]="p.isMuted || isLocallyMuted(p.id)"></i>
           </div>
         </div>
 
@@ -165,6 +168,27 @@
         <i class="fas" [class.fa-microphone-slash]="isMuted" [class.fa-microphone]="!isMuted"></i>
         <span>{{ isMuted ? 'Unmute' : 'Mute' }}</span>
       </button>
+
+      <!-- Volume control -->
+      <div class="volume-control-wrapper">
+        <button class="control-btn-light icon-only" [class.active-mode]="showVolumeControl"
+          (click)="toggleVolumeControl($event)" [title]="'Volume: ' + (volume * 100 | number:'1.0-0') + '%'">
+          <i class="fas"
+            [class.fa-volume-up]="volume > 0.5"
+            [class.fa-volume-down]="volume > 0 && volume <= 0.5"
+            [class.fa-volume-mute]="volume === 0"></i>
+        </button>
+        <!-- Volume popup -->
+        <div class="volume-popup" *ngIf="showVolumeControl" (click)="$event.stopPropagation()">
+          <div class="volume-popup-header">
+            <i class="fas fa-volume-up"></i>
+            <span>Volume</span>
+            <span class="vol-pct">{{ (volume * 100) | number:'1.0-0' }}%</span>
+          </div>
+          <input type="range" class="volume-slider" min="0" max="1" step="0.02"
+            [value]="volume" (input)="setVolume($event)">
+        </div>
+      </div>
 
       <!-- Screen share -->
       <button class="control-btn-light icon-only" [class.active-mode]="isScreenSharing" (click)="toggleScreenShare()"

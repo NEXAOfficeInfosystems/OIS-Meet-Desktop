@@ -66,6 +66,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   showChat: boolean = false;
   isLoading: boolean = true;
 
+  // Volume & local mute
+  volume: number = 1;
+  showVolumeControl: boolean = false;
+  private localMutedParticipants: Set<string> = new Set();
+
   // Real-time Invites Support
   showInvitePopover: boolean = false;
   oisMeetUsers: any[] = [];
@@ -2150,7 +2155,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.showParticipants) {
       this.showChat = false;
       this.showAddParticipantPanel = false;
+      this.showLiveTranscriptionPanel = false;
     }
+    this.showVolumeControl = false;
     this.cdr.markForCheck();
   }
 
@@ -2159,7 +2166,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.showChat) {
       this.showParticipants = false;
       this.showAddParticipantPanel = false;
+      this.showLiveTranscriptionPanel = false;
     }
+    this.showVolumeControl = false;
     this.cdr.markForCheck();
   }
 
@@ -2185,6 +2194,51 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       await this.toggleLiveTranscription();
     } else {
       await this.toggleLiveTranscription();
+      this.cdr.markForCheck();
+    }
+  }
+
+  // ── Volume ────────────────────────────────────────────────────────────────
+  toggleVolumeControl(event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.showVolumeControl = !this.showVolumeControl;
+    this.cdr.markForCheck();
+  }
+
+  setVolume(event: Event): void {
+    const val = parseFloat((event.target as HTMLInputElement).value);
+    this.volume = val;
+    // Apply to all remote audio elements
+    document.querySelectorAll<HTMLAudioElement>('audio').forEach(a => a.volume = val);
+    document.querySelectorAll<HTMLVideoElement>('video:not([muted])').forEach(v => v.volume = val);
+    this.cdr.markForCheck();
+  }
+
+  // ── Local mute of remote participant ─────────────────────────────────────
+  isLocallyMuted(participantId: string): boolean {
+    return this.localMutedParticipants.has(participantId);
+  }
+
+  toggleRemoteLocalMute(p: Participant): void {
+    const id = p.id;
+    if (this.localMutedParticipants.has(id)) {
+      this.localMutedParticipants.delete(id);
+      // Unmute their audio track
+      const stream = this.remoteAudioStreams.get(p.connectionId);
+      if (stream) stream.getAudioTracks().forEach(t => t.enabled = true);
+    } else {
+      this.localMutedParticipants.add(id);
+      // Mute their audio track locally
+      const stream = this.remoteAudioStreams.get(p.connectionId);
+      if (stream) stream.getAudioTracks().forEach(t => t.enabled = false);
+    }
+    this.cdr.markForCheck();
+  }
+
+  // ── Close volume popup on outside click ──────────────────────────────────
+  onMeetingClick(): void {
+    if (this.showVolumeControl) {
+      this.showVolumeControl = false;
       this.cdr.markForCheck();
     }
   }

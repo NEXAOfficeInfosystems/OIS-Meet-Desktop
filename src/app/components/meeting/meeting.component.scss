@@ -34,11 +34,6 @@
   --chat-text-me: #ffffff;
   --chat-text-other: #1e293b;
 
-  &.sidebars-open {
-    .main-area {
-      width: calc(100% - var(--sidebar-width));
-    }
-  }
 }
 
 .main-area {
@@ -402,6 +397,107 @@
   }
 }
 
+/* ── Clickable mic icon on participant tile ───────────────────── */
+.clickable-mic {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    transform: scale(1.18);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+/* ── Volume control wrapper & popup ──────────────────────────── */
+.volume-control-wrapper {
+  position: relative;
+}
+
+.volume-popup {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
+  padding: 14px 16px;
+  width: 200px;
+  z-index: 700;
+  animation: panelReveal 0.18s ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 7px solid transparent;
+    border-top-color: #e2e8f0;
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #ffffff;
+    z-index: 1;
+    margin-top: -1px;
+  }
+
+  .volume-popup-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #1a202c;
+
+    i { color: var(--accent-color); }
+
+    .vol-pct {
+      margin-left: auto;
+      font-weight: 700;
+      color: var(--accent-color);
+    }
+  }
+
+  .volume-slider {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 4px;
+    background: linear-gradient(to right, var(--accent-color) calc(var(--val, 100) * 1%), #e2e8f0 calc(var(--val, 100) * 1%));
+    outline: none;
+    cursor: pointer;
+
+    &::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(99, 102, 241, 0.4);
+      transition: transform 0.12s;
+    }
+
+    &::-webkit-slider-thumb:hover {
+      transform: scale(1.25);
+    }
+  }
+}
+
 /* ── Bottom Controls Dock ─────────────────────────────────────── */
 .call-controls-light {
   position: absolute;
@@ -528,32 +624,31 @@
 }
 
 /* ── Right Sidebar ────────────────────────────────────────────── */
+/* ── Popup panels (participants / chat) — float above footer ──── */
 .meeting-right-sidebar {
-  width: var(--sidebar-width);
+  position: absolute;
+  bottom: 120px; // above the call-controls-light dock (60px) + gap
+  right: 20px;
+  width: 340px;
+  max-height: 65vh;
   background: #ffffff;
-  border-left: 1px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.14);
   display: flex;
   flex-direction: column;
-  animation: slideInSidebar 0.3s ease;
-}
-
-@keyframes slideInSidebar {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+  z-index: 600;
+  overflow: hidden;
+  animation: panelReveal 0.22s ease;
 }
 
 .sidebar-tabs-nav {
   padding: 10px 14px;
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
+  border-radius: 16px 16px 0 0;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .sidebar-tab-link {
@@ -844,10 +939,10 @@
 /* ── Live Transcription Panel ─────────────────────────────────── */
 .live-transcription-panel {
   position: absolute;
-  bottom: 90px;
+  bottom: 120px; // above the footer dock
   right: 20px;
   width: 340px;
-  max-height: 280px;
+  max-height: 320px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
@@ -1163,7 +1258,9 @@
   }
 
   .meeting-right-sidebar {
-    --sidebar-width: 320px;
+    width: 300px;
+    max-height: 60vh;
+    bottom: 110px;
   }
 
   .add-participant-panel {
@@ -1174,28 +1271,16 @@
   .live-transcription-panel {
     width: 300px;
     max-height: 240px;
-    bottom: 80px;
+    bottom: 110px;
   }
 }
 
 /* ── Very small / compact windows (< 900px wide) ──────────────── */
 @media (max-width: 900px) {
-  .meeting-container {
-    --sidebar-width: 100%; // sidebar stacks full-width on narrow windows
-
-    &.sidebars-open .main-area {
-      display: none; // hide video grid when sidebar is open (overlay mode)
-    }
-  }
-
   .meeting-right-sidebar {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 800;
-    width: 100% !important;
-    border-left: none;
+    width: calc(100vw - 40px);
+    right: 20px;
+    bottom: 110px;
   }
 
   .video-grid-light {

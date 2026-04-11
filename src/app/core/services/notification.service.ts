@@ -1,5 +1,5 @@
 import { Injectable, signal, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { filter } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { Notification, NotificationRecipient, NotificationType } from '../models/notification.models';
@@ -106,7 +106,8 @@ export class NotificationService {
     );
     this.unreadCount.update(c => Math.max(0, c - recipientIds.length));
 
-    this.http.post(`${this.apiUrl}/mark-as-read?userId=${userId}`, recipientIds)
+    const markReadParams = new HttpParams().set('userId', userId);
+    this.http.post(`${this.apiUrl}/mark-as-read`, recipientIds, { params: markReadParams })
       .subscribe({ error: () => {} });
   }
 
@@ -117,7 +118,8 @@ export class NotificationService {
     this.notifications.update(prev => prev.map(n => ({ ...n, isRead: true })));
     this.unreadCount.set(0);
 
-    this.http.post(`${this.apiUrl}/mark-all-read?userId=${userId}`, {})
+    const markAllParams = new HttpParams().set('userId', userId);
+    this.http.post(`${this.apiUrl}/mark-all-read`, {}, { params: markAllParams })
       .subscribe({ error: () => {} });
   }
 
@@ -128,12 +130,14 @@ export class NotificationService {
     if (!userId) return;
 
     this.isLoading.set(true);
-    const filterVal = this.activeFilter();
-    const pageVal = this.page();
 
-    this.http.get<any>(
-      `${this.apiUrl}?userId=${userId}&filter=${filterVal}&page=${pageVal}&pageSize=20`
-    ).subscribe({
+    const params = new HttpParams()
+      .set('userId', userId)
+      .set('filter', this.activeFilter())
+      .set('page', String(this.page()))
+      .set('pageSize', '20');
+
+    this.http.get<any>(this.apiUrl, { params }).subscribe({
       next: (res: any) => {
         // Tolerate both { items: [] } (paged) and { success, data: [] } (legacy) formats
         const items: NotificationRecipient[] = res?.items ?? res?.data ?? [];
@@ -157,7 +161,8 @@ export class NotificationService {
     const userId = this.session.getOISMeetUserId();
     if (!userId) return;
 
-    this.http.get<any>(`${this.apiUrl}/unread-count?userId=${userId}`)
+    const params = new HttpParams().set('userId', userId);
+    this.http.get<any>(`${this.apiUrl}/unread-count`, { params })
       .subscribe({
         next: (res: any) => {
           const count = typeof res === 'number' ? res : (res?.count ?? res?.data ?? 0);

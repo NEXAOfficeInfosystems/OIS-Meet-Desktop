@@ -331,7 +331,9 @@
               </div>
 
               <div class="message-group" [id]="'msg-' + (msg.id || msg.Id)"
-                [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()">
+                [class.is-self]="msg.senderId?.toString() === currentUserId?.toString()"
+                [class.picker-open]="activeReactionMsgId === (msg.id || msg.Id)"
+                [class.is-editing]="editingMessage?.id === (msg.id || msg.Id)">
                 <!-- *ngIf="msg.senderId?.toString() !== currentUserId?.toString()" -->
                 <div class="message-avatar-col">
                   <img *ngIf="msg.senderAvatarUrl" [src]="fileService.getFileUrl(msg.senderAvatarUrl)"
@@ -349,7 +351,24 @@
                     <span class="msg-time">{{ msg.sentAt | date:'shortTime' }}</span>
                   </div>
                   <div class="msg-content">
-                    <!-- Formatted HTML content or fallback plain text -->
+                    <!-- Inline edit mode -->
+                    <ng-container *ngIf="editingMessage?.id === (msg.id || msg.Id); else msgDisplay">
+                      <div class="msg-edit-area">
+                        <textarea class="msg-edit-textarea" #editTextarea
+                          [(ngModel)]="editContent"
+                          (keydown)="onEditKeydown($event)"
+                          rows="1"></textarea>
+                        <div class="msg-edit-actions">
+                          <span class="edit-hint">Esc to <button class="edit-link-btn" (click)="cancelEdit()">cancel</button> · Enter to <button class="edit-link-btn" (click)="saveEdit()">save</button></span>
+                          <div class="edit-btns">
+                            <button class="edit-cancel-btn" (click)="cancelEdit()">Cancel</button>
+                            <button class="edit-save-btn" (click)="saveEdit()">Save</button>
+                          </div>
+                        </div>
+                      </div>
+                    </ng-container>
+                    <!-- Normal display mode -->
+                    <ng-template #msgDisplay>
                     <div class="mb-0" *ngIf="msg.formattedContent || msg.content"
                       [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
 
@@ -377,6 +396,7 @@
                         hidden
                       </span>
                     </div>
+                    </ng-template>
                   </div> <!-- end msg-content -->
 
                   <!-- Reactions Section -->
@@ -390,6 +410,38 @@
                         <span class="count">{{ getReactionCount(msg, emoji) }}</span>
                       </button>
                     </span>
+                  </div>
+
+                  <!-- Hover action bar -->
+                  <div class="msg-hover-bar" (click)="$event.stopPropagation()">
+                    <!-- Emoji picker popup -->
+                    <div class="msg-emoji-picker"
+                         *ngIf="activeReactionMsgId === (msg.id || msg.Id)">
+                      <button class="pick-emoji"
+                              *ngFor="let e of commonEmojis"
+                              [class.picked]="hasReacted(msg, e)"
+                              [title]="e"
+                              (click)="toggleReaction(msg, e); closeReactionPicker()">
+                        {{ e }}
+                      </button>
+                    </div>
+                    <!-- React button -->
+                    <button class="msg-act-btn react-btn"
+                            title="Add reaction"
+                            [class.active]="activeReactionMsgId === (msg.id || msg.Id)"
+                            (click)="openReactionPicker(msg.id || msg.Id, $event)">
+                      <i class="bi bi-emoji-smile"></i>
+                    </button>
+                    <!-- Reply button -->
+                    <button class="msg-act-btn" title="Reply" (click)="replyTo(msg)">
+                      <i class="bi bi-reply"></i>
+                    </button>
+                    <!-- Edit button (own messages only) -->
+                    <button class="msg-act-btn" title="Edit"
+                            *ngIf="msg.senderId?.toString() === currentUserId?.toString()"
+                            (click)="editMessage(msg)">
+                      <i class="bi bi-pencil"></i>
+                    </button>
                   </div>
                 </div>
               </div>
