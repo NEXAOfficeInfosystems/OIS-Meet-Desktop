@@ -34,6 +34,8 @@
   flex: 1;
   width: 100%;
   background-color: var(--light-bg);
+  border-left: 1px solid var(--fluent-border);
+  border-top: 1px solid var(--fluent-border);
   /* Removed padding so components can have sticky headers/sidebars at the edge */
   padding: 0;
   overflow: auto;

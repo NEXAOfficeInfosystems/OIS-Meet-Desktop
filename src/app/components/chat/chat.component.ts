@@ -723,15 +723,39 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     if (!selection?.rangeCount) return;
 
     const range = selection.getRangeAt(0);
-    const textBefore = range.startContainer.textContent?.substring(0, range.startOffset) || '';
+    const textNode = range.startContainer;
+    const offset = range.startOffset;
+
+    // We only trigger mentions if we're inside a text node
+    if (textNode.nodeType !== Node.TEXT_NODE) {
+      this.mentionsVisible = false;
+      return;
+    }
+
+    const textBefore = textNode.textContent?.substring(0, offset) || '';
+    // Look for @ followed by word characters up to the cursor
     const atMatch = textBefore.match(/@(\w*)$/);
 
     if (atMatch) {
+      // Ensure there's a space/newline before @, or it's the start of the node
+      const matchIndex = atMatch.index || 0;
+      const atPos = textBefore.lastIndexOf('@' + atMatch[1]);
+      
+      if (atPos > 0) {
+        const charBefore = textBefore.charAt(atPos - 1);
+        if (charBefore !== ' ' && charBefore !== '\n' && charBefore !== '\u00A0') {
+          this.mentionsVisible = false;
+          return;
+        }
+      }
+
       this.mentionsVisible = true;
       this.mentionSearchQuery = atMatch[1].toLowerCase();
       this.filterMentions();
+      this.cdr.detectChanges(); // Ensure UI reflects the change
     } else {
       this.mentionsVisible = false;
+      this.cdr.detectChanges();
     }
   }
 
@@ -743,7 +767,6 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   insertMention(user: any): void {
-    // Always close the dropdown immediately, regardless of outcome
     this.mentionsVisible = false;
 
     const selection = window.getSelection();
@@ -754,7 +777,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     const range = selection.getRangeAt(0);
 
-    // Selection must be inside the editor; if not (e.g. click stole focus), bail out
+    // Selection must be inside the editor
     if (!this.messageEditor?.nativeElement.contains(range.startContainer)) {
       this.messageEditor?.nativeElement.focus();
       this.cdr.detectChanges();
@@ -763,49 +786,54 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     const textNode = range.startContainer;
     const offset = range.startOffset;
-    const text = textNode.textContent || '';
 
+    if (textNode.nodeType !== Node.TEXT_NODE) {
+      this.cdr.detectChanges();
+      return;
+    }
+
+    const text = textNode.textContent || '';
     const atIndex = text.lastIndexOf('@', offset - 1);
     if (atIndex === -1) {
       this.cdr.detectChanges();
       return;
     }
 
-    const before = text.substring(0, atIndex);
-    const after = text.substring(offset);
+    // 1. Remove the "@query" string that was being typed
+    range.setStart(textNode, atIndex);
+    range.setEnd(textNode, offset);
+    range.deleteContents();
 
-    // Replace text node content with the part before @
-    textNode.textContent = before;
-
+    // 2. Create the mention element
     const mentionSpan = document.createElement('span');
     mentionSpan.className = 'mention';
     mentionSpan.contentEditable = 'false';
-    mentionSpan.setAttribute('data-user-id', user.userId || user.id);
+    mentionSpan.setAttribute('data-user-id', user.userId || user.id || user.userId);
     mentionSpan.innerText = `@${user.fullName || user.name}`;
 
-    const spaceNode = document.createTextNode(' ');
+    // 3. Create a trailing space
+    const spaceNode = document.createTextNode('\u00A0');
 
+    // 4. Insert nodes
     range.insertNode(spaceNode);
     range.insertNode(mentionSpan);
 
-    // Re-insert any text that was after the cursor (preserves mid-message edits)
-    if (after) {
-      const afterNode = document.createTextNode(after);
-      range.setStartAfter(spaceNode);
-      range.insertNode(afterNode);
-    }
-
-    // Move cursor after the space
+    // 5. Move cursor after the space
     const newRange = document.createRange();
     newRange.setStartAfter(spaceNode);
     newRange.collapse(true);
     selection.removeAllRanges();
     selection.addRange(newRange);
 
+    // 6. Sync internal state
     this.suppressMentionCheck = true;
-    this.cdr.detectChanges();
     this.onEditorInput({ target: this.messageEditor.nativeElement });
-    this.suppressMentionCheck = false;
+    setTimeout(() => {
+      this.suppressMentionCheck = false;
+      this.cdr.detectChanges();
+    }, 100);
+
+    this.cdr.detectChanges();
   }
 
   // ——————————————————————————————————————————————————————————————————————————————
@@ -1582,6 +1610,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
             if (user) {
               user.conversationId = conv.id?.toString();
               user.isGroup = isGroup;
+              user.participants = participants;
               if (isGroup) {
                 user.name = conv.groupName || user.name;
                 user.fullName = conv.groupName || user.fullName;

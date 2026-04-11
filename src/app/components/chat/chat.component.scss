@@ -472,7 +472,7 @@
 
 .workspace-header {
   grid-row: 1;
-  height: 64px;
+  height: 54px;
   border-bottom: 1px solid #e2e8f0;
   padding: 0 1.5rem;
   display: flex;
@@ -1064,7 +1064,7 @@
   transition: border-color .18s, box-shadow .18s;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 
   &:focus-within,
   &--focused:focus-within {
