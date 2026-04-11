@@ -1,5 +1,5 @@
 const electron = require('electron');
-const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, session, nativeImage } = electron;
+const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, session, nativeImage, desktopCapturer } = electron;
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -298,17 +298,14 @@ function createTray() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  // Grant media + display-capture permissions so getUserMedia (camera/mic) and
+  // the desktopCapturer-backed screen share both work without an OS prompt.
   session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
-    if (permission === 'media') return true;
-    return false;
+    return ['media', 'display-capture'].includes(permission);
   });
 
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === 'media') {
-      callback(true);
-    } else {
-      callback(false);
-    }
+    callback(['media', 'display-capture'].includes(permission));
   });
 
   createMainWindow();
@@ -414,6 +411,26 @@ ipcMain.on('close-meeting-window', (event, { force } = { force: false }) => {
     else win.close();
   } catch (err) {
     console.error('[main] Error closing meeting window:', err);
+  }
+});
+
+// ── Desktop source picker (used by renderer screen-share fallback) ──────────
+ipcMain.handle('get-desktop-sources', async (_event, opts) => {
+  try {
+    const types = (opts && Array.isArray(opts.types)) ? opts.types : ['screen', 'window'];
+    const sources = await desktopCapturer.getSources({
+      types,
+      thumbnailSize: { width: 320, height: 180 }
+    });
+    // Serialise only what the renderer needs (avoid passing non-cloneable objects).
+    return sources.map(s => ({
+      id:        s.id,
+      name:      s.name,
+      thumbnail: s.thumbnail.toDataURL()
+    }));
+  } catch (err) {
+    console.error('[main] get-desktop-sources failed:', err);
+    return [];
   }
 });
 

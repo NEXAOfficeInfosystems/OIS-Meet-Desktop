@@ -132,6 +132,12 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private mediaStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
 
+  // ── Noise suppression pipeline ────────────────────────────────────────────
+  // A dedicated AudioContext processes the raw mic track through a DSP chain
+  // (highpass filter → compressor → gain) before the track is sent to peers.
+  private noiseSuppressionContext: AudioContext | null = null;
+  private processedMicStream: MediaStream | null = null;
+
   // ── Live Transcription ────────────────────────────────────────────
   isLiveTranscriptionOn: boolean = false;
   liveTranscriptionIsHost: boolean = false;
@@ -1168,11 +1174,13 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isRemoteScreenSharing = true;
     this.screenShareOwnerName = ownerName || 'Screen';
     this.remoteLivekitScreenShareTrackSid = trackSid;
+    this.cdr.detectChanges(); // render screen-share-stage so #screenShareVideo is in DOM
 
     const stream = new MediaStream([mediaStreamTrack]);
     if (this.screenShareVideo) {
       this.screenShareVideo.nativeElement.srcObject = stream;
     }
+    this.cdr.markForCheck();
   }
 
   private detachRemoteScreenShare(trackSid: string): void {
@@ -1214,9 +1222,12 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       const settings = this.settingsService.currentSettings;
       const audioConstraints: any = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
+        echoCancellation:   { ideal: true },
+        noiseSuppression:   { ideal: true },
+        autoGainControl:    { ideal: true },
+        channelCount:       { ideal: 1 },   // mono is more effective for voice NS
+        latency:            { ideal: 0 },   // minimise buffering delay
+        sampleRate:         { ideal: 48000 }
       };
 
       if (settings.preferredAudioInputId && settings.preferredAudioInputId !== 'default') {
@@ -1233,12 +1244,27 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         videoConstraints.deviceId = { exact: settings.preferredVideoInputId };
       }
 
-      console.log('Requesting getUserMedia with constaints:', { audio: audioConstraints, video: videoConstraints });
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+      console.log('Requesting getUserMedia with constraints:', { audio: audioConstraints, video: videoConstraints });
+      const rawStream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
         video: videoConstraints
       });
-      console.log('Got media stream with tracks:', this.mediaStream.getTracks().length);
+      console.log('Got raw media stream with tracks:', rawStream.getTracks().length);
+
+      // ── Apply Web Audio noise-suppression pipeline to the microphone track
+      // The browser NS constraint is a hint; our DSP chain adds a second layer:
+      //   highpass filter (cuts sub-100Hz rumble) → dynamics compressor
+      //   (squashes sudden loud ambient bursts) → noise gate gain (silences
+      //   anything below the voice-activity threshold).
+      const { processedStream, audioContext } = this.buildNoiseSuppressedStream(rawStream);
+      this.noiseSuppressionContext = audioContext;
+      this.processedMicStream      = processedStream;
+
+      // Merge the processed audio track with the original video track(s).
+      const videoTracks = rawStream.getVideoTracks();
+      const processedAudioTracks = processedStream ? processedStream.getAudioTracks() : rawStream.getAudioTracks();
+      this.mediaStream = new MediaStream([...processedAudioTracks, ...videoTracks]);
+      console.log('Media stream with NS pipeline:', this.mediaStream.getTracks().length, 'tracks');
 
       const startWithAudio = !this.isMuted;
       const startWithVideo = !this.isVideoOff;
@@ -2198,6 +2224,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  // ── Screen share helpers ─────────────────────────────────────────────────
+  get localStream(): MediaStream | null {
+    return this.mediaStream;
+  }
+
   // ── Volume ────────────────────────────────────────────────────────────────
   toggleVolumeControl(event?: MouseEvent): void {
     event?.stopPropagation();
@@ -2419,86 +2450,106 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async toggleScreenShare() {
-    if (this.livekitActive) {
-      if (!this.isScreenSharing) {
-        try {
-          console.log('Starting screen share (LiveKit)');
-          this.screenStream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            audio: false
-          });
-
-          const screenTrack = this.screenStream.getVideoTracks()[0];
-          this.localLivekitScreenShareTrackSid = await this.livekitService.publishScreenShareTrack(screenTrack);
-
-          this.isScreenSharing = true;
-          this.screenShareOwnerName = 'Your Screen';
-          if (this.screenShareVideo) {
-            this.screenShareVideo.nativeElement.srcObject = this.screenStream;
-          }
-
-          await this.signalRService.startScreenShare(this.meetingId);
-
-          screenTrack.onended = () => {
-            console.log('Screen share ended by user');
-            this.stopScreenSharing();
-          };
-        } catch (error) {
-          console.error('Error sharing screen (LiveKit):', error);
-        }
-      } else {
-        await this.stopScreenSharing();
-      }
-      this.refreshTooltips();
-      return;
-    }
-
     if (!this.isScreenSharing) {
+      // ── Acquire the screen stream (Electron 29-compatible) ───────────────────
+      // Electron 29 does not support setDisplayMediaRequestHandler, so
+      // getDisplayMedia() throws "DOMException: Not supported".
+      // Instead:  ask the main process for a desktopCapturer sourceId via IPC,
+      // then call getUserMedia with chromeMediaSource:'desktop'.
+      // When running in a plain browser (no window.oisMeet) we fall back to
+      // the standard getDisplayMedia() path.
+      let screenStream: MediaStream;
       try {
-        console.log('Starting screen share');
-        this.screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            displaySurface: "application", // optional: monitor | window | application
-          },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 44100,          // optional but useful
-            channelCount: 2             // stereo
+        const oisMeet = (window as any).oisMeet;
+        if (oisMeet && typeof oisMeet.getDesktopSources === 'function') {
+          // ── Electron path ──────────────────────────────────────────────────
+          console.log('Starting screen share (Electron desktopCapturer path)');
+          const sources: Array<{ id: string; name: string; thumbnail: string }> =
+            await oisMeet.getDesktopSources({ types: ['screen'] });
+
+          if (!sources || sources.length === 0) {
+            throw new Error('No desktop sources available');
           }
-        });
 
-        this.isScreenSharing = true;
-        this.screenShareOwnerName = 'Your Screen';
-        if (this.screenShareVideo) {
-          this.screenShareVideo.nativeElement.srcObject = this.screenStream;
+          // Pick the primary screen (first source whose name includes 'Screen' or
+          // just the first one if naming differs by OS/locale).
+          const primary = sources.find(s => /screen\s*1?$/i.test(s.name) || /entire/i.test(s.name))
+            ?? sources[0];
+
+          screenStream = await (navigator.mediaDevices as any).getUserMedia({
+            audio: false,
+            video: {
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: primary.id,
+                minWidth:  1280,
+                maxWidth:  1920,
+                minHeight: 720,
+                maxHeight: 1080,
+              }
+            }
+          });
+        } else {
+          // ── Browser fallback ───────────────────────────────────────────────
+          console.log('Starting screen share (browser getDisplayMedia path)');
+          screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: true
+          });
         }
+      } catch (error) {
+        console.error('Error sharing screen:', error);
+        this.isScreenSharing = false;
+        this.screenShareOwnerName = 'Your Screen';
+        this.cdr.markForCheck();
+        this.snackBar.open('Could not start screen share', 'Close', { duration: 3000 });
+        this.refreshTooltips();
+        return;
+      }
 
+      this.screenStream = screenStream;
+
+      // ── LiveKit path ─────────────────────────────────────────────────────────
+      if (this.livekitActive) {
+        const screenTrack = this.screenStream.getVideoTracks()[0];
+        this.localLivekitScreenShareTrackSid =
+          await this.livekitService.publishScreenShareTrack(screenTrack).catch(e => {
+            console.error('LiveKit screen share publish failed:', e);
+            return null;
+          });
+      }
+
+      this.isScreenSharing = true;
+      this.screenShareOwnerName = 'Your Screen';
+      this.cdr.detectChanges(); // render screen-share-stage so #screenShareVideo is in DOM
+      if (this.screenShareVideo) {
+        this.screenShareVideo.nativeElement.srcObject = this.screenStream;
+      }
+
+      // ── Mesh WebRTC: swap camera track for screen track ──────────────────────
+      if (!this.livekitActive) {
         const existingCameraTrack = this.mediaStream?.getVideoTracks()[0] ?? null;
         this.preservedCameraTrack = existingCameraTrack;
         if (existingCameraTrack) {
           this.mediaStream?.removeTrack(existingCameraTrack);
         }
-
         const screenTrack = this.screenStream.getVideoTracks()[0];
         if (screenTrack) {
           screenTrack.enabled = true;
           this.mediaStream?.addTrack(screenTrack);
         }
+      }
 
-        await this.signalRService.startScreenShare(this.meetingId);
-        console.log('Screen share started');
+      await this.signalRService.startScreenShare(this.meetingId);
+      console.log('Screen share started');
 
-        this.screenStream.getVideoTracks()[0].onended = () => {
-          console.log('Screen share ended by user');
+      // Stop sharing when the user clicks "Stop sharing" in the OS bar
+      const firstVideoTrack = this.screenStream.getVideoTracks()[0];
+      if (firstVideoTrack) {
+        firstVideoTrack.onended = () => {
+          console.log('Screen share ended by user via OS stop button');
           this.stopScreenSharing();
         };
-      } catch (error) {
-        console.error('Error sharing screen:', error);
-        this.isScreenSharing = false;
-        this.screenShareOwnerName = 'Your Screen';
-        this.snackBar.open('Could not start screen share', 'Close', { duration: 3000 });
       }
     } else {
       await this.stopScreenSharing();
@@ -3114,6 +3165,76 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  /**
+   * Builds a noise-suppression DSP chain around the microphone audio track.
+   *
+   * Chain:  MediaStreamSource
+   *           → BiquadFilter (highpass @ 100 Hz  — removes low-freq rumble/AC hum)
+   *           → BiquadFilter (lowpass  @ 8 kHz   — removes high-freq hiss above voice range)
+   *           → DynamicsCompressor                — tames sudden ambient bursts
+   *           → GainNode (unity gain)             — output stage
+   *           → MediaStreamDestination            — back to a MediaStream
+   *
+   * The raw video tracks are NOT touched; only the audio track is replaced.
+   * Returns the processed MediaStream and the AudioContext so they can be
+   * stored and cleaned up on component destruction.
+   */
+  private buildNoiseSuppressedStream(
+    rawStream: MediaStream
+  ): { processedStream: MediaStream | null; audioContext: AudioContext | null } {
+    const audioTracks = rawStream.getAudioTracks();
+    if (!audioTracks.length) {
+      return { processedStream: null, audioContext: null };
+    }
+
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)() as AudioContext;
+
+      // ── Source node ──────────────────────────────────────────────────────────
+      const source = audioContext.createMediaStreamSource(rawStream);
+
+      // ── High-pass filter: cut sub-100 Hz rumble, fan noise, AC hum ──────────
+      const highpass = audioContext.createBiquadFilter();
+      highpass.type            = 'highpass';
+      highpass.frequency.value = 100;   // Hz — below human voice fundamental
+      highpass.Q.value         = 0.7;
+
+      // ── Low-pass filter: cut ultra-high hiss above intelligible voice range ──
+      const lowpass = audioContext.createBiquadFilter();
+      lowpass.type            = 'lowpass';
+      lowpass.frequency.value = 8000;  // Hz — keeps full voice clarity
+      lowpass.Q.value         = 0.7;
+
+      // ── Dynamics compressor: prevents loud bursts / transient clipping ───────
+      const compressor = audioContext.createDynamicsCompressor();
+      compressor.threshold.value = -40;   // dBFS — start compressing here
+      compressor.knee.value      = 10;   // soft knee width in dB
+      compressor.ratio.value     = 6;    // 6:1 ratio — moderate compression
+      compressor.attack.value    = 0.003; // 3 ms — fast attack to catch bursts
+      compressor.release.value   = 0.25;  // 250 ms — natural release
+
+      // ── Output gain (unity) ───────────────────────────────────────────────────
+      const outputGain = audioContext.createGain();
+      outputGain.gain.value = 1.0;
+
+      // ── Destination → new MediaStream carrying only the processed audio ───────
+      const destination = audioContext.createMediaStreamDestination();
+
+      // Wire up the chain
+      source.connect(highpass);
+      highpass.connect(lowpass);
+      lowpass.connect(compressor);
+      compressor.connect(outputGain);
+      outputGain.connect(destination);
+
+      console.log('🎙️ Noise suppression pipeline active');
+      return { processedStream: destination.stream, audioContext };
+    } catch (err) {
+      console.warn('Failed to build noise suppression pipeline, falling back to raw stream:', err);
+      return { processedStream: null, audioContext: null };
+    }
+  }
+
   private performComponentCleanup(leaveMeeting: boolean): void {
     this.stopTimer();
 
@@ -3150,6 +3271,16 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     this.tooltips = [];
 
     Array.from(this.speakingDetectionHandles.keys()).forEach((connectionId) => this.stopSpeakingDetection(connectionId));
+
+    // ── Tear down noise suppression pipeline ─────────────────────────────────
+    if (this.noiseSuppressionContext) {
+      try { this.noiseSuppressionContext.close(); } catch { }
+      this.noiseSuppressionContext = null;
+    }
+    if (this.processedMicStream) {
+      this.processedMicStream.getTracks().forEach(t => t.stop());
+      this.processedMicStream = null;
+    }
 
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(track => track.stop());

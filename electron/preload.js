@@ -78,6 +78,15 @@ contextBridge.exposeInMainWorld('oisMeet', {
   },
   restartApp: () => {
     ipcRenderer.send('restart-app');
+  },
+
+  // ── Screen capture sources (for custom screen-picker UI if needed) ──────────
+  // Returns an array of { id, name, thumbnail } objects for all available
+  // screens and windows.  The primary path uses setDisplayMediaRequestHandler
+  // in main.js (triggered automatically by getDisplayMedia()), but this IPC
+  // is available as a fallback for building a custom picker dialog.
+  getDesktopSources: (opts) => {
+    return ipcRenderer.invoke('get-desktop-sources', opts || {});
   }
 });
 

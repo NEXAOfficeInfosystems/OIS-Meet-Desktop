@@ -33,7 +33,7 @@
     </header>
 
     <!-- ── Info Bar ────────────────────────────────────────────── -->
-    <div class="meeting-info-bar">
+    <!-- <div class="meeting-info-bar">
       <div class="info-left">
         <i class="fas fa-headset info-icon"></i>
         <div class="info-text">
@@ -62,10 +62,70 @@
           <i class="fas fa-user-plus"></i>
         </button>
       </div>
+    </div> -->
+
+    <!-- ── Screen Share Stage ───────────────────────────────────── -->
+    <div class="screen-share-stage" *ngIf="isScreenSharing || isRemoteScreenSharing">
+
+      <!-- Banner -->
+      <div class="ss-banner">
+        <div class="ss-banner-left">
+          <span class="ss-live-dot"></span>
+          <i class="fas fa-desktop"></i>
+          <span *ngIf="isScreenSharing">You are presenting</span>
+          <span *ngIf="!isScreenSharing">{{ screenShareOwnerName }} is presenting</span>
+        </div>
+        <div class="ss-banner-right">
+          <span class="ss-participant-chip">
+            <i class="fas fa-users"></i> {{ participants.length + 1 }} in call
+          </span>
+          <button class="ss-stop-btn" *ngIf="isScreenSharing" (click)="toggleScreenShare()">
+            <i class="fas fa-stop-circle"></i>
+            Stop sharing
+          </button>
+        </div>
+      </div>
+
+      <!-- Main shared screen -->
+      <div class="ss-main">
+        <video #screenShareVideo autoplay playsinline [muted]="true" class="ss-main-video"></video>
+        <div class="ss-no-stream" *ngIf="isRemoteScreenSharing && !isScreenSharing">
+          <i class="fas fa-desktop"></i>
+          <p>{{ screenShareOwnerName }}'s screen</p>
+        </div>
+      </div>
+
+      <!-- Participant thumbnail strip -->
+      <div class="ss-thumbs">
+        <!-- Local -->
+        <div class="ss-thumb" [class.ss-thumb-speaking]="isSpeaking" [class.ss-thumb-muted]="isMuted">
+          <video *ngIf="!isVideoOff && localStream" [srcObject]="localStream" autoplay playsinline muted
+            class="ss-thumb-vid"></video>
+          <div class="ss-thumb-avatar" *ngIf="isVideoOff || !localStream" style="background:#6366f1;">{{
+            getInitials(userFullName) }}</div>
+          <div class="ss-thumb-label">You</div>
+          <div class="ss-thumb-mic">
+            <i class="fas" [class.fa-microphone]="!isMuted" [class.fa-microphone-slash]="isMuted"></i>
+          </div>
+        </div>
+        <!-- Remote participants -->
+        <div class="ss-thumb" *ngFor="let p of participants; trackBy: trackById"
+          [class.ss-thumb-speaking]="p.isSpeaking" [class.ss-thumb-muted]="p.isMuted">
+          <video *ngIf="!p.isVideoOff && p.stream" [srcObject]="p.stream" autoplay playsinline
+            class="ss-thumb-vid"></video>
+          <div class="ss-thumb-avatar" *ngIf="p.isVideoOff || !p.stream"
+            [style.background-color]="p.avatarColor || '#6366f1'">{{ getInitials(p.name) }}</div>
+          <div class="ss-thumb-label">{{ p.name }}</div>
+          <div class="ss-thumb-mic">
+            <i class="fas" [class.fa-microphone]="!p.isMuted" [class.fa-microphone-slash]="p.isMuted"></i>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- ── Video Grid ──────────────────────────────────────────── -->
-    <div class="video-container" [class.hidden]="isVoiceMode">
+    <div class="video-container" [class.hidden]="isVoiceMode || isScreenSharing || isRemoteScreenSharing">
       <div class="video-grid-light" [class]="getGridLayout()">
 
         <!-- LOCAL TILE -->
@@ -102,10 +162,9 @@
             {{ p.name }}
           </div>
           <div class="mic-icon-light clickable-mic" (click)="toggleRemoteLocalMute(p)"
-               [title]="isLocallyMuted(p.id) ? 'Unmute locally' : 'Mute locally'">
-            <i class="fas"
-               [class.fa-microphone]="!p.isMuted && !isLocallyMuted(p.id)"
-               [class.fa-microphone-slash]="p.isMuted || isLocallyMuted(p.id)"></i>
+            [title]="isLocallyMuted(p.id) ? 'Unmute locally' : 'Mute locally'">
+            <i class="fas" [class.fa-microphone]="!p.isMuted && !isLocallyMuted(p.id)"
+              [class.fa-microphone-slash]="p.isMuted || isLocallyMuted(p.id)"></i>
           </div>
         </div>
 
@@ -123,16 +182,6 @@
       </div>
     </div>
 
-    <!-- ── Screen Share Overlay ────────────────────────────────── -->
-    <div class="screen-share-overlay" *ngIf="isScreenSharing || isRemoteScreenSharing"
-      style="position:absolute;top:110px;right:20px;width:300px;border-radius:14px;overflow:hidden;border:2px solid #6366f1;box-shadow:0 12px 40px rgba(0,0,0,0.2);z-index:1000;">
-      <video #screenShareVideo autoplay playsinline [muted]="true" style="width:100%;display:block;"></video>
-      <div
-        style="background:#fff;padding:6px 12px;font-size:0.68rem;display:flex;align-items:center;gap:6px;color:#4a5568;border-top:1px solid #e2e8f0;">
-        <i class="fas fa-desktop" style="color:#6366f1;"></i>
-        <span>{{ screenShareOwnerName }} is sharing</span>
-      </div>
-    </div>
 
     <!-- ── Voice Only Mode ─────────────────────────────────────── -->
     <div class="voice-call-light" *ngIf="isVoiceMode">
@@ -173,9 +222,7 @@
       <div class="volume-control-wrapper">
         <button class="control-btn-light icon-only" [class.active-mode]="showVolumeControl"
           (click)="toggleVolumeControl($event)" [title]="'Volume: ' + (volume * 100 | number:'1.0-0') + '%'">
-          <i class="fas"
-            [class.fa-volume-up]="volume > 0.5"
-            [class.fa-volume-down]="volume > 0 && volume <= 0.5"
+          <i class="fas" [class.fa-volume-up]="volume > 0.5" [class.fa-volume-down]="volume > 0 && volume <= 0.5"
             [class.fa-volume-mute]="volume === 0"></i>
         </button>
         <!-- Volume popup -->
@@ -185,8 +232,8 @@
             <span>Volume</span>
             <span class="vol-pct">{{ (volume * 100) | number:'1.0-0' }}%</span>
           </div>
-          <input type="range" class="volume-slider" min="0" max="1" step="0.02"
-            [value]="volume" (input)="setVolume($event)">
+          <input type="range" class="volume-slider" min="0" max="1" step="0.02" [value]="volume"
+            (input)="setVolume($event)">
         </div>
       </div>
 
