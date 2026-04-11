@@ -35,6 +35,7 @@ import { PreviewService } from '../../core/services/preview.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { NotificationRecipient } from '../../core/models/notification.models';
 import { ActivityFeedComponent } from '../activity-feed/activity-feed.component';
+import { SignalRService } from '../../core/services/signalr.service';
 
 
 declare var bootstrap: any;
@@ -91,6 +92,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   // Calling state
   incomingCall: IncomingCall | null = null;
   isCalling: boolean = false;
+  isGroupCallStarting: boolean = false;
   activeCallUserId: string | null = null;
   activeCallUserName: string = '';
   callType: CallType = 'Audio';
@@ -229,7 +231,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private store: Store,
     private settingsService: SettingsService,
     private previewService: PreviewService,
-    public notificationService: NotificationService
+    public notificationService: NotificationService,
+    private signalRService: SignalRService
   ) {
     this.currentUserId = this.sessionService.getOISMeetUserId();
 
@@ -704,7 +707,11 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   startCall(type: CallType): void {
-    if (!this.selectedUser || this.selectedUser.isGroup) return;
+    if (!this.selectedUser) return;
+    if (this.selectedUser.isGroup) {
+      this.startGroupCall(type);
+      return;
+    }
 
     // Use exact SignalR mapped ID (priority: oisMeetUserId, then db id)
     const targetUserId = this.selectedUser.oisMeetUserId || this.selectedUser.id;
@@ -1883,9 +1890,63 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     new bootstrap.Modal(document.getElementById('imageViewerModal')).show();
   }
 
-  startVoiceCall(): void { }
-  startVideoCall(): void { }
   loadUnreadCount(): void { }
+
+  async startGroupCall(type: CallType): Promise<void> {
+    if (!this.selectedUser?.isGroup || this.isGroupCallStarting) return;
+
+    const hostId = this.currentUserId;
+    const hostName = this.sessionService.getFullName() || 'User';
+    if (!hostId) return;
+
+    this.isGroupCallStarting = true;
+    this.cdr.detectChanges();
+
+    try {
+      const res: any = await this.meetingService.createMeeting({
+        topic: `${this.selectedUser.name || this.selectedUser.fullName || 'Group'} Call`,
+        hostId,
+        hostName,
+        expiryHours: 2,
+        settings: {
+          muteOnEntry: false,
+          allowChat: true,
+          allowScreenShare: true,
+          maxParticipants: 50
+        }
+      }).toPromise();
+
+      if (!res?.success || !res?.data?.meetingId) {
+        alert('Could not create group call. Please try again.');
+        return;
+      }
+
+      const meetingId: string = res.data.meetingId;
+      console.log(`🎯 Group call created — meetingId=${meetingId}`);
+
+      // Open the meeting room for the host immediately.
+      this.openMeetingWindow(meetingId, true, true, type === 'Video');
+
+      // Invite every group participant (excluding self) via SignalR.
+      const participants: any[] = this.selectedUser.participants || [];
+      for (const p of participants) {
+        const userId = p.userId?.toString();
+        if (!userId || userId === hostId) continue;
+        try {
+          await this.signalRService.inviteToMeeting(userId, meetingId, hostName);
+          console.log(`📨 Invited ${p.name || p.fullName || userId} to group call`);
+        } catch (err) {
+          console.error(`Failed to invite ${p.name || userId} to group call:`, err);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to start group call:', err);
+      alert('Could not start group call. Please try again.');
+    } finally {
+      this.isGroupCallStarting = false;
+      this.cdr.detectChanges();
+    }
+  }
 
   // ——————————————————————————————————————————————————————————————————————————————
   // REACTIONS

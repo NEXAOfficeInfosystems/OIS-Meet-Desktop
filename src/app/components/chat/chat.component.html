@@ -281,14 +281,14 @@
           <div class="v-divider"></div>
 
           <button class="action-btn-v4 call-btn-v4" (click)="startCall('Audio')"
-            [disabled]="!selectedUser || selectedUser?.isGroup || isCalling" title="Voice Call">
-            <i class="bi bi-telephone" *ngIf="!(isCalling && callType === 'Audio')"></i>
-            <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Audio'"></div>
+            [disabled]="!selectedUser || isCalling || isGroupCallStarting" title="Voice Call">
+            <i class="bi bi-telephone" *ngIf="!(isCalling && callType === 'Audio') && !isGroupCallStarting"></i>
+            <div class="spinner-border spinner-border-sm" *ngIf="(isCalling && callType === 'Audio') || isGroupCallStarting"></div>
           </button>
 
           <button class="action-btn-v4 call-btn-v4" (click)="startCall('Video')"
-            [disabled]="!selectedUser || selectedUser?.isGroup || isCalling" title="Video Call">
-            <i class="bi bi-camera-video" *ngIf="!(isCalling && callType === 'Video')"></i>
+            [disabled]="!selectedUser || isCalling || isGroupCallStarting" title="Video Call">
+            <i class="bi bi-camera-video" *ngIf="!(isCalling && callType === 'Video') && !isGroupCallStarting"></i>
             <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Video'"></div>
           </button>
         </div>
