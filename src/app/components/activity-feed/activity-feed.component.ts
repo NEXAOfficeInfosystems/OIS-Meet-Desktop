@@ -5,7 +5,6 @@ import { FilterTabsComponent } from './filter-tabs/filter-tabs.component';
 import { ActivityItemComponent } from './activity-item/activity-item.component';
 import { NotificationBadgeComponent } from './notification-badge/notification-badge.component';
 import { NotificationRecipient } from '../../core/models/notification.models';
-import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-activity-feed',
@@ -17,129 +16,150 @@ import { Router } from '@angular/router';
     NotificationBadgeComponent
   ],
   template: `
-    <div class="activity-feed-container">
-      <div class="header">
-        <h1>Activity</h1>
-        <div class="header-actions">
-           <button class="icon-btn" (click)="notificationService.markAllAsRead()" title="Mark all as read">
-             <i class="bi bi-check-all"></i>
-           </button>
-           <app-notification-badge [count]="notificationService.unreadCount()"></app-notification-badge>
+    <div class="activity-feed">
+
+      <!-- Header -->
+      <div class="feed-header">
+        <h2 class="feed-title">Activity</h2>
+        <div class="feed-header-actions">
+          <button class="icon-btn" (click)="notificationService.markAllAsRead()"
+                  title="Mark all as read"
+                  [disabled]="notificationService.unreadCount() === 0">
+            <i class="bi bi-check2-all"></i>
+          </button>
+          <app-notification-badge [count]="notificationService.unreadCount()"></app-notification-badge>
         </div>
       </div>
-      
+
+      <!-- Filter Tabs -->
       <app-filter-tabs></app-filter-tabs>
 
-      <div class="activity-list" (scroll)="onScroll($event)">
-        <div *ngIf="notifications().length === 0 && !isLoading()" class="empty-state">
-           <i class="bi bi-bell-slash"></i>
-           <p>No activity yet.</p>
+      <!-- List -->
+      <div class="feed-list" (scroll)="onScroll($event)">
+
+        <!-- Empty state -->
+        <div *ngIf="notificationService.notifications().length === 0 && !notificationService.isLoading()"
+             class="empty-state">
+          <div class="empty-icon"><i class="bi bi-bell-slash"></i></div>
+          <p class="empty-title">No activity yet</p>
+          <p class="empty-sub">Mentions, reactions, and missed calls will appear here.</p>
         </div>
-        
-        <app-activity-item 
-          *ngFor="let item of notifications()" 
-          [recipient]="item" 
+
+        <!-- Activity items -->
+        <app-activity-item
+          *ngFor="let item of notificationService.notifications(); trackBy: trackById"
+          [recipient]="item"
           (clickItem)="onNotificationClick($event)">
         </app-activity-item>
 
-        <div *ngIf="isLoading()" class="loading-state">
-           <div class="spinner"></div>
-           <span>Loading activity...</span>
+        <!-- Load more spinner -->
+        <div *ngIf="notificationService.isLoading()" class="loading-row">
+          <div class="spinner-border spinner-border-sm text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
         </div>
-        
-        <div *ngIf="!hasMore() && notifications().length > 0" class="end-of-list">
-           <span>You're all caught up.</span>
+
+        <!-- End of list -->
+        <div *ngIf="!notificationService.hasMore() && notificationService.notifications().length > 0"
+             class="end-row">
+          You're all caught up
         </div>
       </div>
     </div>
   `,
   styles: [`
-    .activity-feed-container {
+    :host {
       display: flex;
       flex-direction: column;
       height: 100%;
-      background: #f8fafc; /* Matches sidebar background */
-      width: 100%;
+      min-height: 0;
+      background: var(--fluent-bg-surface, #fff);
     }
-    .header {
-      padding: 16px;
+
+    .activity-feed {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
     }
-    .header h1 {
-      font-size: 20px;
+
+    /* Header */
+    .feed-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 16px 10px;
+      flex-shrink: 0;
+    }
+    .feed-title {
+      font-size: 18px;
       font-weight: 700;
-      color: #323130;
+      color: var(--fluent-text-primary, #323130);
       margin: 0;
     }
-    .header-actions {
+    .feed-header-actions {
       display: flex;
-      gap: 12px;
       align-items: center;
+      gap: 8px;
     }
     .icon-btn {
       background: none;
       border: none;
       cursor: pointer;
-      font-size: 18px;
-      color: #616161;
-      padding: 4px;
-      border-radius: 4px;
+      font-size: 16px;
+      color: var(--fluent-text-secondary, #605E5C);
+      padding: 5px 6px;
+      border-radius: 6px;
       display: flex;
       align-items: center;
-      justify-content: center;
+      transition: background 0.15s ease, color 0.15s ease;
     }
-    .icon-btn:hover {
-      background: #f3f2f1;
-      color: #5b5fc7;
-    }
-    .activity-list {
+    .icon-btn:hover { background: var(--fluent-bg-hover, #EDEBE9); color: var(--fluent-primary, #2563EB); }
+    .icon-btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* List */
+    .feed-list {
       flex: 1;
       overflow-y: auto;
+      min-height: 0;
     }
+
+    /* Empty state */
     .empty-state {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 60px 40px;
-      color: #616161;
+      padding: 56px 32px;
       text-align: center;
     }
-    .empty-state i {
-      font-size: 48px;
-      margin-bottom: 12px;
-      color: #edebe9;
+    .empty-icon {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: var(--fluent-bg-subtle, #FAF9F8);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px;
+      font-size: 28px;
+      color: var(--fluent-text-subtle, #A19F9D);
     }
-    .loading-state, .end-of-list {
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      color: #616161;
-      gap: 8px;
+    .empty-title {
+      font-size: 15px; font-weight: 600;
+      color: var(--fluent-text-primary, #323130); margin: 0 0 6px;
     }
-    .spinner {
-      width: 24px;
-      height: 24px;
-      border: 2px solid #5b5fc7;
-      border-right-color: transparent;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+    .empty-sub {
+      font-size: 12px; color: var(--fluent-text-subtle, #A19F9D);
+      margin: 0; max-width: 220px; line-height: 1.5;
     }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    /* Footer rows */
+    .loading-row, .end-row {
+      display: flex; justify-content: center; align-items: center;
+      padding: 16px; font-size: 12px;
+      color: var(--fluent-text-subtle, #A19F9D);
+    }
   `]
 })
 export class ActivityFeedComponent implements OnInit {
   notificationService = inject(NotificationService);
-  router = inject(Router);
-
-  notifications = this.notificationService.notifications;
-  isLoading = this.notificationService.isLoading;
-  hasMore = this.notificationService.hasMore;
 
   ngOnInit() {
     this.notificationService.loadInitial();
@@ -149,24 +169,17 @@ export class ActivityFeedComponent implements OnInit {
     if (!recipient.isRead) {
       this.notificationService.markAsRead([recipient.id]);
     }
+    this.notificationService.selectedNotification.set(recipient);
+  }
 
-    const n = recipient.notification;
-    if (!n) return;
-
-    // Navigate to context
-    if (n.entityType === 'Message') {
-      // Assuming entityId is messageId, but we might need conversationId
-      // In a real app we'd load the conversation context
-      this.router.navigate(['/chat', n.entityId]);
-    } else if (n.entityType === 'Meeting') {
-      this.router.navigate(['/meeting', n.entityId]);
+  onScroll(event: Event) {
+    const el = event.target as HTMLElement;
+    if (el.scrollHeight - el.scrollTop <= el.clientHeight + 120) {
+      this.notificationService.loadMore();
     }
   }
 
-  onScroll(event: any) {
-    const element = event.target;
-    if (element.scrollHeight - element.scrollTop <= element.clientHeight + 100) {
-      this.notificationService.loadMore();
-    }
+  trackById(_: number, item: NotificationRecipient): string {
+    return item.id;
   }
 }

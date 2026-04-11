@@ -21,6 +21,8 @@ export interface Notification {
     contextId?: string;
     createdAt: string;
     priority: number;
+    body?: string;            // preview text (message snippet, meeting title, emoji, etc.)
+    conversationId?: string;  // used to navigate directly to the chat thread
 }
 
 export interface NotificationRecipient {

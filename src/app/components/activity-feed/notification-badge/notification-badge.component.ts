@@ -6,28 +6,25 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <span *ngIf="count > 0" class="badge" [class.badge-large]="count > 9">
+    <span *ngIf="count > 0" class="badge">
       {{ count > 99 ? '99+' : count }}
     </span>
   `,
   styles: [`
     .badge {
-      --badge-size: 20px;
-      background: #c4314b; /* Teams-like red */
-      color: white;
+      background: var(--fluent-primary, #2563EB);
+      color: #fff;
       font-size: 10px;
       font-weight: 700;
-      padding: 2px 5px;
+      padding: 1px 5px;
       border-radius: 10px;
       min-width: 16px;
       height: 16px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border: 1.5px solid #ffffff;
-    }
-    .badge-large {
-      padding: 2px 4px;
+      border: 1.5px solid var(--fluent-bg-surface, #fff);
+      line-height: 1;
     }
   `]
 })

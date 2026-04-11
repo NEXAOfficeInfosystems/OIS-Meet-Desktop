@@ -1598,29 +1598,30 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   private async handleNotificationSelection(recipient: NotificationRecipient) {
     const notification = recipient.notification;
-    if (!notification || !notification.entityId) {
-      console.warn('Notification selection skipped: No entityId found.');
-      return;
-    }
+    if (!notification) return;
 
     // Ensure we are in activity mode
     if (this.viewMode() !== 'activity') return;
 
-    const contextId = notification.contextId;
+    // Priority: conversationId > contextId > entityId (for message-type notifications)
+    const convId = notification.conversationId || notification.contextId;
     const entityId = notification.entityId;
 
     let target = this.users.find(u =>
-      (contextId && (u.conversationId === contextId || u.id === contextId)) ||
-      (u.conversationId === entityId || u.id === entityId)
+      (convId && (u.conversationId === convId || u.id === convId)) ||
+      (entityId && (u.conversationId === entityId || u.id === entityId))
     );
 
     if (target) {
+      this.viewMode.set('chat');
       await this.selectUser(target);
-    }
-
-    this.mainActiveTab = 'chat';
-    if (notification.entityType === 'Message') {
-      this.scrollToMessage(notification.entityId);
+      this.mainActiveTab = 'chat';
+      if (notification.entityType === 'Message' && entityId) {
+        this.scrollToMessage(entityId);
+      }
+    } else if (notification.entityType === 'Meeting' && entityId) {
+      // Navigate to meeting (join)
+      this.viewMode.set('chat');
     }
   }
 
