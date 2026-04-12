@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { NotificationService } from '../../../core/services/notification.service';
+import { ActivityService } from '../../../core/services/activity.service';
 
 @Component({
   selector: 'app-filter-tabs',
@@ -10,8 +10,8 @@ import { NotificationService } from '../../../core/services/notification.service
     <div class="filter-tabs">
       <button
         *ngFor="let f of filters"
-        [class.active]="notificationService.activeFilter() === f.value"
-        (click)="notificationService.setFilter(f.value)">
+        [class.active]="activityService.activeFilter() === f.value"
+        (click)="setFilter(f.value)">
         {{ f.label }}
       </button>
     </div>
@@ -58,12 +58,16 @@ import { NotificationService } from '../../../core/services/notification.service
   `]
 })
 export class FilterTabsComponent {
-  notificationService = inject(NotificationService);
+  activityService = inject(ActivityService);
 
-  filters: { label: string; value: 'all' | 'unread' | 'mentions' | 'missed' }[] = [
+  filters: { label: string; value: 'all' | 'unread' | 'mentions' }[] = [
     { label: 'All',      value: 'all' },
     { label: 'Unread',   value: 'unread' },
-    { label: 'Mentions', value: 'mentions' },
-    { label: 'Missed',   value: 'missed' }
+    { label: 'Mentions', value: 'mentions' }
   ];
+
+  setFilter(v: any) {
+    this.activityService.activeFilter.set(v);
+    this.activityService.loadActivities(v, 1);
+  }
 }

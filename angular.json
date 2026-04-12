@@ -64,10 +64,7 @@
                 }
               ],
               "optimization": true,
-              "aot": true,
-              "buildOptimizer": true,
               "sourceMap": false,
-              "extractLicenses": true,
               "outputHashing": "all"
             },
             "electron": {
@@ -90,13 +87,9 @@
                 }
               ],
               "optimization": true,
-              "aot": true,
-              "buildOptimizer": true,
               "sourceMap": false,
-              "extractLicenses": true,
               "outputHashing": "all",
-              "baseHref": "./",
-              "deployUrl": "./"
+              "baseHref": "./"
             },
             "development": {
               "optimization": false,

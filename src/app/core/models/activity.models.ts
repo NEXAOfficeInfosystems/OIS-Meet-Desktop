@@ -6,7 +6,8 @@ export enum ActivityType {
   Reaction = 4,
   Reply = 5,
   TeamCreated = 6,
-  ChannelCreated = 7
+  ChannelCreated = 7,
+  MissedCall = 8
 }
 
 export interface ActivityItem {

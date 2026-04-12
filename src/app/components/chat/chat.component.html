@@ -226,7 +226,7 @@
 
     <!-- ACTIVITY SIDEBAR CONTENT -->
     <div class="activity-scroll-area" *ngIf="viewMode() === 'activity'">
-      <app-activity-feed></app-activity-feed>
+      <app-activity-feed (activityClicked)="handleActivityClick($event)"></app-activity-feed>
     </div>
 
   </div>
@@ -432,20 +432,17 @@
                       </app-chat-audio-player>
 
                       <!-- ── Screen recording / video ── -->
-                      <app-chat-video-player
-                        *ngIf="msg.messageType === 'Video' || msg.MessageType === 'Video'"
+                      <app-chat-video-player *ngIf="msg.messageType === 'Video' || msg.MessageType === 'Video'"
                         [videoUrl]="fileService.getFileUrl(msg.fileUrl || msg.FileUrl)"
                         [isMine]="msg.senderId?.toString() === currentUserId?.toString()"
                         [fileName]="msg.fileName || msg.FileName || 'screen-recording.webm'">
                       </app-chat-video-player>
 
                       <!-- ── Inline image ── -->
-                      <div class="msg-image-wrap" *ngIf="(msg.messageType === 'Image' || msg.MessageType === 'Image') && (msg.fileUrl || msg.FileUrl) && settings.showMediaPreviews">
-                        <img class="msg-image"
-                          [src]="fileService.getFileUrl(msg.fileUrl || msg.FileUrl)"
-                          [alt]="msg.fileName || msg.FileName || 'Image'"
-                          (click)="openPreview(msg)"
-                          loading="lazy">
+                      <div class="msg-image-wrap"
+                        *ngIf="(msg.messageType === 'Image' || msg.MessageType === 'Image') && (msg.fileUrl || msg.FileUrl) && settings.showMediaPreviews">
+                        <img class="msg-image" [src]="fileService.getFileUrl(msg.fileUrl || msg.FileUrl)"
+                          [alt]="msg.fileName || msg.FileName || 'Image'" (click)="openPreview(msg)" loading="lazy">
                       </div>
 
                       <!-- ── Text content (non-media messages) ── -->
@@ -454,12 +451,14 @@
                         [innerHTML]="(msg.formattedContent || msg.content) | safeHtml"></div>
 
                       <!-- ── Direct file on message (File type with fileUrl) ── -->
-                      <ng-container *ngIf="(msg.messageType === 'File' || msg.MessageType === 'File') && (msg.fileUrl || msg.FileUrl)">
+                      <ng-container
+                        *ngIf="(msg.messageType === 'File' || msg.MessageType === 'File') && (msg.fileUrl || msg.FileUrl)">
                         <div class="msg-attachments" *ngIf="settings.showMediaPreviews">
                           <div class="file-chip animate-fade-in" (click)="openPreview(msg)">
                             <i class="bi fs-4" [class]="getFileIcon(msg.fileName || msg.FileName || '')"></i>
                             <div class="file-info">
-                              <span class="file-name text-truncate" style="max-width: 150px;">{{ msg.fileName || msg.FileName || 'File' }}</span>
+                              <span class="file-name text-truncate" style="max-width: 150px;">{{ msg.fileName ||
+                                msg.FileName || 'File' }}</span>
                             </div>
                             <button class="btn-download"
                               (click)="downloadFile(msg.fileUrl || msg.FileUrl, msg.fileName || msg.FileName); $event.stopPropagation()">
@@ -672,7 +671,8 @@
               </div>
 
               <!-- Screen Recording Overlay — shown in browser; Electron uses the floating window instead -->
-              <div class="recording-overlay screen-rec-overlay animate-slide-up" *ngIf="screenRecordingState.isRecording && !isElectron">
+              <div class="recording-overlay screen-rec-overlay animate-slide-up"
+                *ngIf="screenRecordingState.isRecording && !isElectron">
                 <!-- Left: status badge -->
                 <div class="screen-rec-status">
                   <div class="screen-dot" [class.paused]="screenRecordingState.isPaused"></div>
@@ -775,9 +775,8 @@
                   </button>
 
                   <!-- Screen Record -->
-                  <button class="rte-action-btn screen-rec-btn"
-                    (click)="startScreenRecording()" title="Record screen" aria-label="Record screen"
-                    [disabled]="recordingState.isRecording || isSendingScreenRecording">
+                  <button class="rte-action-btn screen-rec-btn" (click)="startScreenRecording()" title="Record screen"
+                    aria-label="Record screen" [disabled]="recordingState.isRecording || isSendingScreenRecording">
                     <i class="bi bi-display" *ngIf="!isSendingScreenRecording"></i>
                     <div class="spinner-border spinner-border-sm" *ngIf="isSendingScreenRecording" role="status"></div>
                   </button>

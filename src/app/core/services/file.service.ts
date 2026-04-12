@@ -15,12 +15,15 @@ export class FileService {
     private sessionService: SessionService
   ) { }
 
-  uploadFile(file: File): Observable<HttpEvent<any>> {
+  uploadFile(file: File, conversationId?: string): Observable<HttpEvent<any>> {
     const formData: FormData = new FormData();
     formData.append('file', file);
     const userId = this.sessionService.getOISMeetUserId() || this.sessionService.getUserId();
     if (userId) {
       formData.append('userId', userId);
+    }
+    if (conversationId) {
+      formData.append('conversationId', conversationId);
     }
 
     const req = new HttpRequest('POST', `${this.apiUrl}/upload`, formData, {

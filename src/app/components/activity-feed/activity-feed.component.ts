@@ -1,19 +1,47 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { NotificationService } from '../../core/services/notification.service';
+import { ActivityService } from '../../core/services/activity.service';
 import { FilterTabsComponent } from './filter-tabs/filter-tabs.component';
 import { ActivityItemComponent } from './activity-item/activity-item.component';
 import { NotificationBadgeComponent } from './notification-badge/notification-badge.component';
-import { NotificationRecipient } from '../../core/models/notification.models';
+import { ActivityItem as CoreActivityItem, ActivityType } from '../../core/models/activity.models';
+import { toObservable } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs/operators';
+import { ScrollingModule } from '@angular/cdk/scrolling';
+import { ActivityChatBridgeService } from '../../core/services/activity-chat-bridge.service';
+import { Output, EventEmitter } from '@angular/core';
+
+export interface UnifiedActivityItem {
+  id: string;
+  type: 'mention' | 'missed_call' | 'reaction' | 'reply' | 'system' | 'meeting' | 'file';
+  title: string;
+  description: string;
+  timestamp: number;
+  user: {
+    id: string;
+    name: string;
+    avatar?: string;
+  };
+  metadata?: any;
+  read: boolean;
+  original: CoreActivityItem;
+}
+
+export interface ActivityGroup {
+  label: string;
+  items: UnifiedActivityItem[];
+}
 
 @Component({
   selector: 'app-activity-feed',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CommonModule,
     FilterTabsComponent,
     ActivityItemComponent,
-    NotificationBadgeComponent
+    NotificationBadgeComponent,
+    ScrollingModule
   ],
   template: `
     <div class="activity-feed">
@@ -22,12 +50,12 @@ import { NotificationRecipient } from '../../core/models/notification.models';
       <div class="feed-header">
         <h2 class="feed-title">Activity</h2>
         <div class="feed-header-actions">
-          <button class="icon-btn" (click)="notificationService.markAllAsRead()"
+          <button class="icon-btn" (click)="markAllAsRead()"
                   title="Mark all as read"
-                  [disabled]="notificationService.unreadCount() === 0">
+                  [disabled]="activityService.unreadCount() === 0">
             <i class="bi bi-check2-all"></i>
           </button>
-          <app-notification-badge [count]="notificationService.unreadCount()"></app-notification-badge>
+          <app-notification-badge [count]="activityService.unreadCount()"></app-notification-badge>
         </div>
       </div>
 
@@ -38,30 +66,28 @@ import { NotificationRecipient } from '../../core/models/notification.models';
       <div class="feed-list" (scroll)="onScroll($event)">
 
         <!-- Empty state -->
-        <div *ngIf="notificationService.notifications().length === 0 && !notificationService.isLoading()"
-             class="empty-state">
-          <div class="empty-icon"><i class="bi bi-bell-slash"></i></div>
-          <p class="empty-title">No activity yet</p>
-          <p class="empty-sub">Mentions, reactions, and missed calls will appear here.</p>
-        </div>
-
-        <!-- Activity items -->
-        <app-activity-item
-          *ngFor="let item of notificationService.notifications(); trackBy: trackById"
-          [recipient]="item"
-          (clickItem)="onNotificationClick($event)">
-        </app-activity-item>
-
-        <!-- Load more spinner -->
-        <div *ngIf="notificationService.isLoading()" class="loading-row">
-          <div class="spinner-border spinner-border-sm text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
+        <ng-container *ngIf="(isEmpty$ | async)">
+          <div class="empty-state">
+            <div class="empty-icon"><i class="bi bi-bell-slash"></i></div>
+            <p class="empty-title">No activity yet</p>
+            <p class="empty-sub">Mentions, reactions, shared files, and calls will appear here.</p>
           </div>
+        </ng-container>
+
+        <!-- Activity Groups -->
+        <div class="activity-list" *ngIf="(activityGroups$ | async) as groups">
+          <ng-container *ngFor="let group of groups">
+             <div class="group-header" *ngIf="group.items.length > 0">{{ group.label }}</div>
+             <app-activity-item
+               *ngFor="let item of group.items; trackBy: trackById"
+               [item]="item"
+               (clickItem)="onActivityClick($event)">
+             </app-activity-item>
+          </ng-container>
         </div>
 
         <!-- End of list -->
-        <div *ngIf="!notificationService.hasMore() && notificationService.notifications().length > 0"
-             class="end-row">
+        <div *ngIf="!(isEmpty$ | async)" class="end-row">
           You're all caught up
         </div>
       </div>
@@ -120,8 +146,25 @@ import { NotificationRecipient } from '../../core/models/notification.models';
     /* List */
     .feed-list {
       flex: 1;
+    
+    }
+
+    .activity-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-bottom: 8px;
+      height: calc(100vh - 200px);
       overflow-y: auto;
-      min-height: 0;
+    }
+
+    .group-header {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--fluent-text-secondary, #605E5C);
+      padding: 16px 16px 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     /* Empty state */
@@ -159,27 +202,127 @@ import { NotificationRecipient } from '../../core/models/notification.models';
   `]
 })
 export class ActivityFeedComponent implements OnInit {
-  notificationService = inject(NotificationService);
+  activityService = inject(ActivityService);
+  private bridgeService = inject(ActivityChatBridgeService);
+  private page = 1;
+
+  @Output() activityClicked = new EventEmitter<UnifiedActivityItem>();
+
+  // Since activities are exposed as a computed signal filteredActivities:
+  private rawActivities$ = toObservable(this.activityService.filteredActivities);
+
+  isEmpty$ = this.rawActivities$.pipe(
+    map(notifs => notifs.length === 0)
+  );
+
+  activityGroups$ = this.rawActivities$.pipe(
+    map(notifs => {
+      const limited = notifs.slice(0, 100);
+      const items = limited.map(n => this.normalizeActivity(n));
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const grouped: { [key: string]: UnifiedActivityItem[] } = {
+        'Today': [],
+        'Yesterday': [],
+        'Earlier': []
+      };
+
+      for (const item of items) {
+        const d = new Date(item.timestamp);
+        if (d >= today) {
+          grouped['Today'].push(item);
+        } else if (d >= yesterday) {
+          grouped['Yesterday'].push(item);
+        } else {
+          grouped['Earlier'].push(item);
+        }
+      }
+
+      const result: ActivityGroup[] = [];
+      if (grouped['Today'].length > 0) result.push({ label: 'Today', items: grouped['Today'] });
+      if (grouped['Yesterday'].length > 0) result.push({ label: 'Yesterday', items: grouped['Yesterday'] });
+      if (grouped['Earlier'].length > 0) result.push({ label: 'Earlier', items: grouped['Earlier'] });
+
+      return result;
+    })
+  );
 
   ngOnInit() {
-    this.notificationService.loadInitial();
+    this.page = 1;
+    this.activityService.loadActivities('all', this.page);
   }
 
-  onNotificationClick(recipient: NotificationRecipient) {
-    if (!recipient.isRead) {
-      this.notificationService.markAsRead([recipient.id]);
+  onActivityClick(item: UnifiedActivityItem) {
+    this.activityService.selectActivity(item.original);
+    
+    // Emit for parent component if listening
+    this.activityClicked.emit(item);
+
+    // Also trigger via bridge for decoupled navigation
+    this.bridgeService.openChat({
+      conversationId: item.original.contextId || item.original.id,
+      messageId: item.original.targetMessageId ?? undefined,
+      senderId: item.original.senderId
+    });
+  }
+
+  markAllAsRead() {
+    const ids = this.activityService.activities().filter(a => !a.isRead).map(a => a.id);
+    if (ids.length > 0) {
+      this.activityService.markRead(ids);
     }
-    this.notificationService.selectedNotification.set(recipient);
   }
 
   onScroll(event: Event) {
     const el = event.target as HTMLElement;
     if (el.scrollHeight - el.scrollTop <= el.clientHeight + 120) {
-      this.notificationService.loadMore();
+      this.page++;
+      this.activityService.loadActivities('all', this.page);
     }
   }
 
-  trackById(_: number, item: NotificationRecipient): string {
+  trackById(_: number, item: UnifiedActivityItem): string {
     return item.id;
   }
+
+  private normalizeActivity(a: CoreActivityItem): UnifiedActivityItem {
+    let t: UnifiedActivityItem['type'] = 'system';
+
+    switch (a.type) {
+      case ActivityType.FileShared: t = 'file'; break;
+      case ActivityType.Mention: t = 'mention'; break;
+      case ActivityType.MeetingInvite:
+      case ActivityType.MeetingStarted: t = 'meeting'; break;
+      case ActivityType.Reaction: t = 'reaction'; break;
+      case ActivityType.Reply: t = 'reply'; break;
+      case ActivityType.MissedCall: t = 'missed_call'; break;
+      default: t = 'system';
+    }
+
+    // Sanitize high-precision date strings (e.g. 7 digits) to 3 digits for standard Date parsing
+    const cleanedDate = a.createdAt?.replace(/(\.\d{3})\d+/, '$1');
+    const timestamp = cleanedDate ? new Date(cleanedDate).getTime() : Date.now();
+
+    return {
+      id: a.id,
+      type: t,
+      title: a.senderName || (a.type === ActivityType.MissedCall ? 'Missed Call' : 'System'),
+      description: a.type === ActivityType.MissedCall ? 'Missed a call' : (a.preview || a.context || ''),
+      timestamp: timestamp,
+      user: {
+        id: a.senderId || '',
+        name: a.senderName || '',
+        avatar: a.senderAvatar || undefined,
+      },
+      read: a.isRead,
+      original: a
+    };
+  }
 }
+
+

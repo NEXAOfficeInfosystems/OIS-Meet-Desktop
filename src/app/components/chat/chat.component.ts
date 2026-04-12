@@ -36,6 +36,8 @@ import { PreviewService } from '../../core/services/preview.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { NotificationRecipient } from '../../core/models/notification.models';
 import { ActivityFeedComponent } from '../activity-feed/activity-feed.component';
+import { ActivityService } from '../../core/services/activity.service';
+import { ActivityChatBridgeService, ActivityChatTarget } from '../../core/services/activity-chat-bridge.service';
 import { SignalRService } from '../../core/services/signalr.service';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../../shared/layout/confirmation-dialog.component';
@@ -282,21 +284,18 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     private settingsService: SettingsService,
     private previewService: PreviewService,
     public notificationService: NotificationService,
+    public activityService: ActivityService,
     private signalRService: SignalRService,
     private voiceNoteService: VoiceNoteService,
     private screenRecorderService: ScreenRecorderService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private bridgeService: ActivityChatBridgeService
   ) {
     this.currentUserId = this.sessionService.getOISMeetUserId();
 
-    // Wire up activity selection to chat loading
-    // Wire up notification selection to chat loading
-    effect(() => {
-      const selected = this.notificationService.selectedNotification();
-      const mode = this.viewMode();
-      if (selected && mode === 'activity') {
-        this.handleNotificationSelection(selected);
-      }
+    // Wire up activity selection to chat loading via bridge service
+    this.bridgeService.chatTrigger$.subscribe(target => {
+      this.handleBridgeNavigation(target);
     });
 
     effect(() => {
@@ -420,7 +419,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       const oisMeet = (window as any).oisMeet;
       if (oisMeet) {
         if (state.isRecording) {
-          if (!wasRecording) oisMeet.showRecordingControls?.().catch(() => {});
+          if (!wasRecording) oisMeet.showRecordingControls?.().catch(() => { });
           oisMeet.updateRecordingControls?.({ duration: state.duration, isPaused: state.isPaused });
         } else if (wasRecording) {
           oisMeet.hideRecordingControls?.();
@@ -437,9 +436,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const oisMeet = (window as any).oisMeet;
     if (oisMeet?.onRecordingControlAction) {
       oisMeet.onRecordingControlAction((action: string) => {
-        if (action === 'stop')   this.stopScreenRecording();
+        if (action === 'stop') this.stopScreenRecording();
         if (action === 'cancel') this.cancelScreenRecording();
-        if (action === 'pause')  this.toggleScreenRecordingPause();
+        if (action === 'pause') this.toggleScreenRecordingPause();
       });
     }
 
@@ -1190,7 +1189,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private uploadFile(file: File): void {
     this.isUploading = true;
     const msgType = this.detectMessageType(file);
-    this.fileService.uploadFile(file).subscribe({
+    this.fileService.uploadFile(file, this.selectedConversation?.id).subscribe({
       next: (event: any) => {
         if (event.type === 4) {
           const res = event.body;
@@ -1932,49 +1931,89 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  private async handleNotificationSelection(recipient: NotificationRecipient) {
-    const notification = recipient.notification;
-    if (!notification) return;
+  private async handleBridgeNavigation(target: ActivityChatTarget) {
+    if (!target) return;
 
-    // Ensure we are in activity mode
-    if (this.viewMode() !== 'activity') return;
+    const targetConvId = target.conversationId?.toString().toLowerCase();
+    const targetUserId = target.senderId?.toString().toLowerCase();
 
-    // Priority: conversationId > contextId > entityId (for message-type notifications)
-    const convId = notification.conversationId || notification.contextId;
-    const entityId = notification.entityId;
+    console.log('[DEBUG] Activity Nav Target:', { targetConvId, targetUserId, messageId: target.messageId });
 
-    let target = this.users.find(u =>
-      (convId && (u.conversationId === convId || u.id === convId)) ||
-      (entityId && (u.conversationId === entityId || u.id === entityId))
-    );
+    // 1. Primary Strategy: Find the Group or Direct conversation by ID
+    // We prioritize checking the conversationId property which is standard for groups.
+    let chatTarget = this.users.find(u => {
+      const uConvId = u.conversationId?.toString().toLowerCase();
+      const uId = u.id?.toString().toLowerCase();
+      return targetConvId && (uConvId === targetConvId || uId === targetConvId);
+    });
 
-    if (target) {
-      this.viewMode.set('chat');
-      await this.selectUser(target);
-      this.mainActiveTab = 'chat';
-      if (notification.entityType === 'Message' && entityId) {
-        this.scrollToMessage(entityId);
+    // 2. Secondary Strategy: If it was a direct activity (like a DM) and search failed, find by user ID
+    if (!chatTarget && targetUserId) {
+      chatTarget = this.users.find(u => u.id?.toString().toLowerCase() === targetUserId);
+    }
+
+    if (chatTarget) {
+      console.log('[DEBUG] Activity Nav Found Target:', chatTarget.fullName || chatTarget.name);
+      // NOTE: We intentionally keep the viewMode as is. This ensures the 
+      // sidebar remains in 'activity' mode while the right panel updates 
+      // to show the selected conversation and target message.
+      // if (this.viewMode() !== 'chat') {
+      //   this.viewMode.set('chat');
+      // }
+
+      // Check if already selected to avoid full reload
+      const isAlreadySelected = (this.selectedUser?.id === chatTarget.id) ||
+        (this.selectedConversation?.id === chatTarget.conversationId);
+
+      if (!isAlreadySelected) {
+        // 2. Select the conversation (loads messages)
+        await this.selectUser(chatTarget);
       }
-    } else if (notification.entityType === 'Meeting' && entityId) {
-      // Navigate to meeting (join)
-      this.viewMode.set('chat');
+
+      // Ensure we are in the main chat tab
+      this.mainActiveTab = 'chat';
+      this.cdr.detectChanges();
+
+      // 3. Scroll to message if target exists
+      if (target.messageId) {
+        this.scrollToMessage(target.messageId);
+      }
     }
   }
 
   private scrollToMessage(messageId: string) {
-    setTimeout(() => {
-      let attempts = 0;
-      const interval = setInterval(() => {
-        const element = document.getElementById(`msg-${messageId}`);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'end' });
-          element.classList.add('highlight-message');
-          setTimeout(() => element.classList.remove('highlight-message'), 5000);
-          clearInterval(interval);
-        }
-        if (++attempts > 20) clearInterval(interval);
-      }, 500);
-    }, 500);
+    const elementId = `msg-${messageId}`;
+    let attempts = 0;
+    const maxAttempts = 20;
+    const intervalTime = 300;
+
+    const scrollInterval = setInterval(() => {
+      attempts++;
+      const element = document.getElementById(elementId);
+
+      if (element) {
+        clearInterval(scrollInterval);
+
+        // Smooth scroll to center
+        element.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+
+        // Apply highlight
+        element.classList.add('highlight-message');
+
+        // Remove highlight after a few seconds
+        setTimeout(() => {
+          element.classList.remove('highlight-message');
+        }, 3000);
+
+        this.cdr.detectChanges();
+      } else if (attempts >= maxAttempts) {
+        clearInterval(scrollInterval);
+        console.warn('ChatComponent: Target message element not found after max attempts:', elementId);
+      }
+    }, intervalTime);
   }
 
 
@@ -3131,7 +3170,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const fileName = `voice_note_${Date.now()}.webm`;
     const audioFile = new File([this.recordingBlob], fileName, { type: 'audio/webm' });
 
-    this.fileService.uploadFile(audioFile).subscribe({
+    this.fileService.uploadFile(audioFile, this.selectedConversation?.id).subscribe({
       next: (event: any) => {
         if (event.type === 4) { // Success
           const res = event.body;
@@ -3181,8 +3220,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       // Suppress user-cancellation errors — they are normal UX, not errors
       const name: string = err?.name ?? '';
       const isCancellation = name === 'NotAllowedError'   // user denied / closed picker
-                          || name === 'AbortError'         // picker dismissed
-                          || name === 'InvalidStateError'; // picker cancelled mid-flight
+        || name === 'AbortError'         // picker dismissed
+        || name === 'InvalidStateError'; // picker cancelled mid-flight
       if (!isCancellation) {
         console.error('Screen recording error:', err);
         this.showAlert('Screen recording is not supported on this device.', 'Notice');
@@ -3216,7 +3255,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const fileName = `screen_recording_${Date.now()}.${ext}`;
     const file = new File([blob], fileName, { type: blob.type });
 
-    this.fileService.uploadFile(file).subscribe({
+    this.fileService.uploadFile(file, this.selectedConversation?.id).subscribe({
       next: (event: any) => {
         if (event.type === 4) {
           const res = event.body;
@@ -3241,4 +3280,12 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     });
   }
 
+  handleActivityClick(activity: any) {
+    this.bridgeService.openChat({
+      conversationId: activity.original.contextId || activity.original.id,
+      messageId: activity.original.targetMessageId ?? undefined,
+      senderId: activity.original.senderId
+    });
+  }
 }
+
