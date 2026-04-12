@@ -26,6 +26,7 @@
          <!-- Month view items -->
          @for (day of days; track day.getTime()) {
             <div class="month-cell" [class.other-month]="day.getMonth() !== selectedDate.getMonth()"
+                 [class.past-slot]="isPast(day, 23)"
                  (click)="onSlotClick(day, 0)">
                 <div class="cell-day">{{ day | date: 'd' }}</div>
                 @for (event of getEventsForSlot(day, 0, true); track event.id) {
@@ -39,7 +40,7 @@
         @for (day of days; track day.getTime()) {
           <div class="day-column">
             @for (hour of hours; track hour) {
-              <div class="grid-cell" (click)="onSlotClick(day, hour)">
+              <div class="grid-cell" [class.past-slot]="isPast(day, hour)" (click)="onSlotClick(day, hour)">
                 <div class="cell-line"></div>
                 @for (event of getEventsForSlot(day, hour); track event.id) {
                   <div class="event-item" 

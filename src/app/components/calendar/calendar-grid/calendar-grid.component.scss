@@ -95,6 +95,16 @@
             background: var(--bg-hover-soft);
           }
 
+          &.past-slot {
+            background: #f9f9f911; // Very subtle transparency
+            opacity: 0.7;
+            cursor: not-allowed;
+            
+            &:hover {
+              background: transparent;
+            }
+          }
+
           .event-item {
             position: absolute;
             left: 2px;
@@ -164,6 +174,15 @@
         &.other-month {
           background: var(--bg-hover-soft);
           opacity: 0.4;
+        }
+
+        &.past-slot {
+          background: #f1f1f144;
+          cursor: not-allowed;
+          
+          .cell-day {
+            opacity: 0.3;
+          }
         }
 
         .event-pill {

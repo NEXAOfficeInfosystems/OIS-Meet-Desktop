@@ -26,6 +26,12 @@ export class CalendarGridComponent {
     this.updateDays();
   }
 
+  ngOnInit() {
+    setInterval(() => {
+      this.today = new Date();
+    }, 60000);
+  }
+
   updateDays() {
     this.days = [];
     const start = this.getStartOfView();
@@ -84,9 +90,16 @@ export class CalendarGridComponent {
   }
 
   onSlotClick(day: Date, hour: number) {
+    if (this.isPast(day, hour)) return;
     const d = new Date(day);
     d.setHours(hour, 0, 0, 0);
     this.slotClick.emit(d);
+  }
+
+  isPast(day: Date, hour: number): boolean {
+    const d = new Date(day);
+    d.setHours(23, 59, 59, 999); // End of the day
+    return d.getTime() < this.today.getTime();
   }
 
   onEventClick(event: CalendarEvent, e: MouseEvent) {

@@ -101,6 +101,14 @@ export class CalendarContainerComponent implements OnInit {
   }
 
   onSlotClick(date: Date) {
+    const now = new Date();
+    const endOfSelectedDay = new Date(date);
+    endOfSelectedDay.setHours(23, 59, 59, 999);
+
+    if (endOfSelectedDay.getTime() < now.getTime()) {
+      console.warn('Click on past day ignored');
+      return;
+    }
     this.selectedEvent.set(undefined);
     this.initialDate.set(date);
     this.isDialogVisible.set(true);

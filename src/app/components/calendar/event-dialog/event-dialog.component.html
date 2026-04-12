@@ -1,99 +1,221 @@
 <div class="modal-overlay" (click)="onClose()">
-  <div class="modal-card" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <div class="d-flex align-items-center gap-2">
-        <div class="header-icon bg-primary px-2 py-1 rounded">
-          <i class="bi bi-calendar-check text-white"></i>
-        </div>
-        <h2 class="title">{{ event ? 'Edit Meeting' : 'Schedule Meeting' }}</h2>
+  <div class="teams-dialog" (click)="$event.stopPropagation()">
+    <!-- Teams style header -->
+    <div class="teams-header">
+      <div class="header-left">
+        <span class="header-title">{{ event ? (isPastEvent() ? 'View meeting' : 'Edit meeting') : 'New meeting' }}</span>
+        @if (isPastEvent()) {
+          <span class="badge-past ml-2">Past Event</span>
+        }
       </div>
-      <button class="btn-close-compact" (click)="onClose()">
-        <i class="bi bi-x"></i>
-      </button>
-    </div>
-    
-    <div class="modal-body pb-0">
-      <form [formGroup]="eventForm" (ngSubmit)="onSave()">
-        <div class="form-group mb-3">
-          <input type="text" formControlName="title" placeholder="What's this meeting about?" class="title-field">
+      <div class="header-right">
+        <div class="header-actions">
+          <!-- <button class="btn-icon"><i class="bi bi-box-arrow-up-right"></i></button> -->
+          <button class="btn-icon" (click)="onClose()"><i class="bi bi-x-lg"></i></button>
         </div>
-        
-        <div class="date-range-container mb-3">
-          <div class="date-item">
-            <span class="field-label">Start time</span>
-            <div class="input-with-icon">
-              <i class="bi bi-clock"></i>
-              <input type="datetime-local" formControlName="startTime" class="modern-field">
-            </div>
-          </div>
-          <div class="date-item">
-            <span class="field-label">End time</span>
-            <div class="input-with-icon">
-              <i class="bi bi-clock"></i>
-              <input type="datetime-local" formControlName="endTime" class="modern-field">
-            </div>
-          </div>
-        </div>
-        
-        <div class="options-container mb-3 px-1">
-          <label class="checkbox-label me-4">
-            <input type="checkbox" formControlName="isAllDay">
-            <span class="ms-2">All day</span>
-          </label>
-          
-          <label class="checkbox-label">
-            <input type="checkbox" formControlName="isPrivate">
-            <span class="ms-2">Private</span>
-          </label>
-        </div>
-        
-        <div class="details-section mb-3">
-          <div class="input-row mb-2">
-            <i class="bi bi-geo-alt field-icon text-primary opacity-75"></i>
-            <input type="text" formControlName="location" placeholder="Add location or link" class="underlined-field">
-          </div>
-          
-          <div class="input-row align-items-start">
-            <i class="bi bi-card-text field-icon text-primary opacity-75 mt-2"></i>
-            <textarea formControlName="description" placeholder="Share a brief overview..." class="underlined-field h-20" rows="2"></textarea>
-          </div>
-        </div>
-        
-        <div class="form-group d-flex align-items-center gap-3 bg-light p-2 rounded mb-4">
-          <label class="field-label mb-0 text-dark opacity-50">Recurrence:</label>
-          <div class="select-wrapper border-0">
-            <select formControlName="repeat" class="modern-select bg-transparent py-1">
-              <option value="none">Happens once</option>
-              <option value="daily">Every day</option>
-              <option value="weekly">Every week</option>
-              <option value="monthly">Every month</option>
-            </select>
-            <i class="bi bi-chevron-expand"></i>
-          </div>
-        </div>
-        
-        <div class="modal-footer-custom pb-3">
-           <div class="d-flex justify-content-between align-items-center w-100">
-             <div>
-               @if (event) {
-                 <button type="button" class="btn btn-outline-danger btn-sm border-0" (click)="onDelete()">
-                   <i class="bi bi-trash"></i> Cancel
-                 </button>
-               }
-             </div>
-             <div class="d-flex gap-2">
-               <button type="button" class="btn btn-link text-secondary text-decoration-none py-1" (click)="onClose()">Discard</button>
-               <button type="submit" class="btn btn-primary px-5 shadow-sm" [disabled]="eventForm.invalid">
-                 {{ event ? 'Save' : 'Schedule' }}
-               </button>
-             </div>
-           </div>
-        </div>
-      </form>
+      </div>
     </div>
 
+    <div class="teams-toolbar">
+      <div class="toolbar-left">
+        <button class="toolbar-btn active"><i class="bi bi-calendar-event"></i> Event</button>
+        <!-- <button class="toolbar-btn"><i class="bi bi-arrow-repeat"></i> Series</button> -->
+      </div>
+      <div class="toolbar-right">
+        @if (!isPastEvent()) {
+          <button class="btn btn-primary shadow-sm" (click)="onSave()" [disabled]="eventForm.invalid || pastDateError()">
+            <i class="bi bi-save"></i> Save
+          </button>
+        } @else {
+          <button class="btn btn-secondary shadow-sm" disabled>
+            <i class="bi bi-lock-fill"></i> Read Only
+          </button>
+        }
+      </div>
+    </div>
 
+    <div class="teams-content">
+      <!-- Left Pane: Form -->
+      <div class="form-pane">
+        <form [formGroup]="eventForm">
+          <!-- Title Row -->
+          <div class="teams-input-row main-title">
+            <i class="bi bi-fonts field-icon"></i>
+            <input type="text" formControlName="title" placeholder="Add title"
+              class="teams-underlined-field title-text">
+          </div>
 
+          <!-- Attendees Row -->
+          <div class="teams-input-row">
+            <i class="bi bi-person-plus field-icon"></i>
+            <div class="attendees-container">
+              <input type="text" [(ngModel)]="searchQuery" [ngModelOptions]="{standalone: true}" (input)="searchUsers()"
+                [disabled]="isPastEvent()"
+                placeholder="Invite required attendees" class="teams-underlined-field">
 
+              @if (searchResults.length > 0) {
+              <div class="teams-search-results">
+                @for (user of searchResults; track user.id) {
+                <div class="search-item" (click)="addParticipant(user)">
+                  <div class="search-avatar">{{ (user.fullName || user.userName)[0] }}</div>
+                  <div class="search-info">
+                    <div class="search-name">{{ user.fullName || user.userName }}</div>
+                    <div class="search-email">{{ user.email }}</div>
+                  </div>
+                </div>
+                }
+              </div>
+              }
+
+              <div class="selected-attendees">
+                @for (p of selectedParticipants; track p.userId) {
+                <div class="attendee-chip" [class.organizer]="p.isOrganizer">
+                  <div class="chip-avatar">{{ p.name[0] }}</div>
+                  <span class="chip-name">{{ p.name }}</span>
+                  @if (!p.isOrganizer && !isPastEvent()) {
+                  <button type="button" class="btn-remove" (click)="removeParticipant(p.userId)"><i
+                      class="bi bi-x"></i></button>
+                  }
+                </div>
+                }
+              </div>
+            </div>
+          </div>
+
+          <!-- Time Row -->
+          <div class="teams-input-row">
+            <i class="bi bi-clock field-icon"></i>
+            <div class="time-controls">
+              <div class="dt-picker">
+                <input type="datetime-local" formControlName="startTime" [min]="minDateTime()" class="teams-underlined-field compact">
+                <span class="separator">-</span>
+                <input type="datetime-local" formControlName="endTime" [min]="eventForm.get('startTime')?.value" class="teams-underlined-field compact">
+              </div>
+              <div class="time-options">
+                <label class="teams-checkbox">
+                  <input type="checkbox" formControlName="isAllDay"> <span>All day</span>
+                </label>
+                <div class="spacer"></div>
+                @if (!isPastEvent()) {
+                <div class="time-shortcuts">
+                  <button type="button" class="btn-shortcut" (click)="setNow()">Now</button>
+                  <div class="shortcut-divider"></div>
+                  <button type="button" class="btn-shortcut" (click)="setDuration(15)">15m</button>
+                  <button type="button" class="btn-shortcut" (click)="setDuration(30)">30m</button>
+                  <button type="button" class="btn-shortcut" (click)="setDuration(60)">1h</button>
+                </div>
+                }
+              </div>
+              <div class="time-options mt-2">
+                <div class="recurrence-select">
+                  <i class="bi bi-arrow-repeat"></i>
+                  <select formControlName="repeat">
+                    <option value="none">Does not repeat</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Location Row -->
+          <div class="teams-input-row">
+            <i class="bi bi-geo-alt field-icon"></i>
+            <input type="text" formControlName="location" placeholder="Add a room or location"
+              class="teams-underlined-field">
+          </div>
+
+          <!-- Teams Meeting Toggle -->
+          <div class="teams-input-row">
+            <i class="bi bi-camera-video field-icon"></i>
+            <div class="d-flex align-items-center justify-content-between w-100 teams-underlined-field py-1">
+              <span>OIS Meet meeting</span>
+              <label class="teams-switch">
+                <input type="checkbox" formControlName="isTeamsMeeting">
+                <span class="slider round"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Description / Notes -->
+          <div class="teams-notes-section">
+            <div class="notes-header">
+              <i class="bi bi-card-text"></i>
+              <span>Meeting notes</span>
+            </div>
+            <textarea formControlName="description" placeholder="Type meeting details here..."
+              class="teams-textarea"></textarea>
+          </div>
+        </form>
+
+        @if (pastDateError()) {
+        <div class="teams-error-banner danger">
+          <i class="bi bi-exclamation-circle-fill"></i>
+          <span>{{ pastDateError() }}</span>
+        </div>
+        }
+        @if (isPastEvent()) {
+        <div class="teams-error-banner info">
+          <i class="bi bi-info-circle-fill"></i>
+          <span>This event has already occurred. You cannot modify it.</span>
+        </div>
+        }
+      </div>
+
+      <!-- Right Pane: Availability Preview -->
+      <div class="preview-pane">
+        <div class="preview-header">
+          <div class="preview-date">
+            {{ (eventForm.get('startTime')?.value | date:'EEE, d MMM, yyyy') || 'Today' }}
+          </div>
+          <button class="btn-icon-sm"><i class="bi bi-arrows-angle-expand"></i></button>
+        </div>
+        <div class="availability-grid" #availabilityGrid>
+          <!-- Current Time Marker -->
+          <div class="current-time-line" [style.top.px]="currentTimeTop()">
+            <div class="time-dot"></div>
+          </div>
+
+          <!-- Render full 24h grid -->
+          @for (h of availableHours; track h) {
+          <div class="hour-row">
+            <span class="hour-label">{{ h === 0 ? '12 AM' : h < 12 ? h + ' AM' : h===12 ? '12 PM' : (h - 12) + ' PM'
+                }}</span>
+                <div class="slot-line"></div>
+          </div>
+          }
+          <div class="current-selected-slot" [style.top.px]="slotPosition().top"
+            [style.height.px]="slotPosition().height">
+            <div class="slot-duration">{{ slotText() }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RSVP Actions for participants -->
+    @if (event && isParticipant && event.organizerId !== currentUserId) {
+    <div class="teams-rsvp-bar">
+      <span>How would you like to respond?</span>
+      <div class="rsvp-btns">
+        <button (click)="onRSVP('Accepted')" [class.active]="myStatus === 'Accepted'"><i class="bi bi-check-lg"></i>
+          Yes</button>
+        <button (click)="onRSVP('Tentative')" [class.active]="myStatus === 'Tentative'"><i
+            class="bi bi-question-lg"></i> Maybe</button>
+        <button (click)="onRSVP('Declined')" [class.active]="myStatus === 'Declined'"><i class="bi bi-x-lg"></i>
+          No</button>
+      </div>
+    </div>
+    }
+
+    <!-- Footer for Save/Delete -->
+    <div class="teams-footer">
+      @if (event && event.organizerId === currentUserId && !isPastEvent()) {
+      <button class="btn btn-danger btn-sm" (click)="onDelete()">Delete meeting</button>
+      }
+      <div class="spacer"></div>
+      <button class="btn-secondary-link" (click)="onClose()">Close</button>
+    </div>
   </div>
 </div>

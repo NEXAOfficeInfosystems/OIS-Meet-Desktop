@@ -57,8 +57,9 @@ export class UserService {
   //   return this.http.post<ApiResponse<boolean>>(`${this.apiUrl}/sync-sso-users`, users);
   // }
 
-  // getChatUsers(): Observable<ApiResponse<ChatUser[]>> {
-  //   return this.http.get<ApiResponse<ChatUser[]>>(`${this.apiUrl}/chat-users`);
-  // }
-
+  // Search Users
+  searchUsers(query: string): Observable<ApiResponse<any[]>> {
+    const params = new HttpParams().set('query', query);
+    return this.http.get<ApiResponse<any[]>>(`${this.apiUrl}/search`, { params });
+  }
 }
