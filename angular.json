@@ -63,6 +63,11 @@
                   "maximumError": "1000mb"
                 }
               ],
+              "optimization": true,
+              "aot": true,
+              "buildOptimizer": true,
+              "sourceMap": false,
+              "extractLicenses": true,
               "outputHashing": "all"
             },
             "electron": {
@@ -84,6 +89,11 @@
                   "maximumError": "1000mb"
                 }
               ],
+              "optimization": true,
+              "aot": true,
+              "buildOptimizer": true,
+              "sourceMap": false,
+              "extractLicenses": true,
               "outputHashing": "all",
               "baseHref": "./",
               "deployUrl": "./"

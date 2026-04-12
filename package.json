@@ -69,6 +69,8 @@
   "build": {
     "appId": "com.ois.meet.desktop",
     "productName": "OIS Meet",
+    "asar": true,
+    "compression": "maximum",
     "directories": {
       "output": "release"
     },
