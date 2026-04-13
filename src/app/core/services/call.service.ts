@@ -401,6 +401,7 @@ export class CallService {
 
   /** Clears incoming call signal + timeout + de-duplication key atomically. */
   private _clearIncomingCallState(): void {
+    this.stopRingtones(); // Ensure audio stops whenever state is cleared
     if (this.callTimeout) {
       clearTimeout(this.callTimeout);
       this.callTimeout = null;

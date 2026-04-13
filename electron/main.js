@@ -202,6 +202,31 @@ function normalizeHttpBaseUrl(value, fallback) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ASSET RESOLUTION (Senior Dev Note: Handles Angular 17+ nested output paths)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getIndexPath() {
+  const possiblePaths = [
+    // Standard Angular 17+ with application builder
+    path.join(__dirname, '..', 'dist', 'ois-meet-desktop', 'browser', 'index.html'),
+    // Fallback if 'browser' folder is omitted or flattened
+    path.join(__dirname, '..', 'dist', 'ois-meet-desktop', 'index.html'),
+    // Alternative build output structure
+    path.join(__dirname, '..', 'dist', 'browser', 'index.html'),
+    // Direct relative path from electron folder
+    path.join(__dirname, '..', 'index.html'),
+  ];
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      console.log('[Main] Found index.html at:', p);
+      return p;
+    }
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN WINDOW
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -229,11 +254,29 @@ function createMainWindow() {
   if (startUrl) {
     void mainWindow.loadURL(startUrl);
   } else {
-    const indexPath = path.join(
-      app.getAppPath(), 'dist', 'ois-meet-desktop', 'browser', 'index.html'
-    );
-    void mainWindow.loadFile(indexPath);
+    const indexPath = getIndexPath();
+    if (indexPath) {
+      void mainWindow.loadFile(indexPath);
+    } else {
+      console.error('[Main] Critical Error: index.html not found in any expected location.');
+      dialog.showErrorBox(
+        'Launch Error',
+        'Application assets could not be located. Please ensure the app was built correctly.\nSearched in: dist/ois-meet-desktop/browser/'
+      );
+    }
   }
+
+  // RECOVERY LOGIC (Senior Dev Note: Handles the "reload at directory root" edge case)
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    // -6 is ERR_FILE_NOT_FOUND. If it failed on a directory (no extension), recover to index.html
+    if (errorCode === -6 && !path.extname(validatedURL)) {
+      console.warn('[Main] Reload failed on directory path. Recovering to index.html...', validatedURL);
+      const indexPath = getIndexPath();
+      if (indexPath) {
+        void mainWindow.loadFile(indexPath);
+      }
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -379,9 +422,14 @@ ipcMain.on('open-meeting-window', (event, payload) => {
       const fullUrl = queryString ? `${devBase}/#${routePath}?${queryString}` : `${devBase}/#${routePath}`;
       void meetingWindow.loadURL(fullUrl);
     } else {
-      const indexPath = path.join(app.getAppPath(), 'dist', 'ois-meet-desktop', 'browser', 'index.html');
-      const hashPath = queryString ? `${routePath}?${queryString}` : routePath;
-      void meetingWindow.loadFile(indexPath, { hash: hashPath });
+      const indexPath = getIndexPath();
+      if (indexPath) {
+        const hashPath = queryString ? `${routePath}?${queryString}` : routePath;
+        void meetingWindow.loadFile(indexPath, { hash: hashPath });
+      } else {
+        meetingWindow.destroy();
+        return;
+      }
     }
   } else if (typeof payload === 'string' && /^https?:\/\//i.test(payload)) {
     const legacyUrl = payload.replace(/(https?:\/\/[^/#]+)(\/)/, '$1/#/');
