@@ -133,9 +133,17 @@ export class ScreenRecorderService implements OnDestroy {
    * In a regular browser we fall back to the standard getDisplayMedia().
    */
   private async acquireStream(): Promise<MediaStream> {
-    if (this.isElectron) {
+    const oisMeet = (window as any).oisMeet;
+    
+    // In Tauri, we MUST use the browser APIs. In Electron, we use desktopCapturer.
+    if (oisMeet?.isTauri) {
+      return this.acquireStreamBrowser();
+    }
+    
+    if (oisMeet?.isElectron) {
       return this.acquireStreamElectron();
     }
+    
     return this.acquireStreamBrowser();
   }
 

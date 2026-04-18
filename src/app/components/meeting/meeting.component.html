@@ -15,11 +15,11 @@
   <div class="main-area" *ngIf="!isLoading">
 
     <!-- ── Header ──────────────────────────────────────────────── -->
-    <!-- <header class="window-header" id="dragHandle">
+    <header class="window-header" id="dragHandle">
       <div class="window-title">
         <i class="fas fa-video"></i>
         <span>{{ meetingTopic || 'Meeting Room' }}</span>
-        <span class="participant-count">{{ participants.length + 1 }} in call</span>
+        <span class="participant-count" *ngIf="participants">{{ participants.length + 1 }} in call</span>
       </div>
 
       <div class="window-controls">
@@ -27,10 +27,11 @@
           <i class="fas fa-fingerprint"></i>
           {{ (displayMeetingId || meetingId) | slice:0:12 }}…
         </div>
-        <button class="win-btn" title="Minimize"><i class="fas fa-minus"></i></button>
+        <button class="win-btn" (click)="onMinimize()" title="Minimize"><i class="fas fa-minus"></i></button>
+        <button class="win-btn" (click)="onMaximize()" title="Maximize"><i class="fas fa-expand-alt"></i></button>
         <button class="win-btn close" (click)="leaveMeeting()" title="End call"><i class="fas fa-times"></i></button>
       </div>
-    </header> -->
+    </header>
 
     <!-- ── Recording Indicator (shows when recording is active) ── -->
     <div class="rec-indicator-bar" *ngIf="recStatus !== 'idle'">
@@ -358,6 +359,9 @@
         <div class="rec-mode-btns">
           <button class="rec-mode-btn" (click)="startRecording('video')" title="Record video + audio">
             <i class="fas fa-video"></i>
+          </button>
+          <button class="rec-mode-btn" (click)="startRecording('screen')" title="Record screen + audio">
+            <i class="fas fa-desktop"></i>
           </button>
           <button class="rec-mode-btn" (click)="startRecording('audio')" title="Record audio only">
             <i class="fas fa-microphone"></i>

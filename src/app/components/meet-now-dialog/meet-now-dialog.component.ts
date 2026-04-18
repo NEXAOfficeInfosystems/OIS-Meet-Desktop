@@ -4,7 +4,7 @@ import { Clipboard } from '@angular/cdk/clipboard';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { SessionService }  from '../../core/services/session.service';
-import { MeetingService }  from '../../core/services/meeting.service';
+import { MeetingService, CreateMeetingRequest }  from '../../core/services/meeting.service';
 import { CallService } from '../../core/services/call.service';
 
 
@@ -76,7 +76,7 @@ export class MeetNowDialogComponent implements OnInit {
     this.isCreating = true;
     this.meetingId  = '';
 
-    const request = {
+    const request: CreateMeetingRequest = {
       topic:       'My Meeting',
       hostId:      userId,
       hostName:    userName,
@@ -87,7 +87,8 @@ export class MeetNowDialogComponent implements OnInit {
         allowScreenShare: true,
         maxParticipants:  50,
         waitingRoom:      false
-      }
+      },
+      conversationId: this.data.conversationId
     };
 
     this.meetingService.createMeeting(request).subscribe({
@@ -95,11 +96,17 @@ export class MeetNowDialogComponent implements OnInit {
         this.isCreating = false;
         if (response.success) {
           this.meetingId = response.data.meetingId;
+        } else {
+          // Non-2xx but body parsed — show server message
+          this.snackBar.open(response.message || 'Failed to create meeting', 'Close', { duration: 5000 });
         }
       },
-      error: () => {
+      error: (err: any) => {
         this.isCreating = false;
-        this.snackBar.open('Failed to create meeting', 'Close', { duration: 3000 });
+        // Try to extract backend message from HttpErrorResponse
+        const serverMsg = err?.error?.message || err?.message || 'Failed to create meeting';
+        console.error('Meeting creation error:', err);
+        this.snackBar.open(serverMsg, 'Close', { duration: 6000 });
       }
     });
   }
@@ -249,6 +256,7 @@ export class MeetNowDialogComponent implements OnInit {
       topic: 'OIS Meet',
       mic:   String(mic),
       cam:   String(cam),
+      conv:  this.data.conversationId || ''
     });
 
     const electronApi = (window as any).oisMeet;

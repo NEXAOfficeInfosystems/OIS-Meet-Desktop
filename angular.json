@@ -67,30 +67,6 @@
               "sourceMap": false,
               "outputHashing": "all"
             },
-            "electron": {
-              "fileReplacements": [
-                {
-                  "replace": "src/environments/environment.ts",
-                  "with": "src/environments/environment.prod.ts"
-                }
-              ],
-              "budgets": [
-                {
-                  "type": "initial",
-                  "maximumWarning": "500mb",
-                  "maximumError": "1000mb"
-                },
-                {
-                  "type": "anyComponentStyle",
-                  "maximumWarning": "500mb",
-                  "maximumError": "1000mb"
-                }
-              ],
-              "optimization": true,
-              "sourceMap": false,
-              "outputHashing": "all",
-              "baseHref": "./"
-            },
             "development": {
               "optimization": false,
               "extractLicenses": false,

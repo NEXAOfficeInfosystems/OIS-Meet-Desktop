@@ -181,6 +181,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   isSidebarSearching: boolean = false;
   isConnected: boolean = false;
   isUploading: boolean = false;
+  private pendingFiles = new Set<string>(); // Deduplication safeguard
+
   isToolbarVisible: boolean = false;
   // Active format state for toolbar button highlights
   formatState: Record<string, boolean> = {
@@ -198,7 +200,9 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }
   }
   userFilterMode: 'recent' | 'unread' = 'recent';
-  isElectron = !!(window as any).windowAPI;
+  get isElectron(): boolean {
+    return !!(window as any).windowAPI;
+  }
   settings: UserSettings = { showMessagePreview: true, showMediaPreviews: true, notificationsMentionsOnly: false };
 
   // Voice Notes
@@ -1186,22 +1190,39 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     }
   }
 
+  private getFileFingerprint(file: File): string {
+    return `${file.name}-${file.size}-${file.lastModified}`;
+  }
+
   private uploadFile(file: File): void {
+    const fingerprint = this.getFileFingerprint(file);
+    if (this.pendingFiles.has(fingerprint)) {
+      console.warn('File upload already in progress:', file.name);
+      return;
+    }
+
     this.isUploading = true;
+    this.pendingFiles.add(fingerprint);
     const msgType = this.detectMessageType(file);
+
     this.fileService.uploadFile(file, this.selectedConversation?.id).subscribe({
       next: (event: any) => {
         if (event.type === 4) {
           const res = event.body;
           if (res.success && res.data) {
             this.sendMessage(res.data.url, res.data.fileName, msgType);
+            if (this.fileInput) {
+              this.fileInput.nativeElement.value = '';
+            }
           }
           this.isUploading = false;
+          this.pendingFiles.delete(fingerprint);
         }
       },
       error: (err) => {
         console.error('Upload failed', err);
         this.isUploading = false;
+        this.pendingFiles.delete(fingerprint);
       }
     });
   }
@@ -1465,8 +1486,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
 
     if (isActiveConversation) {
-      const updated = [...this.messages, message];
-      this.messages = this.decorateMessagesWithDates(updated);
+      // FIX: and duplication - let NgRx drive the message list
+      // this.messages = this.decorateMessagesWithDates([...this.messages, message]);
       this.shouldScroll = true;
       this.updateSharedFiles();
 
@@ -2140,12 +2161,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       topic: 'OIS Meet',
       mic: String(mic),
       cam: String(cam),
+      conv: this.selectedConversation?.id || ''
     });
 
-    const electronApi = (window as any).oisMeet;
-    if (electronApi?.isElectron && typeof electronApi.openMeetingWindow === 'function') {
-      // Send structured payload so main.js can use loadFile() in production
-      electronApi.openMeetingWindow({
+    const desktopApi = (window as any).oisMeet;
+    if (desktopApi && typeof desktopApi.openMeetingWindow === 'function') {
+      // Send structured payload so desktop host can resolve correctly
+      desktopApi.openMeetingWindow({
         routePath: `/meeting/${meetingId}`,
         queryString: params.toString(),
       });
@@ -2290,8 +2312,14 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     this.cdr.detectChanges();
 
     try {
-      const res: any = await this.meetingService.createMeeting({
-        topic: `${this.selectedUser.name || this.selectedUser.fullName || 'Group'} Call`,
+      const topic = `${this.selectedUser.name || this.selectedUser.fullName || 'Group'} Call`.substring(0, 100);
+      const convId = this.selectedConversation?.id;
+
+      console.log('🚀 Starting group call:', { topic, hostId, convId, apiUrl: 'Meeting/create' });
+
+      // Use createMeetingAsync (firstValueFrom) instead of deprecated .toPromise()
+      const res: any = await this.meetingService.createMeetingAsync({
+        topic,
         hostId,
         hostName,
         expiryHours: 2,
@@ -2300,11 +2328,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           allowChat: true,
           allowScreenShare: true,
           maxParticipants: 50
-        }
-      }).toPromise();
+        },
+        conversationId: convId
+      });
 
       if (!res?.success || !res?.data?.meetingId) {
-        this.showAlert('Could not create group call. Please try again.');
+        console.error('❌ Meeting creation returned failure:', res);
+        this.showAlert(res?.message || 'Could not create group meeting. Please check your connection.');
         return;
       }
 
@@ -2316,19 +2346,36 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
       // Invite every group participant (excluding self) via SignalR.
       const participants: any[] = this.selectedUser.participants || [];
+      console.log(`📨 Inviting ${participants.length - 1} participants...`);
+
       for (const p of participants) {
         const userId = p.userId?.toString();
         if (!userId || userId === hostId) continue;
         try {
           await this.signalRService.inviteToMeeting(userId, meetingId, hostName);
-          console.log(`📨 Invited ${p.name || p.fullName || userId} to group call`);
-        } catch (err) {
-          console.error(`Failed to invite ${p.name || userId} to group call:`, err);
+          console.log(`✅ Invited ${p.name || p.fullName || userId}`);
+        } catch (inviteErr) {
+          // Non-fatal — log but don't abort the call
+          console.error(`❌ Failed to invite ${p.name || userId}:`, inviteErr);
         }
       }
-    } catch (err) {
-      console.error('Failed to start group call:', err);
-      this.showAlert('Could not start group call. Please try again.');
+    } catch (err: any) {
+      // Extract the real error message from HttpErrorResponse
+      const serverMsg = err?.error?.message || err?.message || null;
+      const status = err?.status ?? 0;
+      console.error('🔥 Group call failed:', { status, serverMsg, err });
+
+      let alertMsg: string;
+      if (status === 0) {
+        alertMsg = 'Could not reach server. Please ensure the backend is running and try again.';
+      } else if (status === 401) {
+        alertMsg = 'Session expired. Please log in again.';
+      } else if (serverMsg) {
+        alertMsg = `Failed to start group call: ${serverMsg}`;
+      } else {
+        alertMsg = `Failed to start group call (HTTP ${status || 'network error'}).`;
+      }
+      this.showAlert(alertMsg);
     } finally {
       this.isGroupCallStarting = false;
       this.cdr.detectChanges();
@@ -3266,6 +3313,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
               messageType: 'Video',
               fileUrl: res.data.url,
               fileName,
+              duration: this.screenRecordingState.duration,
               replyToMessageId: this.replyToMessage?.id
             }));
             this.cancelReply();

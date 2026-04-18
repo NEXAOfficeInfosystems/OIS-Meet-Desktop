@@ -214,9 +214,9 @@ export class IncomingCallBannerComponent {
       cam: String(cam),
     });
 
-    const electronApi = (window as any).oisMeet;
-    if (electronApi?.isElectron) {
-      electronApi.openMeetingWindow({
+    const desktopApi = (window as any).oisMeet;
+    if (desktopApi && typeof desktopApi.openMeetingWindow === 'function') {
+      desktopApi.openMeetingWindow({
         routePath: `/meeting/${meetingId}`,
         queryString: params.toString(),
       });

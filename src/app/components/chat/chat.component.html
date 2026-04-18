@@ -51,10 +51,10 @@
       <div class="header-filters" *ngIf="!isSidebarSearching">
         <span class="filter-chip" [class.active]="userFilterMode === 'unread'"
           (click)="setUserFilterMode('unread')">Unread</span>
-        <span class="filter-chip" [class.active]="activeView === 'teams'">Channels</span>
+        <!-- <span class="filter-chip" [class.active]="activeView === 'teams'">Channels</span> -->
         <span class="filter-chip" [class.active]="userFilterMode === 'recent'"
           (click)="setUserFilterMode('recent')">Chats</span>
-        <span class="filter-chip">Meeting chats</span>
+        <!-- <span class="filter-chip">Meeting chats</span> -->
       </div>
     </div>
 
@@ -763,8 +763,8 @@
                   <!-- Attach file -->
                   <input type="file" #fileInput style="display: none" (change)="onFileSelected($event)">
                   <button class="rte-action-btn" (click)="fileInput.click()" title="Attach file"
-                    aria-label="Attach file">
-                    <i class="bi bi-paperclip"></i>
+                    aria-label="Attach file" [disabled]="isUploading">
+                    <i class="bi bi-paperclip" [class.spinner-border]="isUploading" [class.spinner-border-sm]="isUploading"></i>
                   </button>
 
                   <!-- Voice Note -->

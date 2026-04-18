@@ -12,6 +12,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { AuthService } from './core/services/auth.service';
 import * as signalR from '@microsoft/signalr';
 import { SignalRService } from './core/services/signalr.service';
+import { TauriService } from './core/services/tauri.service';
 
 
 @Component({
@@ -58,7 +59,9 @@ import { SignalRService } from './core/services/signalr.service';
 })
 export class AppComponent {
   title = 'ois-meet-desktop';
-  isElectron = !!(window as any).windowAPI;
+  get isElectron(): boolean {
+    return !!(window as any).oisMeet;
+  }
   isAuthenticated = toSignal(this.auth.isAuthenticated$, { initialValue: false });
   callConnectionState = toSignal(this.callService.connectionState$, {
     initialValue: signalR.HubConnectionState.Disconnected
@@ -73,7 +76,8 @@ export class AppComponent {
     private notifications: NativeNotificationService,
     private session: SessionService,
     public callService: CallService,
-    private signalRService: SignalRService
+    private signalRService: SignalRService,
+    private _tauri: TauriService
   ) {
     // ── THEME INITIALIZATION ──
     this._initializeTheme();

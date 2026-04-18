@@ -3,12 +3,14 @@
   "version": "2.0.0",
   "description": "OIS Meet desktop application",
   "author": "OIS Meet",
-  "main": "electron/main.js",
   "scripts": {
     "ng": "ng",
-    "start": "concurrently -k \"ng serve\" \"wait-on http://localhost:4200 && cross-env ELECTRON_START_URL=http://localhost:4200 electron .\"",
-    "build": "ng build --configuration electron && electron-builder --win --x64",
-    "watch": "ng build --watch --configuration development",
+    "start": "ng serve",
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "start:tauri": "ng serve",
+    "build:tauri": "ng build --configuration production",
     "test": "ng test"
   },
   "private": true,
@@ -30,10 +32,15 @@
     "@ngrx/entity": "^17.2.0",
     "@ngrx/store": "^17.2.0",
     "@ngrx/store-devtools": "^17.2.0",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
+    "@tauri-apps/plugin-fs": "^2.5.0",
+    "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-shell": "^2.3.5",
     "bootstrap": "^5.3.3",
     "bootstrap-icons": "^1.11.3",
     "crypto-js": "^4.2.0",
-    "electron-updater": "^6.8.3",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
     "livekit-client": "^2.17.3",
@@ -49,14 +56,13 @@
     "@angular-devkit/build-angular": "^17.3.17",
     "@angular/cli": "^17.3.17",
     "@angular/compiler-cli": "^17.3.0",
+    "@tauri-apps/cli": "^2.10.1",
     "@types/bootstrap": "^5.2.10",
     "@types/crypto-js": "^4.2.2",
     "@types/jasmine": "~5.1.0",
     "@types/simple-peer": "^9.11.9",
     "concurrently": "^9.0.0",
     "cross-env": "^7.0.3",
-    "electron": "^29.0.0",
-    "electron-builder": "^24.13.3",
     "jasmine-core": "~5.1.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",
@@ -65,44 +71,5 @@
     "karma-jasmine-html-reporter": "~2.1.0",
     "typescript": "~5.4.2",
     "wait-on": "^7.2.0"
-  },
-  "build": {
-    "appId": "com.ois.meet.desktop",
-    "productName": "OIS Meet",
-    "asar": true,
-    "compression": "maximum",
-    "directories": {
-      "output": "release"
-    },
-    "publish": [
-      {
-        "provider": "generic",
-        "url": "https://netorgft12643612-my.sharepoint.com/personal/senthilkumar_s_officeinfosystems_com/Documents/oismeet-updates",
-        "channel": "latest"
-      }
-    ],
-    "files": [
-      "dist/**",
-      "electron/**",
-      "package.json"
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "publisherName": "OIS Meet",
-      "icon": "electron/assets/icon.ico"
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": true,
-      "allowToChangeInstallationDirectory": false,
-      "allowElevation": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "OIS Meet",
-      "artifactName": "${productName} Setup ${version}.${ext}",
-      "uninstallDisplayName": "${productName}"
-    }
   }
 }

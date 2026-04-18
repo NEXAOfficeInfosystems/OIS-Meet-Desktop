@@ -34,6 +34,8 @@ import { UserService } from '../../core/services/user.service';
 import { CallService } from '../../core/services/call.service';
 import { ScreenShareStateService, ScreenShareState } from '../../core/services/screen-share-state.service';
 import { MeetingRecorderService, RecordingMode, RecordingState } from '../../core/services/meeting-recorder.service';
+import { FileService } from '../../core/services/file.service';
+
 
 @Component({
   selector: 'app-meeting',
@@ -53,6 +55,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Meeting Info
   meetingId: string = '';
+  conversationId: string | null = null;
   displayMeetingId: string = '';
   meetingTopic: string = 'OIS Meet';
   meetingDetails: any = null;
@@ -202,9 +205,19 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   get isRecording(): boolean { return this.recorderService.isRecording; }
   get isRecPaused(): boolean { return this.recorderService.isPaused; }
   get recStatus(): string { return this.recorderService.state.status; }
+  get recMode(): string { return this.recorderService.state.mode; }
   get recTime(): string { return this.recorderService.state.formattedTime; }
   get recSizeKb(): number { return this.recorderService.state.sizeKb; }
-  get recMode(): string { return this.recorderService.state.mode; }
+
+  get isElectron(): boolean {
+    const bridge = (window as any).oisMeet;
+    return !!bridge && bridge.isElectron === true;
+  }
+
+  get isTauri(): boolean {
+    const bridge = (window as any).oisMeet;
+    return !!bridge && bridge.isTauri === true;
+  }
 
   constructor(
     private route: ActivatedRoute,
@@ -225,7 +238,9 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     private callService: CallService,
     public ssStateService: ScreenShareStateService,
     public recorderService: MeetingRecorderService,
-    private commonService: CommonService
+    private commonService: CommonService,
+    private fileService: FileService
+
   ) {
     this.userFullName = this.sessionService.getFullName() || 'User';
     this.oisMeetUserId = this.sessionService.getOISMeetUserId() || '';
@@ -336,7 +351,69 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       .pipe(takeUntil(this.destroy$))
       .subscribe((msg) => this.ngZone.run(() => { this.liveTranscriptionError = msg; }));
     // ────────────────────────────────────────────────────────────────────────
+
+    // Subscribe to recording completion to upload to chat
+    this.recorderService.finished$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(({ blob, fileName, mode, duration }) => {
+        this.uploadRecordingToChat(blob, fileName, mode, duration);
+      });
   }
+
+  private uploadRecordingToChat(blob: Blob, fileName: string, mode: RecordingMode, duration: number): void {
+    const targetId = this.conversationId || this.meetingId;
+    if (!targetId) {
+      console.error('[Meeting] Cannot upload recording: No meeting or conversation ID');
+      return;
+    }
+
+    if (!blob || blob.size === 0) {
+      console.warn('[Meeting] Cannot upload recording: Blob is empty');
+      return;
+    }
+
+    console.log(`[Meeting] Uploading ${mode} recording to ${targetId}...`, { fileName, size: blob.size, duration });
+
+    const file = new File([blob], fileName, { type: blob.type });
+    this.fileService.uploadFile(file, targetId).subscribe({
+      next: (event: any) => {
+        if (event.type === 4) { // HttpEventType.Response
+          const res = event.body;
+          if (res.success && res.data) {
+            console.log('[Meeting] Upload successful. Sending SignalR notification...');
+            const messageType = mode === 'audio' ? 'Audio' : (mode === 'screen' ? 'Screen' : 'Video');
+            
+            // Send message to the meeting chat
+            this.signalRService.sendMeetingMessage(
+              this.meetingId,
+              `${messageType} Recording: ${fileName}`,
+              Date.now().toString(),
+              res.data.url,
+              fileName,
+              messageType,
+              duration
+            ).catch(err => console.error('[Meeting] Failed to send recording message:', err));
+
+            this.snackBar.open(`${messageType} recording shared to chat!`, 'OK', { duration: 3000 });
+          } else {
+            console.error('[Meeting] Upload failed: Backend response unsuccessful', res);
+            this.snackBar.open('Recording upload failed (Server error).', 'Close', { duration: 4000 });
+          }
+        }
+      },
+      error: (err) => {
+        console.error('[Meeting] Failed to upload recording:', err);
+        this.snackBar.open('Recording saved locally, but failed to share with chat.', 'OK', { duration: 5000 });
+        this.recorderService.reset();
+      },
+      complete: () => {
+        console.log('[Meeting] Recording upload pipeline complete');
+        this.recorderService.reset();
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
 
   downloadMomPdf(): void {
     if (this.momPdfGenerating) {
@@ -1246,6 +1323,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         this.meetingDetails = response.data;
         this.meetingTopic = this.meetingDetails?.topic || 'OIS Meet Session';
         this.displayMeetingId = this.meetingDetails?.meetingId || this.meetingId;
+        
+        // If we didn't have a conversationId from URL, see if meeting has one
+        if (!this.conversationId && this.meetingDetails?.conversationId) {
+          this.conversationId = this.meetingDetails.conversationId;
+        }
         this.cdr.markForCheck();
       }
     } catch (error) {
@@ -2413,7 +2495,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.isScreenSharing) { return; }
 
     const oisMeet = (window as any).oisMeet;
-    if (!oisMeet || typeof oisMeet.getDesktopSources !== 'function') {
+    if (!oisMeet || !oisMeet.isElectron || typeof oisMeet.getDesktopSources !== 'function') {
       // Browser: re-trigger getDisplayMedia which shows the built-in picker
       await this.stopScreenSharing();
       await this.toggleScreenShare();
@@ -2475,42 +2557,70 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /**
    * Start a new recording.
-   * @param mode 'video' captures camera/screen + mic; 'audio' captures mic only.
+   * @param mode 'video' captures camera/screen + mic; 'audio' captures mic only; 'screen' captures screen + mic.
    */
   async startRecording(mode: RecordingMode = 'video'): Promise<void> {
     if (!this.recorderService.isIdle) { return; }
 
+    console.log(`[Meeting] Requesting start of ${mode} recording`);
+
     const streams: MediaStream[] = [];
 
-    // Always include the local mic+camera stream
+    // 1. Core Media Stream (Camera + Mic)
     if (this.mediaStream) {
-      streams.push(this.mediaStream);
+      if (mode === 'audio') {
+        // Only take the audio tracks
+        const audioStream = new MediaStream(this.mediaStream.getAudioTracks());
+        streams.push(audioStream);
+      } else {
+        streams.push(this.mediaStream);
+      }
     }
 
-    // If screen sharing is active, add the screen stream (gives best composite)
-    if (this.isScreenSharing && this.screenStream) {
-      streams.push(this.screenStream);
+    // 2. Screen Stream
+    if (mode === 'screen' || mode === 'video') {
+      if (this.isScreenSharing && this.screenStream) {
+        streams.push(this.screenStream);
+      } else if (mode === 'screen') {
+        // If user specifically requested screen recording but is NOT sharing,
+        // we should probably offer to start screen sharing first, but to keep it simple
+        // we'll just show a snackbar for now.
+        this.snackBar.open('Please start screen sharing first to record your screen.', 'OK', { duration: 4000 });
+        return;
+      }
     }
 
-    if (streams.length === 0) {
-      this.snackBar.open('No media stream available to record.', 'Close', { duration: 3000 });
+    // 3. Remote Audio Streams (to record other participants)
+    // We iterate through all remote video tiles and gather their audio streams.
+    // Ensure we are truly capturing what's being heard.
+    if (this.remoteAudioStreams.size > 0) {
+      console.log(`[Meeting] Adding ${this.remoteAudioStreams.size} remote audio streams to recording`);
+      this.remoteAudioStreams.forEach((stream, connId) => {
+        if (stream && stream.active && stream.getAudioTracks().length > 0) {
+          streams.push(stream);
+        }
+      });
+    }
+
+    if (streams.length === 0 || streams.every(s => s.getTracks().length === 0)) {
+      this.snackBar.open('No active media (mic/camera/screen) found to record.', 'Close', { duration: 3000 });
       return;
     }
 
     try {
       await this.recorderService.start(streams, mode);
-      // Subscribe to state changes so the template (timer/size) re-renders
+      
       this.recorderService.state$
         .pipe(takeUntil(this.destroy$))
-        .subscribe(() => this.cdr.markForCheck());
+        .subscribe(() => {
+          this.cdr.markForCheck();
+        });
 
-      this.snackBar.open(
-        `${mode === 'audio' ? '🎙️ Audio' : '🎥 Video'} recording started`,
-        'OK', { duration: 2500 }
-      );
+      const modeLabel = mode === 'audio' ? '🎙️ Audio' : (mode === 'screen' ? '🖥️ Screen' : '🎥 Video');
+      this.snackBar.open(`${modeLabel} recording started`, 'OK', { duration: 2500 });
     } catch (err) {
-      console.error('Recording start failed:', err);
-      this.snackBar.open('Could not start recording. Check permissions.', 'Close', { duration: 4000 });
+      console.error('[Meeting] Recording start failed:', err);
+      this.snackBar.open('Could not start recording. Check device permissions.', 'Close', { duration: 4000 });
     }
   }
 
@@ -2527,7 +2637,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Stop recording and trigger auto-download of the .webm file. */
   stopRecording(): void {
     this.recorderService.stop();
-    this.snackBar.open('Recording saved — check your Downloads folder.', '✔', { duration: 4000 });
+    this.snackBar.open('Finalizing recording and uploading to chat...', '✔', { duration: 4000 });
     this.cdr.markForCheck();
   }
 
@@ -2771,7 +2881,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       let screenStream: MediaStream;
       try {
         const oisMeet = (window as any).oisMeet;
-        if (oisMeet && typeof oisMeet.getDesktopSources === 'function') {
+        const isElectron = oisMeet && oisMeet.isElectron && !oisMeet.isTauri;
+        if (isElectron && typeof oisMeet.getDesktopSources === 'function') {
           // ── Electron path ──────────────────────────────────────────────────
           console.log('Starting screen share (Electron desktopCapturer path)');
           const sources: Array<{ id: string; name: string; thumbnail: string }> =
@@ -2807,12 +2918,24 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
             audio: true
           });
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error sharing screen:', error);
         this.isScreenSharing = false;
         this.screenShareOwnerName = 'Your Screen';
         this.cdr.markForCheck();
-        this.snackBar.open('Could not start screen share', 'Close', { duration: 3000 });
+
+        let errorMsg = 'Could not start screen share';
+        if (error.name === 'NotAllowedError') {
+          errorMsg = 'Screen share permission was denied.';
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+          errorMsg = 'No screen sources found.';
+        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+          errorMsg = 'Screen source is already in use or restricted.';
+        } else if (error.message && error.message.includes('desktop sources')) {
+          errorMsg = 'No desktop sources available (Electron error).';
+        }
+
+        this.snackBar.open(errorMsg, 'Close', { duration: 4000 });
         this.refreshTooltips();
         return;
       }
@@ -2848,6 +2971,23 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         if (screenTrack) {
           screenTrack.enabled = true;
           this.mediaStream?.addTrack(screenTrack);
+
+          // CRITICAL: Replace track in all existing peer connections
+          this.peers.forEach((peer) => {
+            try {
+              const pc: RTCPeerConnection = (peer as any)._pc;
+              if (!pc) return;
+              const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video');
+              if (videoSender) {
+                videoSender.replaceTrack(screenTrack).catch((e: any) =>
+                  console.warn('replaceTrack (screen) failed:', e));
+              } else {
+                pc.addTrack(screenTrack, this.mediaStream!);
+              }
+            } catch (e) {
+              console.warn('Failed to update screen track in peer:', e);
+            }
+          });
         }
       }
 
@@ -2984,11 +3124,25 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   closeMeetingWindow() {
-    const electronApi = (window as any).oisMeet;
-    if (electronApi?.isElectron && typeof electronApi.closeMeetingWindow === 'function') {
-      electronApi.closeMeetingWindow({ force: true });
+    const bridge = (window as any).oisMeet;
+    if (bridge && typeof bridge.close === 'function') {
+      bridge.close();
     } else {
       this.router.navigate(['/chat']);
+    }
+  }
+
+  onMinimize() {
+    const bridge = (window as any).oisMeet;
+    if (bridge && typeof bridge.minimize === 'function') {
+      bridge.minimize();
+    }
+  }
+
+  onMaximize() {
+    const bridge = (window as any).oisMeet;
+    if (bridge && typeof bridge.maximize === 'function') {
+      bridge.maximize();
     }
   }
 

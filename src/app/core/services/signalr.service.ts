@@ -408,8 +408,16 @@ export class SignalRService {
     await this.hubConnection?.invoke('StopScreenShare', meetingId);
   }
 
-  public async sendMeetingMessage(meetingId: string, message: string, messageId?: string): Promise<void> {
-    await this.hubConnection?.invoke('SendChatMessage', meetingId, message, messageId);
+  public async sendMeetingMessage(
+    meetingId: string,
+    message: string,
+    messageId?: string,
+    fileUrl?: string,
+    fileName?: string,
+    messageType?: string,
+    duration?: number
+  ): Promise<void> {
+    await this.hubConnection?.invoke('SendChatMessage', meetingId, message, messageId, fileUrl, fileName, messageType, duration);
   }
 
   public async publishTranscription(meetingId: string, transcription: TranscriptionResponse): Promise<void> {

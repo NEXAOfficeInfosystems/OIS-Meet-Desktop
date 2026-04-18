@@ -24,8 +24,11 @@ type ThemeMode = 'light' | 'dark';
 })
 export class TitleBarComponent implements OnInit, OnDestroy {
   isMaximized = false;
-  isElectron = !!(window as any).windowAPI;
   isLoginPage = false;
+
+  get isElectron(): boolean {
+    return !!(window as any).oisMeet;
+  }
 
   readonly isAuthenticated$ = this.auth.isAuthenticated$;
   readonly appTitle = computed(() => 'OIS Meet');
