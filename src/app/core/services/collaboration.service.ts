@@ -52,7 +52,7 @@ export class CollaborationService {
   getChannels(teamId: string): Observable<{ success: boolean; data: ChannelDto[] }> {
     return this.http.get<{ success: boolean; data: ChannelDto[] }>(
       `${this.apiUrl}/channels`,
-      { params: { teamId } }
+      { params: { teamId, userId: this.userId } }
     );
   }
 

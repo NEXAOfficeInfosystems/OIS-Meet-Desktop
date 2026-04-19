@@ -640,6 +640,47 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     return 'bi-file-earmark-fill text-primary';
   }
 
+  getFAFileIcon(type: string): string {
+    const t = type?.toLowerCase();
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(t)) return 'fa-file-image';
+    if (['pdf'].includes(t)) return 'fa-file-pdf';
+    if (['xls', 'xlsx', 'csv'].includes(t)) return 'fa-file-excel';
+    if (['ppt', 'pptx'].includes(t)) return 'fa-file-powerpoint';
+    if (['doc', 'docx'].includes(t)) return 'fa-file-word';
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(t)) return 'fa-file-archive';
+    if (['txt', 'md'].includes(t)) return 'fa-file-alt';
+    if (['mp3', 'wav', 'ogg'].includes(t)) return 'fa-file-audio';
+    if (['mp4', 'mov', 'avi'].includes(t)) return 'fa-file-video';
+    return 'fa-file';
+  }
+
+  getFileTypeIconUrl(type: string): string {
+    const t = type?.toUpperCase() || '';
+    const available = [
+      'AI', 'AVI', 'BMP', 'CRD', 'CSV', 'DLL', 'DOC', 'DOCX', 'DWG', 'EPS',
+      'EXE', 'FLV', 'GIFF', 'HTML', 'ISO', 'JAVA', 'JPG', 'MDB', 'MID', 'MOV',
+      'MP3', 'MP4', 'MPEG', 'PDF', 'PNG', 'PPT', 'PS', 'PSD', 'PUB', 'RAR',
+      'RAW', 'RSS', 'SVG', 'TIFF', 'TXT', 'WAV', 'WMA', 'XML', 'XSL', 'ZIP'
+    ];
+
+    if (available.includes(t)) {
+      return `assets/filetypes/${t}.svg`;
+    }
+
+    // Comprehensive Fallbacks
+    if (t === 'JPEG' || t === 'WEBP') return 'assets/filetypes/JPG.svg';
+    if (t === 'GIF') return 'assets/filetypes/GIFF.svg';
+    if (t === 'XLS' || t === 'XLSX') return 'assets/filetypes/XSL.svg';
+    if (t === 'PPTX') return 'assets/filetypes/PPT.svg';
+    if (t === '7Z' || t === 'TAR' || t === 'GZ') return 'assets/filetypes/ZIP.svg';
+    if (['JS', 'TS', 'CSS', 'SCSS', 'JSON', 'PH'].includes(t)) return 'assets/filetypes/HTML.svg';
+    if (t === 'MD' || t === 'LOG') return 'assets/filetypes/TXT.svg';
+    if (['MP3', 'WAV', 'OGG', 'M4A'].includes(t)) return 'assets/filetypes/MP3.svg';
+    if (['MP4', 'MOV', 'AVI', 'MKV', 'WEBM'].includes(t)) return 'assets/filetypes/MP4.svg';
+
+    return 'assets/filetypes/TXT.svg'; // Default
+  }
+
   onEditorKeydown(event: KeyboardEvent): void {
     // ── Mention popover navigation ─────────────────────────────────────────────
     if (this.mentionsVisible && this.filteredMentionList.length > 0) {
@@ -2682,6 +2723,8 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     const allFiles: any[] = [];
     this.messages.forEach(m => {
       const msgFiles: any[] = [];
+      const seenUrls = new Set<string>();
+
       const fileUrl = m.fileUrl || m.FileUrl;
       if (fileUrl) {
         msgFiles.push({
@@ -2690,15 +2733,21 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
           sentAt: m.sentAt || m.SentAt,
           sender: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown')
         });
+        seenUrls.add(fileUrl);
       }
+
       const attachments = m.attachments || m.Attachments || [];
       attachments.forEach((a: any) => {
-        msgFiles.push({
-          name: a.fileName || a.FileName || 'Unnamed File',
-          url: a.fileUrl || a.FileUrl,
-          sentAt: m.sentAt || m.SentAt,
-          sender: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown')
-        });
+        const url = a.fileUrl || a.FileUrl;
+        if (url && !seenUrls.has(url)) {
+          msgFiles.push({
+            name: a.fileName || a.FileName || 'Unnamed File',
+            url: url,
+            sentAt: m.sentAt || m.SentAt,
+            sender: m.senderId?.toString() === this.currentUserId?.toString() ? 'You' : (m.senderName || m.SenderName || 'Unknown')
+          });
+          seenUrls.add(url);
+        }
       });
 
       msgFiles.forEach(f => {

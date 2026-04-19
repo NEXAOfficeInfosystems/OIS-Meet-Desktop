@@ -414,6 +414,192 @@
 .main-content-split {
   flex: 1;
   min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* =====================================================
+   RIGHT SIDE PANEL (CONTEXT DETAILS)
+==================================================== */
+.right-panel {
+  width: 380px;
+  min-width: 380px;
+  border-left: 1px solid var(--fluent-border);
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  z-index: 5;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.02);
+
+  .right-panel-header {
+    height: 54px;
+    padding: 0 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--fluent-border);
+    background: #ffffff;
+    flex-shrink: 0;
+  }
+
+  .right-panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    min-height: 0;
+
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #e2e8f0;
+      border-radius: 10px;
+    }
+  }
+
+  .profile-card-modern {
+    background-color: #f8fafc !important;
+    border: 1px solid var(--fluent-border) !important;
+  }
+
+  .panel-section {
+    .section-header {
+      h6 {
+        font-size: 0.9rem;
+        color: #1e293b;
+      }
+    }
+
+    .list-group-item {
+      padding: 0.75rem 0.5rem;
+      border: none;
+      background: transparent;
+      border-bottom: 1px solid #f1f5f9;
+
+      &:last-child {
+        border-bottom: none;
+      }
+    }
+  }
+
+  .shared-media-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    .media-list-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      gap: 12px;
+      position: relative;
+
+      &:hover {
+        background: #f1f5f9;
+
+        .download-btn {
+          opacity: 1;
+          transform: translateY(0);
+        }
+
+        .file-ext-box {
+          background: #ffffff;
+        }
+      }
+
+      .file-ext-box {
+        width: 42px;
+        height: 42px;
+        background: #f8fafc;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        border: 1px solid var(--fluent-border);
+        transition: background 0.2s;
+
+        .file-type-icon {
+          width: 26px;
+          height: 26px;
+          object-fit: contain;
+        }
+      }
+
+      .file-details {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+
+        .file-name {
+          font-size: 0.88rem;
+          font-weight: 600;
+          color: #1e293b;
+        }
+
+        .file-meta {
+          font-size: 0.72rem;
+          color: #64748b;
+        }
+      }
+
+      .download-btn {
+        opacity: 0;
+        transform: translateY(5px);
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: #ffffff;
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+        &:hover {
+          background: var(--fluent-primary);
+          color: #ffffff;
+        }
+      }
+    }
+  }
+}
+
+@media (max-width: 1200px) {
+  .right-panel {
+    position: fixed;
+    top: 54px; // Below header
+    right: 0;
+    bottom: 0;
+    width: 320px;
+    min-width: 320px;
+    box-shadow: -10px 0 30px rgba(0,0,0,0.1);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out;
 }
 
 .main-view-container {
@@ -871,9 +1057,15 @@
     transition: background 0.15s ease, color 0.15s ease;
     flex-shrink: 0;
 
+
     &:hover {
       background: var(--fluent-bg-hover, #EDEBE9);
       color: var(--fluent-primary, #2563EB);
+
+      &.hover-bg-danger {
+        background: rgba(220, 38, 38, 0.1);
+        color: #dc2626 !important;
+      }
     }
 
     &.active {
@@ -961,6 +1153,13 @@
   &:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     background: #fff;
+  }
+
+  .file-type-icon-sm {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    flex-shrink: 0;
   }
 
   .file-info {

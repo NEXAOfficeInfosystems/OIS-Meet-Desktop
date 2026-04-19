@@ -31,6 +31,7 @@ export class CallsCenterComponent implements OnInit, OnDestroy {
 
   private localStream: MediaStream | null = null;
   private screenShareTrackSid: string | null = null;
+  private isStartingScreenShare = false;
   private readonly subs = new Subscription();
 
   constructor(
@@ -154,15 +155,23 @@ export class CallsCenterComponent implements OnInit, OnDestroy {
     }
   }
 
-  async toggleScreenShare(): Promise<void> {
-    if (!this.activeCallId) return;
+   async toggleScreenShare(): Promise<void> {
+    if (!this.activeCallId || this.isStartingScreenShare) return;
 
     if (!this.screenSharing) {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      const track = stream.getVideoTracks()[0];
-      this.screenShareTrackSid = await this.livekit.publishScreenShareTrack(track);
-      this.screenSharing = true;
-      track.onended = () => void this.stopScreenShare();
+      try {
+        this.isStartingScreenShare = true;
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        this.isStartingScreenShare = false;
+        
+        const track = stream.getVideoTracks()[0];
+        this.screenShareTrackSid = await this.livekit.publishScreenShareTrack(track);
+        this.screenSharing = true;
+        track.onended = () => void this.stopScreenShare();
+      } catch (err) {
+        this.isStartingScreenShare = false;
+        console.error('Screen share failed', err);
+      }
       return;
     }
 

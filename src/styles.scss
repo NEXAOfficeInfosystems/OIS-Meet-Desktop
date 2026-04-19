@@ -211,3 +211,42 @@ body.theme-dark {
   transition: all 0.2s;
 
 }
+
+
+
+
+.win-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+  -webkit-app-region: no-drag;
+
+  &:hover {
+    background: #f1f5f9;
+    color: #1a202c;
+  }
+
+  &.close:hover {
+    background: #ef4444;
+    color: white;
+  }
+
+  &.minimize:hover {
+    background: #f1f5f9;
+    color: #1a202c;
+  }
+
+  &.maximize:hover {
+    background: #f1f5f9;
+    color: #1a202c;
+  }
+}

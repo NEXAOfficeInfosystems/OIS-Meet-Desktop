@@ -28,7 +28,18 @@
           {{ (displayMeetingId || meetingId) | slice:0:12 }}…
         </div>
         <button class="win-btn" (click)="onMinimize()" title="Minimize"><i class="fas fa-minus"></i></button>
-        <button class="win-btn" (click)="onMaximize()" title="Maximize"><i class="fas fa-expand-alt"></i></button>
+        <button class="win-btn" (click)="onMaximize()" title="Maximize">
+          <!-- use window expand and contract svg -->
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"
+            *ngIf="!isMaximized">
+            <rect x="1" y="1" width="8" height="8" stroke="currentColor" stroke-width="1.2" fill="transparent" />
+          </svg>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"
+            *ngIf="isMaximized">
+            <path d="M3 1H9V7" stroke="currentColor" stroke-width="1.2" fill="transparent" />
+            <rect x="1" y="3" width="6" height="6" stroke="currentColor" stroke-width="1.2" fill="transparent" />
+          </svg>
+        </button>
         <button class="win-btn close" (click)="leaveMeeting()" title="End call"><i class="fas fa-times"></i></button>
       </div>
     </header>

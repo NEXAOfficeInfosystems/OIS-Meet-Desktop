@@ -15,6 +15,7 @@ export class ScreenRecorderService implements OnDestroy {
   private chunks: Blob[] = [];
   private stream: MediaStream | null = null;
   private timerSubscription: Subscription | null = null;
+  private isAcquiring: boolean = false;
 
   private stateSubject = new BehaviorSubject<ScreenRecordingState>({
     isRecording: false,
@@ -180,15 +181,37 @@ export class ScreenRecorderService implements OnDestroy {
   }
 
   private async acquireStreamBrowser(): Promise<MediaStream> {
+    if (this.isAcquiring) {
+      throw new Error('Already acquiring screen stream');
+    }
+
     // Try with system audio; fall back to video-only for platforms that
     // don't support screen audio capture (macOS, Firefox, older Electron).
     try {
-      return await navigator.mediaDevices.getDisplayMedia({
+      this.isAcquiring = true;
+      const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: true
       });
-    } catch {
-      return await navigator.mediaDevices.getDisplayMedia({ video: true });
+      this.isAcquiring = false;
+      return stream;
+    } catch (err: any) {
+      this.isAcquiring = false;
+      // If user cancelled or denied permission, don't try again without audio
+      if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
+        throw err;
+      }
+      console.warn('[ScreenRecorder] Audio capture failed or unsupported, retrying video-only.', err);
+      
+      this.isAcquiring = true;
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        this.isAcquiring = false;
+        return stream;
+      } catch (retryErr) {
+        this.isAcquiring = false;
+        throw retryErr;
+      }
     }
   }
 

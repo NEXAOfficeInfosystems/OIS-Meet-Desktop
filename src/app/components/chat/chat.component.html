@@ -248,9 +248,10 @@
           <span class="status-indicator-sm" [class.online]="selectedUser?.isOnline"></span>
         </div>
         <div class="channel-info">
-          <h5 class="channel-title" (click)="selectMainTab('info')" [class.cursor-pointer]="selectedUser">
+          <h5 class="channel-title" (click)="toggleRightPanel()" [class.cursor-pointer]="selectedUser">
             <span *ngIf="selectedUser; else channelTitle">
               {{ selectedUser.fullName || selectedUser.name }}
+              <i class="bi bi-chevron-down ms-1 fs-xs opacity-50"></i>
             </span>
             <ng-template #channelTitle># {{ activeChannel }}</ng-template>
           </h5>
@@ -294,6 +295,14 @@
             </span>
             <div class="spinner-border spinner-border-sm" *ngIf="isCalling && callType === 'Video'"></div>
           </button>
+
+          <div class="v-divider"></div>
+
+          <!-- <button class="action-btn-v4" (click)="toggleRightPanel()" [class.active]="showRightPanel"
+            [disabled]="!selectedUser" title="Contact / Group Info">
+            <i class="bi bi-info-circle" *ngIf="!showRightPanel"></i>
+            <i class="bi bi-info-circle-fill text-primary" *ngIf="showRightPanel"></i>
+          </button> -->
         </div>
       </div>
     </header>
@@ -455,7 +464,7 @@
                         *ngIf="(msg.messageType === 'File' || msg.MessageType === 'File') && (msg.fileUrl || msg.FileUrl)">
                         <div class="msg-attachments" *ngIf="settings.showMediaPreviews">
                           <div class="file-chip animate-fade-in" (click)="openPreview(msg)">
-                            <i class="bi fs-4" [class]="getFileIcon(msg.fileName || msg.FileName || '')"></i>
+                            <img [src]="getFileTypeIconUrl(msg.fileName || msg.FileName || '')" class="file-type-icon-sm" />
                             <div class="file-info">
                               <span class="file-name text-truncate" style="max-width: 150px;">{{ msg.fileName ||
                                 msg.FileName || 'File' }}</span>
@@ -475,10 +484,10 @@
 
                       <!-- ── Attachments array ── -->
                       <div class="msg-attachments"
-                        *ngIf="['Audio','Video','Image'].indexOf(msg.messageType || msg.MessageType) === -1 && (msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
+                        *ngIf="['Audio','Video','Image','File'].indexOf(msg.messageType || msg.MessageType) === -1 && (msg.attachments || msg.Attachments)?.length > 0 && settings.showMediaPreviews">
                         <div class="file-chip animate-fade-in" *ngFor="let file of (msg.attachments || msg.Attachments)"
                           (click)="openPreview(file)">
-                          <i class="bi fs-4" [class]="getFileIcon(file.fileName || file.FileName)"></i>
+                          <img [src]="getFileTypeIconUrl(file.fileName || file.FileName)" class="file-type-icon-sm" />
                           <div class="file-info">
                             <span class="file-name text-truncate" style="max-width: 150px;">{{ file.fileName ||
                               file.FileName }}</span>
@@ -490,7 +499,7 @@
                         </div>
                       </div>
                       <div class="msg-attachments-hidden mt-1"
-                        *ngIf="['Audio','Video','Image'].indexOf(msg.messageType || msg.MessageType) === -1 && (msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
+                        *ngIf="['Audio','Video','Image','File'].indexOf(msg.messageType || msg.MessageType) === -1 && (msg.attachments || msg.Attachments)?.length > 0 && !settings.showMediaPreviews">
                         <span class="badge bg-light text-muted border py-1 px-2 fs-xs">
                           <i class="bi bi-paperclip me-1"></i> {{(msg.attachments || msg.Attachments).length}}
                           Attachment(s) hidden
@@ -532,11 +541,17 @@
                     <button class="msg-act-btn" title="Reply" (click)="replyTo(msg)">
                       <i class="bi bi-reply"></i>
                     </button>
-                    <!-- Edit button (own messages only) -->
+                    <!-- Edit button (own messages only, text/emoji/sticker only) -->
                     <button class="msg-act-btn" title="Edit"
-                      *ngIf="msg.senderId?.toString() === currentUserId?.toString() && msg.messageType !== 'Audio' && msg.MessageType !== 'Audio'"
+                      *ngIf="msg.senderId?.toString() === currentUserId?.toString() && (msg.messageType === 'Text' || msg.MessageType === 'Text')"
                       (click)="editMessage(msg)">
                       <i class="bi bi-pencil"></i>
+                    </button>
+                    <!-- Delete button (own messages only) -->
+                    <button class="msg-act-btn text-danger hover-bg-danger" title="Delete"
+                      *ngIf="msg.senderId?.toString() === currentUserId?.toString()"
+                      (click)="deleteMessage(msg.id || msg.Id)">
+                      <i class="bi bi-trash"></i>
                     </button>
                   </div>
                 </div>
@@ -764,7 +779,8 @@
                   <input type="file" #fileInput style="display: none" (change)="onFileSelected($event)">
                   <button class="rte-action-btn" (click)="fileInput.click()" title="Attach file"
                     aria-label="Attach file" [disabled]="isUploading">
-                    <i class="bi bi-paperclip" [class.spinner-border]="isUploading" [class.spinner-border-sm]="isUploading"></i>
+                    <i class="bi bi-paperclip" [class.spinner-border]="isUploading"
+                      [class.spinner-border-sm]="isUploading"></i>
                   </button>
 
                   <!-- Voice Note -->
@@ -847,7 +863,7 @@
                         <div
                           class="file-icon-box bg-light-hover rounded-3 d-flex align-items-center justify-content-center"
                           style="width: 40px; height: 40px;">
-                          <i class="bi fs-5" [class]="getFileIcon(file.type)"></i>
+                          <img [src]="getFileTypeIconUrl(file.type)" class="file-type-icon-sm" />
                         </div>
                         <span class="fw-semibold text-dark text-truncate" style="max-width: 300px;">{{ file.name
                           }}</span>
@@ -886,122 +902,133 @@
           </div>
         </div>
 
-        <!-- INFO TAB CONTENT -->
-        <div class="main-tab-content flex-grow-1 overflow-auto bg-light" [class.d-none]="mainActiveTab !== 'info'"
-          style="display: block;">
-          <div class="container-fluid p-0">
-            <div class="row">
-              <div class="col-md-12 mx-auto">
-                <div class="card border-0 shadow-sm rounded-4 p-4">
-                  <h5 class="fw-bold mb-4">Context Details</h5>
+      </div> <!-- end .main-view-container -->
 
-                  <!-- User Profile Widget -->
-                  <div class="profile-widget" *ngIf="selectedUser && !selectedUser.isGroup">
-                    <div class="profile-card-modern border-0 rounded-4 bg-light p-4 text-center">
-                      <div class="avatar-xl mx-auto mb-3 shadow-sm border border-4 border-white"
-                        [style.background-color]="selectedUser.avatarColor || '#3b82f6'">
-                        {{ (selectedUser.fullName || selectedUser.name || 'U') | initials }}
-                      </div>
-                      <h5 class="mb-1 fw-bold">{{ selectedUser.fullName || selectedUser.name }}</h5>
-                      <p class="text-muted mb-3">{{ selectedUser.email }}</p>
-                      <div class="d-flex justify-content-center">
-                        <span class="badge rounded-pill px-3 py-2"
-                          [ngClass]="selectedUser.isOnline ? 'bg-success-soft text-success' : 'bg-secondary-soft text-muted'">
-                          {{ selectedUser.isOnline ? 'Available' : 'Away' }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+      <!-- RIGHT SIDE PANEL (Context Details) -->
+      <aside class="right-panel animate-slide-in-right" *ngIf="showRightPanel && selectedUser">
+        <!-- <div class="right-panel-header">
+          <h6 class="fw-bold mb-0">Context Details</h6>
+          <button class="btn btn-icon-sm" (click)="toggleRightPanel()"><i class="bi bi-x-lg"></i></button>
+        </div> -->
 
-                  <!-- Group Info -->
-                  <div class="group-header" *ngIf="selectedUser?.isGroup">
-                    <div class="profile-card-modern border-0 rounded-4 bg-light p-4 text-center mb-4">
-                      <!-- Avatar with Upload Overlay -->
-                      <div
-                        class="avatar-xl mx-auto mb-3 shadow-sm border border-4 border-white position-relative overflow-hidden group-avatar-editable"
-                        [style.background-color]="selectedUser.avatarColor || '#10b981'"
-                        (click)="onAvatarClick(avatarUploadInput)">
-                        <img *ngIf="selectedUser.avatarUrl" [src]="fileService.getFileUrl(selectedUser.avatarUrl)"
-                          class="w-100 h-100 object-fit-cover" />
-                        <i *ngIf="!selectedUser.avatarUrl" class="bi bi-people-fill"></i>
-
-                        <div class="avatar-upload-overlay">
-                          <i class="bi bi-camera-fill"></i>
-                          <span>Change Photo</span>
-                        </div>
-
-                        <div *ngIf="isUploadingAvatar" class="avatar-upload-spinner">
-                          <div class="spinner-border spinner-border-sm text-white" role="status"></div>
-                        </div>
-                      </div>
-
-                      <!-- Editable Name -->
-                      <div class="group-name-container">
-                        <div *ngIf="!isEditingName"
-                          class="d-flex align-items-center justify-content-center gap-2 group-name-display"
-                          (click)="startEditingName()">
-                          <h5 class="mb-0 fw-bold">{{ selectedUser.name }}</h5>
-                          <i class="bi bi-pencil-square edit-icon-sm"></i>
-                        </div>
-
-                        <div *ngIf="isEditingName" class="group-name-edit">
-                          <input type="text" class="form-control form-control-sm text-center fw-bold"
-                            [(ngModel)]="editingNameValue" (blur)="saveGroupName()" (keydown.enter)="saveGroupName()"
-                            (keydown.escape)="cancelEditingName()" #groupNameInput [autofocus]="true">
-                        </div>
-                      </div>
-
-                      <p class="text-muted small mt-2 mb-0">Group Conversation</p>
-
-                      <input type="file" #avatarUploadInput hidden accept="image/*"
-                        (change)="onAvatarFileSelected($event)">
-                    </div>
-                    <div class="text-center mb-4">
-                      <span class="badge bg-white text-primary border rounded-pill">{{ selectedUser.participants?.length
-                        || 0 }} Members</span>
-                    </div>
-
-                    <section class="panel-section mb-4">
-                      <div class="section-header d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="fw-bold mb-0">Members</h6>
-                        <button class="btn btn-sm btn-outline-primary" (click)="openAddMemberModal()">
-                          <i class="bi bi-person-plus-fill me-1"></i> Add Member
-                        </button>
-                      </div>
-                      <div class="list-group">
-                        <div class="list-group-item d-flex align-items-center gap-3"
-                          *ngFor="let member of filteredGroupMembers">
-                          <div class="dm-avatar-sm" [style.background-color]="getMemberAvatarColor(member.name)">
-                            {{ (member.name || 'U') | initials }}
-                          </div>
-                          <div>
-                            <div class="fw-medium">{{ member.name }}</div>
-                            <small class="text-muted">{{ member.userId === currentUserId ? 'You' : 'Member' }}</small>
-                          </div>
-                        </div>
-                      </div>
-                    </section>
-                  </div>
-
-                  <!-- Recent Activity -->
-                  <section class="panel-section">
-                    <h6 class="fw-bold mb-3">Recent Activity</h6>
-                    <div class="activity-timeline ps-2">
-                      <div class="activity-item-compact d-flex gap-3 mb-3" *ngFor="let act of activityFeed">
-                        <div class="activity-dot-sm"></div>
-                        <div class="activity-content-sm">
-                          <p class="mb-0 fs-sm"><strong>{{ act.user }}</strong> {{ act.action }}</p>
-                          <span class="text-muted fs-xs">{{ act.time }}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                </div>
+        <div class="right-panel-content">
+          <!-- User Profile Widget -->
+          <div class="profile-widget" *ngIf="!selectedUser.isGroup">
+            <div class="profile-card-modern border-0 rounded-4 bg-light p-4 text-center mb-4">
+              <div class="avatar-xl mx-auto mb-3 shadow-sm border border-4 border-white"
+                [style.background-color]="selectedUser.avatarColor || '#3b82f6'">
+                {{ (selectedUser.fullName || selectedUser.name || 'U') | initials }}
+              </div>
+              <h5 class="mb-1 fw-bold">{{ selectedUser.fullName || selectedUser.name }}</h5>
+              <p class="text-muted mb-3">{{ selectedUser.email }}</p>
+              <div class="d-flex justify-content-center">
+                <span class="badge rounded-pill px-3 py-2"
+                  [ngClass]="selectedUser.isOnline ? 'bg-success-soft text-success' : 'bg-secondary-soft text-muted'">
+                  {{ selectedUser.isOnline ? 'Available' : 'Away' }}
+                </span>
               </div>
             </div>
           </div>
+
+          <!-- Group Info -->
+          <div class="group-header" *ngIf="selectedUser?.isGroup">
+            <div class="profile-card-modern border-0 rounded-4 bg-light p-4 text-center mb-4">
+              <!-- Avatar with Upload Overlay -->
+              <div
+                class="avatar-xl mx-auto mb-3 shadow-sm border border-4 border-white position-relative overflow-hidden group-avatar-editable"
+                [style.background-color]="selectedUser.avatarColor || '#10b981'"
+                (click)="onAvatarClick(avatarUploadInput)">
+                <img *ngIf="selectedUser.avatarUrl" [src]="fileService.getFileUrl(selectedUser.avatarUrl)"
+                  class="w-100 h-100 object-fit-cover" />
+                <i *ngIf="!selectedUser.avatarUrl" class="bi bi-people-fill"></i>
+
+                <div class="avatar-upload-overlay">
+                  <i class="bi bi-camera-fill"></i>
+                  <span>Change Photo</span>
+                </div>
+
+                <div *ngIf="isUploadingAvatar" class="avatar-upload-spinner">
+                  <div class="spinner-border spinner-border-sm text-white" role="status"></div>
+                </div>
+              </div>
+
+              <!-- Editable Name -->
+              <div class="group-name-container">
+                <div *ngIf="!isEditingName"
+                  class="d-flex align-items-center justify-content-center gap-2 group-name-display"
+                  (click)="startEditingName()">
+                  <h5 class="mb-0 fw-bold">{{ selectedUser.name }}</h5>
+                  <i class="bi bi-pencil-square edit-icon-sm"></i>
+                </div>
+
+                <div *ngIf="isEditingName" class="group-name-edit">
+                  <input type="text" class="form-control form-control-sm text-center fw-bold"
+                    [(ngModel)]="editingNameValue" (blur)="saveGroupName()" (keydown.enter)="saveGroupName()"
+                    (keydown.escape)="cancelEditingName()" #groupNameInput [autofocus]="true">
+                </div>
+              </div>
+
+              <p class="text-muted small mt-2 mb-0">Group Conversation</p>
+
+              <input type="file" #avatarUploadInput hidden accept="image/*" (change)="onAvatarFileSelected($event)">
+            </div>
+            <div class="text-center mb-4">
+              <span class="badge bg-white text-primary border rounded-pill">{{ selectedUser.participants?.length
+                || 0 }} Members</span>
+            </div>
+
+            <section class="panel-section mb-4">
+              <div class="section-header d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0">Members</h6>
+                <button class="btn btn-sm btn-outline-primary" (click)="openAddMemberModal()">
+                  <i class="bi bi-person-plus-fill me-1"></i> Add
+                </button>
+              </div>
+              <div class="list-group">
+                <div class="list-group-item d-flex align-items-center gap-3"
+                  *ngFor="let member of filteredGroupMembers">
+                  <div class="dm-avatar-sm" [style.background-color]="getMemberAvatarColor(member.name)">
+                    {{ (member.name || 'U') | initials }}
+                  </div>
+                  <div>
+                    <div class="fw-medium">{{ member.name }}</div>
+                    <small class="text-muted">{{ member.userId === currentUserId ? 'You' : 'Member' }}</small>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Shared Media -->
+          <section class="panel-section">
+            <div class="section-header d-flex justify-content-between align-items-center mb-3">
+              <h6 class="fw-bold mb-0">Shared Media</h6>
+              <span class="text-muted fs-xs">{{ sharedFiles.length }} items</span>
+            </div>
+
+            <div class="shared-media-list" *ngIf="sharedFiles.length > 0">
+              <div class="media-list-item animate-fade-in" *ngFor="let file of sharedFiles" (click)="openPreview(file)"
+                [title]="file.name">
+                <div class="file-ext-box">
+                  <img [src]="getFileTypeIconUrl(file.type)" class="file-type-icon" />
+                </div>
+                <div class="file-details">
+                  <div class="file-name text-truncate">{{ file.name }}</div>
+                  <div class="file-meta">{{ file.date }} · {{ file.owner }}</div>
+                </div>
+                <button class="download-btn" (click)="downloadFile(file.url, file.name); $event.stopPropagation()">
+                  <i class="bi bi-download"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="empty-state text-center py-4 bg-light rounded-4" *ngIf="sharedFiles.length === 0">
+              <i class="bi bi-collection-play fs-2 opacity-20 d-block mb-2"></i>
+              <p class="small text-muted mb-0">No media shared yet</p>
+            </div>
+          </section>
         </div>
-      </div>
+      </aside>
     </div> <!-- end .main-view-container -->
   </div> <!-- end .main-content-split -->
 

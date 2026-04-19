@@ -1,5 +1,5 @@
 import { Component, effect } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { RouterOutlet, Router } from '@angular/router';
 import { ElectronAuthService } from './core/services/electron-auth.service';
 import { TitleBarComponent } from './shared/layout/title-bar/title-bar.component';
 import { CommonModule } from '@angular/common';
@@ -20,7 +20,7 @@ import { TauriService } from './core/services/tauri.service';
   standalone: true,
   imports: [RouterOutlet, TitleBarComponent, CommonModule, IncomingCallBannerComponent],
   template: `
-    <app-title-bar *ngIf="isElectron || isAuthenticated()"></app-title-bar>
+    <app-title-bar *ngIf="(isElectron || isAuthenticated()) && !isMeetingRoute"></app-title-bar>
     <app-incoming-call-banner></app-incoming-call-banner>
     <div class="global-call-banner" *ngIf="callService.outgoingCall() as call">
       <div class="global-call-banner__icon">
@@ -51,7 +51,7 @@ import { TauriService } from './core/services/tauri.service';
       </div>
     </div>
 
-    <div class="main-content" [class.with-title-bar]="isElectron || isAuthenticated()">
+    <div class="main-content" [class.with-title-bar]="(isElectron || isAuthenticated()) && !isMeetingRoute">
       <router-outlet></router-outlet>
     </div>
   `,
@@ -67,6 +67,8 @@ export class AppComponent {
     initialValue: signalR.HubConnectionState.Disconnected
   });
 
+  isMeetingRoute = false;
+
   private _theme: 'light' | 'dark' = 'light';
 
   constructor(
@@ -77,10 +79,37 @@ export class AppComponent {
     private session: SessionService,
     public callService: CallService,
     private signalRService: SignalRService,
-    private _tauri: TauriService
+    private _tauri: TauriService,
+    private router: Router
   ) {
     // ── THEME INITIALIZATION ──
     this._initializeTheme();
+
+    // Track active route so we can hide generic UI on fullscreen meeting views
+    this.router.events.subscribe(() => {
+      this.isMeetingRoute = this.router.url.includes('/meeting');
+    });
+
+    // ── SYNC AUTH TO DESKTOP HOST ──
+    // If the app started already logged in (bypassing login screen), we must
+    // push the auth state to the main process so any newly spawned Meeting Windows
+    // can inherit the session and pass the AuthGuard.
+    if (this.auth.isAuthenticated()) {
+      try {
+        const desktopApi = (window as any).oisMeet;
+        if (desktopApi?.isElectron && typeof desktopApi.setAuthData === 'function') {
+          desktopApi.setAuthData({
+            token: this.auth.getSSOToken(),
+            userinfo: this.auth.getEncryptedJson(),
+            user: this.session.getUserDetails(),
+            meetAppId: this.session.getMeetAppId(),
+            oisMeetUserId: this.session.getOISMeetUserId()
+          });
+        }
+      } catch (e) {
+        console.warn('[AppComponent] Failed to sync auth state to desktop host', e);
+      }
+    }
 
     // Trigger browser notification and focus window when a call arrives —
     // only for the CALLEE (not the caller, who already has the outgoing banner).

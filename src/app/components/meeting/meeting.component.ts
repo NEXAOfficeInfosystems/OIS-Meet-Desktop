@@ -184,6 +184,10 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   private pendingTooltipRefreshTimeout: any = null;
   private meetingEndedCloseTimeout: any = null;
   private preservedCameraTrack: MediaStreamTrack | null = null;
+  private isStartingScreenShare: boolean = false;
+  // Cooldown flag: true for ~1 s after the user cancels the picker,
+  // preventing a rapid double-click from reopening the OS dialog.
+  private screenShareCooldownActive: boolean = false;
 
   private destroy$ = new Subject<void>();
 
@@ -191,6 +195,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // ── Screen-share overlay auto-hide timer ─────────────────────────────────
   private ssControlsHideTimer: any = null;
+  isMaximized: boolean = false;
 
   // ── ScreenShare state proxy (used by template) ────────────────────────────
   get ssState(): ScreenShareState { return this.ssStateService.state; }
@@ -382,7 +387,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           if (res.success && res.data) {
             console.log('[Meeting] Upload successful. Sending SignalR notification...');
             const messageType = mode === 'audio' ? 'Audio' : (mode === 'screen' ? 'Screen' : 'Video');
-            
+
             // Send message to the meeting chat
             this.signalRService.sendMeetingMessage(
               this.meetingId,
@@ -1323,7 +1328,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         this.meetingDetails = response.data;
         this.meetingTopic = this.meetingDetails?.topic || 'OIS Meet Session';
         this.displayMeetingId = this.meetingDetails?.meetingId || this.meetingId;
-        
+
         // If we didn't have a conversationId from URL, see if meeting has one
         if (!this.conversationId && this.meetingDetails?.conversationId) {
           this.conversationId = this.meetingDetails.conversationId;
@@ -2609,7 +2614,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
 
     try {
       await this.recorderService.start(streams, mode);
-      
+
       this.recorderService.state$
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => {
@@ -2870,6 +2875,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async toggleScreenShare() {
+    // Guard: block re-entry while the picker is open or during a cooldown
+    // (cooldown is set for ~1 s after the user cancels the picker so that
+    // a frustrated double-click does not immediately reopen the OS dialog).
+    if (this.isStartingScreenShare || this.screenShareCooldownActive) { return; }
+
     if (!this.isScreenSharing) {
       // ── Acquire the screen stream (Electron 29-compatible) ───────────────────
       // Electron 29 does not support setDisplayMediaRequestHandler, so
@@ -2878,6 +2888,11 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
       // then call getUserMedia with chromeMediaSource:'desktop'.
       // When running in a plain browser (no window.oisMeet) we fall back to
       // the standard getDisplayMedia() path.
+
+      // Set the guard flag immediately — before any async operation — so that
+      // rapid button presses are ignored regardless of which code path runs.
+      this.isStartingScreenShare = true;
+
       let screenStream: MediaStream;
       try {
         const oisMeet = (window as any).oisMeet;
@@ -2912,6 +2927,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           });
         } else {
           // ── Browser fallback ───────────────────────────────────────────────
+          // Note: isStartingScreenShare is already true (set above) — no need
+          // to set it again here.
           console.log('Starting screen share (browser getDisplayMedia path)');
           screenStream = await navigator.mediaDevices.getDisplayMedia({
             video: true,
@@ -2919,14 +2936,26 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
           });
         }
       } catch (error: any) {
+        this.isStartingScreenShare = false;
         console.error('Error sharing screen:', error);
         this.isScreenSharing = false;
         this.screenShareOwnerName = 'Your Screen';
         this.cdr.markForCheck();
 
         let errorMsg = 'Could not start screen share';
-        if (error.name === 'NotAllowedError') {
-          errorMsg = 'Screen share permission was denied.';
+        const isCancelledByUser =
+          error.name === 'NotAllowedError' || error.name === 'AbortError';
+
+        if (isCancelledByUser) {
+          // User deliberately cancelled the picker — apply a short cooldown so
+          // that a rapid second click does not reopen the OS dialog immediately.
+          this.screenShareCooldownActive = true;
+          setTimeout(() => {
+            this.screenShareCooldownActive = false;
+          }, 1000);
+          // No snackbar for a deliberate cancel — just silently abort.
+          this.refreshTooltips();
+          return;
         } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
           errorMsg = 'No screen sources found.';
         } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
@@ -2940,6 +2969,8 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
+      // Stream acquired successfully — release the guard so the button can be used again
+      this.isStartingScreenShare = false;
       this.screenStream = screenStream;
 
       // ── LiveKit path ─────────────────────────────────────────────────────────
@@ -3140,6 +3171,7 @@ export class MeetingComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onMaximize() {
+    this.isMaximized = !this.isMaximized;
     const bridge = (window as any).oisMeet;
     if (bridge && typeof bridge.maximize === 'function') {
       bridge.maximize();
