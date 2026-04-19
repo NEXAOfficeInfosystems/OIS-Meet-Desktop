@@ -364,7 +364,9 @@
                   </div>
                   <div class="msg-content"
                     [class.voice-note-msg]="msg.messageType === 'Audio' || msg.MessageType === 'Audio'"
-                    [class.is-other]="msg.senderId?.toString() !== currentUserId?.toString()">
+                    [class.is-other]="msg.senderId?.toString() !== currentUserId?.toString()"
+                    [class.no-bubble]="!shouldShowBubble(msg)"
+                    [class.jumbo-emoji]="isOnlyEmoji(msg.content || msg.Content)">
                     <!-- Inline edit mode -->
                     <ng-container *ngIf="editingMessage?.id === (msg.id || msg.Id); else msgDisplay">
                       <div class="msg-edit-area">
@@ -464,7 +466,8 @@
                         *ngIf="(msg.messageType === 'File' || msg.MessageType === 'File') && (msg.fileUrl || msg.FileUrl)">
                         <div class="msg-attachments" *ngIf="settings.showMediaPreviews">
                           <div class="file-chip animate-fade-in" (click)="openPreview(msg)">
-                            <img [src]="getFileTypeIconUrl(msg.fileName || msg.FileName || '')" class="file-type-icon-sm" />
+                            <img [src]="getFileTypeIconUrl(msg.fileName || msg.FileName || '')"
+                              class="file-type-icon-sm" />
                             <div class="file-info">
                               <span class="file-name text-truncate" style="max-width: 150px;">{{ msg.fileName ||
                                 msg.FileName || 'File' }}</span>

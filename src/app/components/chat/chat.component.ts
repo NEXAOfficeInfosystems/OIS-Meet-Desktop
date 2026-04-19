@@ -1250,7 +1250,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       next: (event: any) => {
         if (event.type === 4) {
           const res = event.body;
-          if (res.success && res.data) {
+          if (res && res.success && res.data) {
             this.sendMessage(res.data.url, res.data.fileName, msgType);
             if (this.fileInput) {
               this.fileInput.nativeElement.value = '';
@@ -1342,7 +1342,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
-          if (res.success && res.data) {
+          if (res && res.success && res.data) {
             const transformed = res.data.map((u: any) => ({
               id: u.id?.toString(),
               userId: u.id?.toString(), // FIX: Use Guid Id as userId for consistent signaling and activities
@@ -1720,7 +1720,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
-          if (!res.success || !res.data) return;
+          if (!res || !res.success || !res.data) return;
 
           (res.data as any[]).forEach((conv: any) => {
             const isGroup = conv.conversationType === 'Group';
@@ -1909,7 +1909,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: async (res) => {
-            if (res.success && res.data) {
+            if (res && res.success && res.data) {
               const convId = res.data?.toString();
               user.conversationId = convId;
               this.selectedConversation = { id: convId };
@@ -1940,8 +1940,10 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     if (user.conversationId) {
       this.chatService.togglePinConversation(user.conversationId, isPinned).subscribe({
-        next: () => {
-          this.applySearch();
+        next: (res) => {
+          if (res && res.success) {
+            this.applySearch();
+          }
         },
         error: () => {
           user.isPinned = !isPinned; // revert
@@ -2163,7 +2165,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
     // Validate first
     this.meetingService.validateMeeting(meetingId).subscribe({
       next: (validateRes: any) => {
-        if (!validateRes.success) {
+        if (!validateRes || !validateRes.success) {
           this.showAlert(validateRes.message || 'Invalid or expired meeting ID.');
           return;
         }
@@ -2171,7 +2173,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
         // Register participant server-side
         this.meetingService.joinMeeting({ meetingId, userId, userName }).subscribe({
           next: (joinRes: any) => {
-            if (joinRes.success) {
+            if (joinRes && joinRes.success) {
               this.openMeetingWindow(meetingId, false);
             } else {
               this.showAlert('Could not join meeting. Please try again.');
@@ -2843,11 +2845,13 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
   private loadActivityFeed(): void {
     this.collaborationService.getActivity(20).subscribe({
       next: (res) => {
-        this.activityFeed = (res.data ?? []).map((item: any) => ({
-          user: item.title,
-          action: item.body || item.activityType || 'Activity',
-          time: this.formatMessageTime(item.createdAt)
-        }));
+        if (res && res.success) {
+          this.activityFeed = (res.data ?? []).map((item: any) => ({
+            user: item.title,
+            action: item.body || item.activityType || 'Activity',
+            time: this.formatMessageTime(item.createdAt)
+          }));
+        }
       },
       error: () => {
         this.activityFeed = [];
@@ -2914,7 +2918,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .subscribe({
         next: (res) => {
           this.isCreatingGroup = false;
-          if (res.success && res.data) {
+          if (res && res.success && res.data) {
             const convId = res.data.id?.toString() || res.data?.toString();
             const newGroup: any = {
               id: convId,
@@ -3004,7 +3008,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       .subscribe({
         next: (res) => {
           this.isAddingMember = false;
-          if (res.success) {
+          if (res && res.success) {
             this.closeAddMemberModal();
             // Refresh conversation data to show new members
             // SignalR should handle the live update if implemented, but we can manually refresh
@@ -3054,7 +3058,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     this.chatService.updateGroupInfo(conversationId, newName).subscribe({
       next: (res) => {
-        if (res.success) {
+        if (res && res.success) {
           this.selectedUser.name = newName;
           this.selectedUser.fullName = newName;
           this.isEditingName = false;
@@ -3189,7 +3193,7 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       next: (event: any) => {
         if (event.type === 4) { // Sent
           const res = event.body;
-          if (res.success && res.data) {
+          if (res && res.success && res.data) {
             const avatarUrl = res.data.url;
             this.saveGroupAvatar(avatarUrl);
           }
@@ -3384,5 +3388,37 @@ export class ChatComponent implements OnInit, AfterViewChecked, OnDestroy {
       senderId: activity.original.senderId
     });
   }
+
+  // ——————————————————————————————————————————————————————————————————————————————
+  // UI HELPERS
+  // ——————————————————————————————————————————————————————————————————————————————
+
+  shouldShowBubble(msg: any): boolean {
+    if (!msg) return true;
+    const type = msg.messageType || msg.MessageType;
+
+    // Media types don't need a bubble
+    if (['Audio', 'Video', 'Image', 'File'].indexOf(type) !== -1) return false;
+
+    // Stickers don't need a bubble
+    const content = msg.content || msg.Content || '';
+    if (content === '[Sticker]') return false;
+
+    // Only emoji (Giant emoji / Jumboji)
+    if (this.isOnlyEmoji(content)) return false;
+
+    return true;
+  }
+
+  isOnlyEmoji(str: string): boolean {
+    if (!str) return false;
+    const cleanStr = str.replace(/&nbsp;/g, '').trim();
+    if (!cleanStr) return false;
+
+    // This regex matches strings that consist only of emojis, symbols, and whitespace
+    const emojiRegex = /^(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff]|\s)+$/;
+    return emojiRegex.test(cleanStr);
+  }
+
 }
 

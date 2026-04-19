@@ -180,7 +180,7 @@
     }
 
     &.active {
-      background: #e2e8f0;
+      background: var(--border-color);
     }
 
     .team-icon {
@@ -213,7 +213,7 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #e2e8f0;
+    background: var(--border-color);
     border-radius: 10px;
   }
 }
@@ -455,7 +455,7 @@
     }
 
     &::-webkit-scrollbar-thumb {
-      background: #e2e8f0;
+      background: var(--border-color);
       border-radius: 10px;
     }
   }
@@ -583,7 +583,7 @@
     bottom: 0;
     width: 320px;
     min-width: 320px;
-    box-shadow: -10px 0 30px rgba(0,0,0,0.1);
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
   }
 }
 
@@ -592,6 +592,7 @@
     opacity: 0;
     transform: translateX(20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -717,7 +718,7 @@
   .divider {
     width: 1px;
     height: 12px;
-    background: #e2e8f0;
+    background: var(--border-color);
   }
 
   .channel-meta {
@@ -835,7 +836,7 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #e2e8f0;
+    background: var(--border-color);
     border-radius: 10px;
   }
 }
@@ -901,23 +902,37 @@
 
     .msg-content {
       font-size: 0.85rem;
-      color: #334155;
+      color: var(--chat-text-color-other);
       line-height: 1.5;
-      background-color: #f1f5f9;
+      background-color: var(--chat-bg-color-other);
       padding: 0.5rem 0.75rem;
       border-radius: 8px;
       display: inline-block;
       text-align: left;
-      border: 1px solid var(--fluent-border);
+      border: 1px solid var(--border-color) !important;
 
       &.voice-note-msg {
         padding: 6px 16px !important;
         border-radius: 20px !important;
-        background: #f1f5f9 !important; // Light gray for others
+        background: var(--chat-bg-color-self) !important; // Light gray for others
         min-width: 280px;
         max-width: 340px;
-        border: none !important;
+        // border: none !important;
         display: block; // Allow waveform to fill
+      }
+
+      &.no-bubble {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        color: #1e293b !important; // Fallback to normal text color
+      }
+
+      &.jumbo-emoji {
+        font-size: 3.5rem !important;
+        line-height: 1.1 !important;
+        display: inline-block !important;
       }
     }
   }
@@ -934,14 +949,14 @@
     }
 
     .msg-content {
-      background-color: var(--accent-color) !important;
-      color: white !important;
-      border: none !important;
+      background-color: var(--chat-bg-color-self) !important;
+      color: var(--chat-text-color-self) !important;
+      // border: none !important;
 
       &.voice-note-msg {
-        background: #f8fafc !important; // Light for both, but we'll differentiate
-        color: #334155 !important;
-        border: 1px solid #e2e8f0 !important;
+        background: var(--chat-bg-color-self) !important; // Light for both, but we'll differentiate
+        color: var(--chat-text-color-self) !important;
+        border: 1px solid var(--border-color) !important;
         padding: 4px 12px !important;
         border-radius: 24px !important;
         display: block;
@@ -950,8 +965,8 @@
 
     /* Merged voice note specific soft background */
     .msg-content.voice-note-msg {
-       background: #ffffff !important;
-       border-color: rgba(99, 102, 241, 0.2) !important;
+      background: var(--chat-bg-color-self) !important;
+      border-color: rgba(99, 102, 241, 0.2) !important;
     }
   }
 
@@ -975,7 +990,7 @@
 
   .msg-content {
     font-size: 0.85rem;
-    color: #334155;
+    color: var(--chat-text-color-self);
     line-height: 1.5;
     // width: 100%;
   }
@@ -997,7 +1012,7 @@
       transition: all 0.2s;
 
       &:hover {
-        background: #e2e8f0;
+        background: var(--border-color);
       }
 
       &.reacted {
@@ -1143,7 +1158,7 @@
   align-items: center;
   gap: 0.75rem;
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 0.25rem 0.5rem;
   min-width: 200px;
@@ -1200,7 +1215,7 @@
 .workspace-input-area {
   padding: 8px 10px 10px;
   background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
 }
@@ -1214,7 +1229,7 @@
   border-radius: 12px;
   padding: 0.75rem 1rem;
   position: relative;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   gap: 1rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
 
@@ -1260,7 +1275,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #e2e8f0;
+    background: var(--border-color);
     border: none;
     border-radius: 50%;
     color: #475569;
@@ -1344,7 +1359,7 @@
   line-height: 1;
 
   &:hover {
-    background: #e2e8f0;
+    background: var(--border-color);
     color: #1e293b;
   }
 
@@ -1384,7 +1399,7 @@
 .rte-divider {
   width: 1px;
   height: 14px;
-  background: #e2e8f0;
+  background: var(--border-color);
   margin: 0 3px;
   flex-shrink: 0;
 }
@@ -1467,7 +1482,7 @@
     font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
     font-size: 0.865em;
     background: #f1f5f9;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
     padding: 2px 6px;
   }
@@ -1605,7 +1620,7 @@
   }
 
   &:disabled {
-    background: #e2e8f0;
+    background: var(--border-color);
     color: #94a3b8;
     cursor: not-allowed;
     transform: none;
@@ -1717,7 +1732,7 @@
     font-family: 'Fira Code', monospace;
     font-size: 0.865em;
     background: #f1f5f9;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 2px 5px;
   }
@@ -1767,7 +1782,7 @@
 .edit-cancel-btn {
   padding: 3px 10px;
   background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   border-radius: 5px;
   font-size: 0.78rem;
   color: #475569;
@@ -1775,7 +1790,7 @@
   transition: background .13s;
 
   &:hover {
-    background: #e2e8f0;
+    background: var(--border-color);
   }
 }
 
@@ -1830,7 +1845,7 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #e2e8f0;
+    background: var(--border-color);
     border-radius: 10px;
   }
 }
@@ -1903,7 +1918,7 @@
   z-index: 1100;
   border-radius: 12px !important;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
 
   .mention-item {
@@ -2173,7 +2188,7 @@
 
 /* Legacy — kept in case any other template still uses it */
 .emoji-picker-popover {
-  border: 1px solid #e2e8f0 !important;
+  border: 1px solid var(--border-color) !important;
   width: 200px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12) !important;
   border-radius: 12px !important;
@@ -2263,7 +2278,7 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #e2e8f0;
+    background: var(--border-color);
     border-radius: 10px;
   }
 }
@@ -2287,7 +2302,7 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #e2e8f0;
+    background: var(--border-color);
     border-radius: 10px;
   }
 }
@@ -2386,7 +2401,7 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #e2e8f0;
+    background: var(--border-color);
     border-radius: 10px;
   }
 }
@@ -2397,7 +2412,7 @@
   gap: 6px;
   padding: 4px 8px 4px 4px;
   background: white;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   border-radius: 20px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   animation: fadeIn 0.2s ease-out;
@@ -2460,7 +2475,7 @@
 .group-name-input {
   border-radius: 10px;
   padding: 0.6rem 1rem;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--border-color);
   font-weight: 500;
 
   &:focus {
@@ -2523,7 +2538,7 @@
   z-index: 1000;
   background: white;
   margin-bottom: 5px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   border-radius: 8px;
 
@@ -2759,7 +2774,7 @@
   &:hover {
     background: #f1f5f9 !important;
     transform: translateX(-2px);
-    border-color: #e2e8f0 !important;
+    border-color: var(--border-color) !important;
   }
 
   .file-icon-square-sm {
@@ -2863,7 +2878,7 @@
       top: 12px;
       bottom: -12px;
       width: 1px;
-      background: #e2e8f0;
+      background: var(--border-color);
     }
 
     &:last-child .activity-line {
@@ -2979,7 +2994,7 @@
     transition: all 0.2s;
 
     &.bg-light-hover:hover {
-      background: #e2e8f0 !important;
+      background: var(--border-color) !important;
       transform: scale(1.05);
     }
   }
@@ -3070,7 +3085,7 @@
     transition: background 0.2s;
 
     &:hover {
-      background: #e2e8f0;
+      background: var(--border-color);
     }
 
     .edit-icon-sm {
@@ -3177,7 +3192,7 @@
     height: 0.5rem;
     color: transparent;
     cursor: pointer;
-    background-color: #e2e8f0;
+    background-color: var(--border-color);
     border-color: transparent;
     border-radius: 1rem;
   }
@@ -3414,7 +3429,7 @@
 
       &:hover {
         transform: scale(1.05);
-        background: #e2e8f0;
+        background: var(--border-color);
       }
 
       &--cancel {
@@ -3516,7 +3531,7 @@
 ===================================================== */
 .screen-rec-overlay {
   background: #0f172a;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding: 10px 14px;
   display: flex;
   align-items: center;
@@ -3563,7 +3578,7 @@
     font-size: 0.95rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    color: #e2e8f0;
+    color: var(--border-color);
     letter-spacing: 0.5px;
   }
 
@@ -3572,7 +3587,7 @@
     width: 34px;
     height: 34px;
     border-radius: 8px;
-    background: rgba(255,255,255,0.07);
+    background: rgba(255, 255, 255, 0.07);
     color: #94a3b8;
     border: none;
     cursor: pointer;
@@ -3583,7 +3598,7 @@
     transition: background 0.15s, color 0.15s;
 
     &:hover {
-      background: rgba(255,255,255,0.14);
+      background: rgba(255, 255, 255, 0.14);
       color: #f1f5f9;
     }
 
@@ -3610,13 +3625,13 @@
    VOICE NOTE MSG bubble — ensure consistent on both sides
 ===================================================== */
 .message-group .msg-content.voice-note-msg {
-  background: #f8fafc !important;
-  border: 1px solid #e2e8f0 !important;
-  color: #334155 !important;
+  background: var(--chat-bg-color-self) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--chat-text-color-self) !important;
 }
 
 .message-group.is-self .msg-content.voice-note-msg {
-  background: #ffffff !important;
+  background: var(--chat-bg-color-self) !important;
   border-color: rgba(99, 102, 241, 0.2) !important;
 }
 
@@ -3632,14 +3647,17 @@
   0% {
     background-color: rgba(255, 243, 191, 0);
   }
+
   15% {
     background-color: rgba(255, 243, 191, 1);
     box-shadow: 0 0 15px rgba(255, 243, 191, 0.8);
   }
+
   85% {
     background-color: rgba(255, 243, 191, 1);
     box-shadow: 0 0 15px rgba(255, 243, 191, 0.8);
   }
+
   100% {
     background-color: rgba(255, 243, 191, 0);
   }

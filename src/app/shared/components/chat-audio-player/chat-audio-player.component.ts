@@ -40,9 +40,11 @@ import { CommonModule } from '@angular/common';
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 6px 4px;
-      background: transparent;
+      padding: 6px 8px;
+      background: var(--chat-bg-color-self);
       user-select: none;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
     }
 
     .play-pause-btn {
